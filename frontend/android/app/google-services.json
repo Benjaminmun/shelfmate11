@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "88134517138",
+    "project_id": "shelfmate-ef126",
+    "storage_bucket": "shelfmate-ef126.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88134517138:android:86c54b454ac8e34a3fc14b",
+        "android_client_info": {
+          "package_name": "student.inti.shelfmate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0Gh54f95Ud475ANbT4Q9bpaCvjTQzAso"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
