@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:88134517138:android:86c54b454ac8e34a3fc14b",
+        "mobilesdk_app_id": "1:88134517138:android:96681e215e9abbd73fc14b",
         "android_client_info": {
-          "package_name": "student.inti.shelfmate"
+          "package_name": "com.example.frontend"
         }
       },
       "oauth_client": [],
