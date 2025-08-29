@@ -1,16 +1,14 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'home_page.dart';
-import 'signup_page.dart';
-import 'login_page.dart';
-import 'dashboard_page.dart';
+import 'home_page.dart'; // Import your HomePage widget
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();  // Initialize Firebase
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -18,12 +16,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: HomePage(),
-      routes: {
-        '/signup': (context) => SignUpPage(),
-        '/login': (context) => LoginPage(),
-        '/dashboard': (context) => DashboardPage(),  // Define Dashboard route
-      },
+      home: HomePage(),  // Your HomePage widget
     );
   }
 }
