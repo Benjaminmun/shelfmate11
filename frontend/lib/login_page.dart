@@ -5,6 +5,8 @@ class LoginPage extends StatelessWidget {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
+  LoginPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -33,12 +35,12 @@ class LoginPage extends StatelessWidget {
                     // Implement your login logic here
                     print('Logging in with: ${emailController.text} and ${passwordController.text}');
                   },
-                  child: Text('Log In', style: TextStyle(fontSize: 18)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
                     padding: EdgeInsets.symmetric(vertical: 12, horizontal: 40),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   ),
+                  child: Text('Log In', style: TextStyle(fontSize: 18)),
                 ),
                 SizedBox(height: 20),
                 TextButton(
@@ -49,8 +51,8 @@ class LoginPage extends StatelessWidget {
                       MaterialPageRoute(builder: (context) => SignUpPage()),
                     );
                   },
-                  child: Text('Don’t have an account? Sign up here'),
                   style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+                  child: Text('Don’t have an account? Sign up here'),
                 )
               ],
             ),

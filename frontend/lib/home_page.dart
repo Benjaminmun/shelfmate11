@@ -3,6 +3,8 @@ import 'login_page.dart';
 import 'signup_page.dart';
 
 class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -66,12 +68,12 @@ class HomePage extends StatelessWidget {
           MaterialPageRoute(builder: (context) => page),
         );
       },
-      child: Text(text, style: TextStyle(fontSize: 18)),
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.black,
         padding: EdgeInsets.symmetric(vertical: 12, horizontal: 40),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       ),
+      child: Text(text, style: TextStyle(fontSize: 18)),
     );
   }
 }

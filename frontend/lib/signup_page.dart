@@ -4,6 +4,8 @@ class SignUpPage extends StatelessWidget {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
+  SignUpPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -30,12 +32,12 @@ class SignUpPage extends StatelessWidget {
                   onPressed: () {
                     print('Signing up with: ${emailController.text} and ${passwordController.text}');
                   },
-                  child: Text('Sign Up', style: TextStyle(fontSize: 18)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
                     padding: EdgeInsets.symmetric(vertical: 12, horizontal: 40),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   ),
+                  child: Text('Sign Up', style: TextStyle(fontSize: 18)),
                 ),
               ],
             ),
