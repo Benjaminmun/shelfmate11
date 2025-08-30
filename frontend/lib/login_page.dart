@@ -1,8 +1,8 @@
+// login_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dashboard_page.dart';
-import 'signup_page.dart';  
+import 'household_service.dart';
+import 'signup_page.dart';
 
 class LoginPage extends StatefulWidget {
   @override
@@ -40,8 +40,7 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       _showDialog('Success', 'Logged in successfully!');
-      await _sendTokenToBackend();
-      _navigateToDashboard();  // Navigate to Dashboard after success
+      _navigateToHouseholdService();  // Navigate to HouseholdPage after success
 
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
@@ -54,11 +53,10 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _navigateToDashboard() {
-    // Navigate to DashboardPage after successful login
+  void _navigateToHouseholdService() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => DashboardPage()),  // Replace with DashboardPage
+      MaterialPageRoute(builder: (context) => HouseholdService()), 
     );
   }
 
@@ -97,8 +95,7 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: () {
                       Navigator.of(context).pop();
                       if (title == 'Success') {
-                        // Navigate to Dashboard when login is successful
-                        _navigateToDashboard();
+                        _navigateToHouseholdService();  // Navigate to HouseholdPage
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -106,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
                       padding: EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(title == 'Success' ? 'Continue to Dashboard' : 'Try Again', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(title == 'Success' ? 'Continue to Household' : 'Try Again', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -115,40 +112,6 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
-  }
-
-  Future<void> _sendTokenToBackend() async {
-    try {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        _showDialog('Error', 'User is not logged in!');
-        return;
-      }
-
-      String? idToken = await user.getIdToken();
-      print("Generated Firebase ID Token: $idToken");
-
-      if (idToken == null) {
-        _showDialog('Error', 'Failed to retrieve ID token.');
-        return;
-      }
-
-      var response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/secure-endpoint'),
-        headers: {'Authorization': 'Bearer $idToken'},
-      );
-
-      print("Response Status: ${response.statusCode}");
-      print("Response Body: ${response.body}");
-
-      if (response.statusCode == 200) {
-        print("Authenticated successfully");
-      } else {
-        _showDialog("Error", "Authentication failed: ${response.body}");
-      }
-    } catch (e) {
-      _showDialog("Error", "Error sending token to backend: $e");
-    }
   }
 
   @override
@@ -302,15 +265,7 @@ class _LoginPageState extends State<LoginPage> {
         controller: controller,
         obscureText: obscureText,
         style: TextStyle(fontSize: 16),
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)),
-          suffixIcon: IconButton(icon: Icon(obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Color(0xFF2D5D7C)), onPressed: onToggle),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-          filled: true,
-          fillColor: Colors.transparent,
-          contentPadding: EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-        ),
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)), suffixIcon: IconButton(icon: Icon(obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Color(0xFF2D5D7C)), onPressed: onToggle), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none), filled: true, fillColor: Colors.transparent),
       ),
     );
   }
