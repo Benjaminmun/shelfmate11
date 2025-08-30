@@ -1,7 +1,6 @@
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
-from firebase_admin.exceptions import FirebaseError
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 import logging
@@ -38,26 +37,10 @@ def verify_token(id_token: str):
     try:
         # Decode and verify the ID token using Firebase Admin SDK
         decoded_token = auth.verify_id_token(id_token)
-        
         # Log the decoded token for debugging purposes
         logging.info(f"Decoded Token: {decoded_token}")
-        
-        # Return the decoded token, which contains user information (UID, email, etc.)
         return decoded_token
-    except auth.ExpiredIdTokenError:
-        # Handle expired token scenario
-        logging.error("The ID token has expired.")
-        return None
-    except auth.RevokedIdTokenError:
-        # Handle revoked token scenario
-        logging.error("The ID token has been revoked.")
-        return None
-    except auth.InvalidIdTokenError:
-        # Handle invalid token format or malformed token
-        logging.error("The ID token is invalid (incorrect format or malformed).")
-        return None
-    except FirebaseError as e:
-        # General Firebase-related error (network issues, etc.)
+    except Exception as e:
         logging.error(f"Error verifying token: {str(e)}")
         return None
 
@@ -66,17 +49,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     decoded_token = verify_token(token)
     if decoded_token is None:
         raise HTTPException(status_code=401, detail="Invalid or expired Firebase token.")
-    return decoded_token  # Contains the user info from the decoded token
+    return decoded_token
 
 # Secure endpoint that requires Firebase authentication
 @app.post("/secure-endpoint")
-async def secure_endpoint(request: Request, current_user: dict = Depends(get_current_user)):
-    token = request.headers.get("Authorization")
-    logging.info(f"Received token from header: {token}")
-    
-    if not token or not token.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-    # Token will be passed for decoding in `verify_token`
+async def secure_endpoint(current_user: dict = Depends(get_current_user)):
     return {"message": "Authenticated", "user_info": current_user}
 
 # Example of accessing Firestore with Firebase

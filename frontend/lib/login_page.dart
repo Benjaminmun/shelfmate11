@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'signup_page.dart';
+import 'dashboard_page.dart';
+import 'signup_page.dart';  
 
 class LoginPage extends StatefulWidget {
   @override
@@ -40,6 +41,7 @@ class _LoginPageState extends State<LoginPage> {
 
       _showDialog('Success', 'Logged in successfully!');
       await _sendTokenToBackend();
+      _navigateToDashboard();  // Navigate to Dashboard after success
 
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
@@ -50,6 +52,14 @@ class _LoginPageState extends State<LoginPage> {
         _isLoading = false;
       });
     }
+  }
+
+  void _navigateToDashboard() {
+    // Navigate to DashboardPage after successful login
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => DashboardPage()),  // Replace with DashboardPage
+    );
   }
 
   void _handleFirebaseAuthError(FirebaseAuthException e) {
@@ -87,7 +97,8 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: () {
                       Navigator.of(context).pop();
                       if (title == 'Success') {
-                        Navigator.pushReplacementNamed(context, '/dashboard');
+                        // Navigate to Dashboard when login is successful
+                        _navigateToDashboard();
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -123,7 +134,7 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       var response = await http.post(
-        Uri.parse('http://localhost:8000/secure-endpoint'),
+        Uri.parse('http://10.0.2.2:8000/secure-endpoint'),
         headers: {'Authorization': 'Bearer $idToken'},
       );
 

@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -19,6 +20,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> _signUpWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
@@ -30,14 +32,35 @@ class _SignUpPageState extends State<SignUpPage> {
     try {
       final email = emailController.text.trim();
       final password = passwordController.text.trim();
+      final fullName = fullNameController.text.trim();
 
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
+      // Store user data in Firestore
+      final String userId = userCredential.user!.uid;
+      await _firestore.collection('users').doc(userId).set({
+        'fullName': fullName,
+        'email': email,
+        'createdAt': FieldValue.serverTimestamp(),
+        'uid': userId,
+      });
+      
+
+// After successful signup, send email verification, show a success dialog, and navigate to the login page
       await userCredential.user!.sendEmailVerification();
       _showDialog('Success', 'Sign-up successful! Please verify your email.');
+
+      Future.delayed(Duration(seconds: 2), () {
+        Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginPage()),
+      );
+   });
+
+
       await _sendTokenToBackend();
 
     } on FirebaseAuthException catch (e) {
@@ -109,7 +132,7 @@ class _SignUpPageState extends State<SignUpPage> {
     try {
       String? idToken = await FirebaseAuth.instance.currentUser!.getIdToken();
       var response = await http.post(
-        Uri.parse('http://localhost:8000/secure-endpoint'),
+        Uri.parse('http://10.0.2.2:8000/secure-endpoint'),
         headers: {'Authorization': 'Bearer $idToken'},
       );
 
@@ -179,13 +202,65 @@ class _SignUpPageState extends State<SignUpPage> {
                   key: _formKey,
                   child: Column(
                     children: [
-                      _buildTextField(controller: fullNameController, label: 'Full Name', icon: Icons.person_outline),
+                      _buildTextField(
+                        controller: fullNameController, 
+                        label: 'Full Name', 
+                        icon: Icons.person_outline,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your full name';
+                          }
+                          return null;
+                        },
+                      ),
                       SizedBox(height: 20),
-                      _buildTextField(controller: emailController, label: 'Email Address', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+                      _buildTextField(
+                        controller: emailController, 
+                        label: 'Email Address', 
+                        icon: Icons.email_outlined, 
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your email';
+                          }
+                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                            return 'Please enter a valid email';
+                          }
+                          return null;
+                        },
+                      ),
                       SizedBox(height: 20),
-                      _buildPasswordField(controller: passwordController, label: 'Password', obscureText: _obscurePassword, onToggle: () => setState(() => _obscurePassword = !_obscurePassword)),
+                      _buildPasswordField(
+                        controller: passwordController, 
+                        label: 'Password', 
+                        obscureText: _obscurePassword, 
+                        onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a password';
+                          }
+                          if (value.length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
+                          return null;
+                        },
+                      ),
                       SizedBox(height: 20),
-                      _buildPasswordField(controller: confirmPasswordController, label: 'Confirm Password', obscureText: _obscureConfirmPassword, onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword)),
+                      _buildPasswordField(
+                        controller: confirmPasswordController, 
+                        label: 'Confirm Password', 
+                        obscureText: _obscureConfirmPassword, 
+                        onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please confirm your password';
+                          }
+                          if (value != passwordController.text) {
+                            return 'Passwords do not match';
+                          }
+                          return null;
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -232,26 +307,85 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildTextField({
+    required TextEditingController controller, 
+    required String label, 
+    required IconData icon, 
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+  }) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 4))]),
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(16), 
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05), 
+            blurRadius: 10, 
+            offset: Offset(0, 4)
+          )
+        ]
+      ),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
+        validator: validator,
         style: TextStyle(fontSize: 16),
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: Color(0xFF2D5D7C)), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none), filled: true, fillColor: Colors.transparent),
+        decoration: InputDecoration(
+          labelText: label, 
+          prefixIcon: Icon(icon, color: Color(0xFF2D5D7C)), 
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16), 
+            borderSide: BorderSide.none
+          ), 
+          filled: true, 
+          fillColor: Colors.transparent
+        ),
       ),
     );
   }
 
-  Widget _buildPasswordField({required TextEditingController controller, required String label, required bool obscureText, required VoidCallback onToggle}) {
+  Widget _buildPasswordField({
+    required TextEditingController controller, 
+    required String label, 
+    required bool obscureText, 
+    required VoidCallback onToggle,
+    String? Function(String?)? validator,
+  }) {
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: Offset(0, 4))]),
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(16), 
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05), 
+            blurRadius: 10, 
+            offset: Offset(0, 4)
+          )
+        ]
+      ),
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
+        validator: validator,
         style: TextStyle(fontSize: 16),
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)), suffixIcon: IconButton(icon: Icon(obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Color(0xFF2D5D7C)), onPressed: onToggle), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none), filled: true, fillColor: Colors.transparent),
+        decoration: InputDecoration(
+          labelText: label, 
+          prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)), 
+          suffixIcon: IconButton(
+            icon: Icon(
+              obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, 
+              color: Color(0xFF2D5D7C)
+            ), 
+            onPressed: onToggle
+          ), 
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16), 
+            borderSide: BorderSide.none
+          ), 
+          filled: true, 
+          fillColor: Colors.transparent
+        ),
       ),
     );
   }
@@ -262,7 +396,12 @@ class _SignUpPageState extends State<SignUpPage> {
       height: 58,
       child: ElevatedButton(
         onPressed: onPressed,
-        style: ElevatedButton.styleFrom(backgroundColor: color, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), shadowColor: color.withOpacity(0.4)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color, 
+          elevation: 0, 
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
+          shadowColor: color.withOpacity(0.4)
+        ),
         child: Text(text, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
       ),
     );
@@ -277,8 +416,21 @@ class _SignUpPageState extends State<SignUpPage> {
         child: Container(
           width: 60,
           height: 60,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 10, offset: Offset(0, 4))]),
-          child: IconButton(icon: Icon(icon, color: color, size: 28), onPressed: () {}),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle, 
+            color: Colors.white, 
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.2), 
+                blurRadius: 10, 
+                offset: Offset(0, 4)
+              )
+            ]
+          ),
+          child: IconButton(
+            icon: Icon(icon, color: color, size: 28), 
+            onPressed: () {}
+          ),
         ),
       ),
     );
