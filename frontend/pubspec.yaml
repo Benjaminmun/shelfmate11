@@ -29,12 +29,17 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   flutter:
-    sdk: flutter
-  firebase_core: ^4.0.0  # Use the latest stable version available
-  firebase_auth: ^6.0.1  # Use the latest stable version available
-  cloud_firestore: ^6.0.0 # Add this for Firestore
-  fluttertoast: ^8.2.12  # Toast message package for Flutter
+    sdk: flutter 
+  firebase_core: ^4.0.0  
+  firebase_auth: ^6.0.1  
+  cloud_firestore: ^6.0.0 
+  fluttertoast: ^8.2.12 
+  http: ^1.1.0 
+  intl: ^0.18.1 
+  shared_preferences: ^2.2.2
 
+
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,8 +1,7 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'dashboard_page.dart';
-import 'login_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/household_service_controller.dart';
+import 'family_members_page.dart';
 
 class HouseholdService extends StatefulWidget {
   @override
@@ -44,6 +43,14 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   },
                 ),
                 ListTile(
+                  leading: Icon(Icons.people, color: primaryColor),
+                  title: Text('Family Members'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showFamilyMembersDialog(context);
+                  },
+                ),
+                ListTile(
                   leading: Icon(Icons.notifications, color: primaryColor),
                   title: Text('Notification Settings'),
                   onTap: () {
@@ -73,12 +80,79 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
+  void _showFamilyMembersDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Family Members',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: primaryColor,
+                  ),
+                ),
+                SizedBox(height: 20),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _controller.getUserHouseholdsWithDetails(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return CircularProgressIndicator();
+                    }
+                    
+                    if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Text('No households found');
+                    }
+                    
+                    return DropdownButtonFormField<String>(
+                      items: snapshot.data!.map((household) {
+                        return DropdownMenuItem<String>(
+                          value: household['id'],
+                          child: Text(household['name']),
+                        );
+                      }).toList(),
+                      onChanged: (householdId) {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FamilyMembersPage(householdId: householdId!),
+                          ),
+                        );
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Select Household',
+                        border: OutlineInputBorder(),
+                      ),
+                    );
+                  },
+                ),
+                SizedBox(height: 20),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        automaticallyImplyLeading: false,  // This removes the back button
+        automaticallyImplyLeading: false,
         title: Text(
           "My Households",
           style: TextStyle(
@@ -246,7 +320,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
           ),
         ],
-      ),
+      )
     );
   }
 
@@ -281,6 +355,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                 return _buildHouseholdCard(
                   household['name'],
                   household['createdAt'],
+                  household['id'],
                   context,
                 );
               },
@@ -291,15 +366,25 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
-  Widget _buildHouseholdCard(String name, Timestamp createdAt, BuildContext context) {
-    DateTime createdDate = createdAt.toDate();
+  Widget _buildHouseholdCard(String name, dynamic createdAt, String householdId, BuildContext context) {
+    DateTime createdDate;
+    
+    // Handle different types of createdAt values
+    if (createdAt is Timestamp) {
+      createdDate = createdAt.toDate();
+    } else if (createdAt is DateTime) {
+      createdDate = createdAt;
+    } else {
+      // Fallback to current date if unknown type
+      createdDate = DateTime.now();
+    }
     
     return Card(
       elevation: 4,
       margin: EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
-        onTap: () => _controller.selectHousehold(name, context),
+        onTap: () => _controller.selectHousehold(name, context, householdId),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: EdgeInsets.all(20),
@@ -338,6 +423,18 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   ],
                 ),
               ),
+              IconButton(
+                icon: Icon(Icons.people_outline, color: primaryColor),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FamilyMembersPage(householdId: householdId),
+                    ),
+                  );
+                },
+                tooltip: 'Manage Family Members',
+              ),
               Icon(Icons.chevron_right, color: Colors.black38),
             ],
           ),
@@ -348,146 +445,5 @@ class _HouseholdServiceState extends State<HouseholdService> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
-  }
-}
-
-class HouseholdServiceController {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  Future<List<Map<String, dynamic>>> getUserHouseholdsWithDetails() async {
-    User? user = _auth.currentUser;
-    if (user == null) {
-      return [];
-    }
-
-    try {
-      var snapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('households')
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      return snapshot.docs.map((doc) {
-        return {
-          'name': doc['householdName'] as String,
-          'createdAt': doc['createdAt'] as Timestamp,
-        };
-      }).toList();
-    } catch (e) {
-      print('Error fetching households: $e');
-      throw e;
-    }
-  }
-
-  Future<void> createNewHousehold(BuildContext context) async {
-    User? user = _auth.currentUser;
-    if (user == null) {
-      return;
-    }
-
-    String householdName = '';
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Create New Household',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D5D7C),
-                  ),
-                ),
-                SizedBox(height: 20),
-                TextField(
-                  onChanged: (value) => householdName = value,
-                  decoration: InputDecoration(
-                    labelText: 'Household Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                  autofocus: true,
-                ),
-                SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel', style: TextStyle(color: Colors.grey)),
-                    ),
-                    SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () async {
-                        if (householdName.isNotEmpty) {
-                          try {
-                            await _firestore
-                                .collection('users')
-                                .doc(user.uid)
-                                .collection('households')
-                                .add({
-                              'householdName': householdName,
-                              'createdAt': FieldValue.serverTimestamp(),
-                            });
-
-                            Navigator.pop(context);
-                            
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Household "$householdName" created successfully'),
-                                backgroundColor: Color(0xFF4CAF50),
-                              ),
-                            );
-                          } catch (e) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error creating household: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF4CAF50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text('Create'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void selectHousehold(String householdName, BuildContext context) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => DashboardPage(selectedHousehold: householdName),
-      ),
-    );
-  }
-
-  void logout(BuildContext context) async {
-    await _auth.signOut();
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => LoginPage()),
-    );
   }
 }

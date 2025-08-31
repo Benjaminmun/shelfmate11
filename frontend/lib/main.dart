@@ -1,10 +1,21 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'home_page.dart'; // Import your HomePage widget
+import 'pages/home_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();  // Initialize Firebase
+  try {
+    await Firebase.initializeApp(); // Initialize Firebase
+    print("Firebase Initialized");
+
+    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL); // Set persistence
+    print("Persistence set to LOCAL");
+    
+  } catch (e) {
+    print("Error initializing Firebase or setting persistence: $e");
+  }
+
   runApp(MyApp());
 }
 
@@ -17,7 +28,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: HomePage(),  // Your HomePage widget
+      home: HomePage(), // Your HomePage widget
     );
   }
 }
