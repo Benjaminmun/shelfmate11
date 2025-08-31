@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';  // Import the intl package
 import '../services/ai_service.dart';
 
 class ChatPage extends StatefulWidget {
@@ -113,6 +114,15 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // Function to format timestamp in GMT+8
+  String _formatTimestamp(DateTime dateTime) {
+    // Get the current time in GMT+8 (Malaysia time)
+    final DateTime gmt8Time = dateTime.toUtc().add(Duration(hours: 8));
+    
+    // Format the timestamp in the desired format
+    return DateFormat('yyyy-MM-dd HH:mm').format(gmt8Time); // Adjust as per your desired format
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -172,7 +182,7 @@ class _ChatPageState extends State<ChatPage> {
                   return ChatBubble(
                     text: message['text']!,
                     isUser: message['sender'] == 'user',
-                    timestamp: '${DateTime.now().hour}:${DateTime.now().minute}',
+                    timestamp: _formatTimestamp(DateTime.now()), // Use formatted timestamp here
                   );
                 },
               ),

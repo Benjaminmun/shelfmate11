@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import '../services/household_service_controller.dart';
 import 'family_members_page.dart';
+import 'package:intl/intl.dart';
 
 class HouseholdService extends StatefulWidget {
   @override
@@ -11,66 +13,136 @@ class HouseholdService extends StatefulWidget {
 class _HouseholdServiceState extends State<HouseholdService> {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final Color primaryColor = Color(0xFF2D5D7C);
-  final Color accentColor = Color(0xFF4CAF50);
-  final Color backgroundColor = Color(0xFFE2E6E0);
+  final Color secondaryColor = Color(0xFF4CAF50);
+  final Color backgroundColor = Color(0xFFF8FAF5);
+  final Color cardColor = Colors.white;
+  final Color textColor = Color(0xFF2C3E50);
+  final Color lightTextColor = Color(0xFF7F8C8D);
 
+  // Search functionality
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Refresh households
+  Future<void> _refreshHouseholds() async {
+    setState(() {
+      _isRefreshing = true;
+    });
+    
+    await Future.delayed(Duration(milliseconds: 1500));
+    
+    setState(() {
+      _isRefreshing = false;
+    });
+  }
+
+  // Enhanced settings dialog
   void _showSettingsDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: primaryColor,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Settings',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: textColor,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, color: lightTextColor),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 20),
-                ListTile(
-                  leading: Icon(Icons.person, color: primaryColor),
-                  title: Text('Profile Settings'),
+                SizedBox(height: 16),
+                _buildSettingsOption(
+                  icon: Icons.person_outline,
+                  title: 'Profile Settings',
+                  subtitle: 'Update your personal information',
                   onTap: () {
                     Navigator.pop(context);
                     // Navigate to profile settings
                   },
                 ),
-                ListTile(
-                  leading: Icon(Icons.people, color: primaryColor),
-                  title: Text('Family Members'),
+                _buildSettingsOption(
+                  icon: Icons.people_outline,
+                  title: 'Family Members',
+                  subtitle: 'Manage household members',
                   onTap: () {
                     Navigator.pop(context);
                     _showFamilyMembersDialog(context);
                   },
                 ),
-                ListTile(
-                  leading: Icon(Icons.notifications, color: primaryColor),
-                  title: Text('Notification Settings'),
+                _buildSettingsOption(
+                  icon: Icons.notifications_none,
+                  title: 'Notifications',
+                  subtitle: 'Configure alert preferences',
                   onTap: () {
                     Navigator.pop(context);
                     // Navigate to notification settings
                   },
                 ),
-                Divider(),
-                ListTile(
-                  leading: Icon(Icons.logout, color: Colors.red),
-                  title: Text('Logout', style: TextStyle(color: Colors.red)),
+                _buildSettingsOption(
+                  icon: Icons.help_outline,
+                  title: 'Help & Support',
+                  subtitle: 'Get assistance with the app',
                   onTap: () {
                     Navigator.pop(context);
-                    _controller.logout(context);
+                    // Navigate to help section
                   },
                 ),
-                SizedBox(height: 10),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel'),
+                SizedBox(height: 16),
+                Divider(),
+                SizedBox(height: 16),
+                Center(
+                  child: TextButton(
+                    onPressed: () => _controller.logout(context),
+                    child: Text(
+                      'Logout',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -80,64 +152,138 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
+  Widget _buildSettingsOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: primaryColor.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: primaryColor),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: textColor,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: lightTextColor,
+        ),
+      ),
+      trailing: Icon(Icons.chevron_right, color: lightTextColor),
+      onTap: onTap,
+    );
+  }
+
   void _showFamilyMembersDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Family Members',
+                  'Select Household',
                   style: TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: primaryColor,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
                   ),
                 ),
-                SizedBox(height: 20),
+                SizedBox(height: 16),
+                Text(
+                  'Choose a household to manage its family members',
+                  style: TextStyle(
+                    color: lightTextColor,
+                  ),
+                ),
+                SizedBox(height: 24),
                 FutureBuilder<List<Map<String, dynamic>>>(
                   future: _controller.getUserHouseholdsWithDetails(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return CircularProgressIndicator();
+                      return Center(child: CircularProgressIndicator());
                     }
                     
                     if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-                      return Text('No households found');
+                      return Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          'No households available',
+                          style: TextStyle(color: lightTextColor),
+                        ),
+                      );
                     }
                     
-                    return DropdownButtonFormField<String>(
-                      items: snapshot.data!.map((household) {
-                        return DropdownMenuItem<String>(
-                          value: household['id'],
-                          child: Text(household['name']),
-                        );
-                      }).toList(),
-                      onChanged: (householdId) {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => FamilyMembersPage(householdId: householdId!),
+                    return Container(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: backgroundColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          items: snapshot.data!.map((household) {
+                            return DropdownMenuItem<String>(
+                              value: household['id'],
+                              child: Text(
+                                household['name'],
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (householdId) {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FamilyMembersPage(householdId: householdId!),
+                              ),
+                            );
+                          },
+                          hint: Text(
+                            'Select a household',
+                            style: TextStyle(color: lightTextColor),
                           ),
-                        );
-                      },
-                      decoration: InputDecoration(
-                        labelText: 'Select Household',
-                        border: OutlineInputBorder(),
+                        ),
                       ),
                     );
                   },
                 ),
-                SizedBox(height: 20),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel'),
+                SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Cancel'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -163,68 +309,165 @@ class _HouseholdServiceState extends State<HouseholdService> {
         ),
         backgroundColor: primaryColor,
         elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(20),
+          ),
+        ),
+        centerTitle: false,
         iconTheme: IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: Icon(Icons.settings),
+            icon: Icon(FeatherIcons.bell, size: 22),
+            onPressed: () {},
+            tooltip: 'Notifications',
+          ),
+          IconButton(
+            icon: Icon(FeatherIcons.settings, size: 22),
             onPressed: () => _showSettingsDialog(context),
             tooltip: 'Settings',
           ),
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {});
-            },
-          ),
         ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _controller.getUserHouseholdsWithDetails(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingState();
-          }
+      body: RefreshIndicator(
+        onRefresh: _refreshHouseholds,
+        color: primaryColor,
+        backgroundColor: Colors.white,
+        child: Column(
+          children: [
+            // Search bar
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 20, 16, 16),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search households...',
+                    prefixIcon: Icon(FeatherIcons.search, color: lightTextColor),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 16),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(FeatherIcons.x, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                            },
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _controller.getUserHouseholdsWithDetails(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
+                    return _buildLoadingState();
+                  }
 
-          if (snapshot.hasError) {
-            return _buildErrorState();
-          }
+                  if (snapshot.hasError) {
+                    return _buildErrorState();
+                  }
 
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildNoHouseholdsState();
-          }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return _buildNoHouseholdsState();
+                  }
 
-          return _buildHouseholdsList(snapshot);
-        },
+                  // Filter households based on search query
+                  final filteredHouseholds = snapshot.data!.where((household) {
+                    return household['name'].toLowerCase().contains(_searchQuery);
+                  }).toList();
+
+                  if (filteredHouseholds.isEmpty) {
+                    return _buildNoResultsState();
+                  }
+
+                  return _buildHouseholdsList(filteredHouseholds);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _controller.createNewHousehold(context),
-        backgroundColor: accentColor,
-        icon: Icon(Icons.add, color: Colors.white),
-        label: Text("New Household", style: TextStyle(color: Colors.white)),
+        backgroundColor: secondaryColor,
         elevation: 4,
+        child: Icon(FeatherIcons.plus, color: Colors.white, size: 28),
+        tooltip: 'Create New Household',
       ),
     );
   }
 
   Widget _buildLoadingState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-            strokeWidth: 3,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Loading your households...',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black54,
+    return ListView.builder(
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Container(
+            height: 120,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                SizedBox(width: 16),
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 16,
+                        color: Colors.grey.shade200,
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        width: 80,
+                        height: 12,
+                        color: Colors.grey.shade200,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 16),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -233,43 +476,42 @@ class _HouseholdServiceState extends State<HouseholdService> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 64, color: Colors.red),
+          Icon(FeatherIcons.alertCircle, size: 64, color: Colors.orange),
           SizedBox(height: 16),
           Text(
-            'Error loading households',
+            'Something went wrong',
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.black54,
+              fontWeight: FontWeight.w600,
+              color: textColor,
             ),
           ),
           SizedBox(height: 8),
-          Text(
-            'Please try again later',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.black38,
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'We couldn\'t load your households. Please check your connection and try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: lightTextColor,
+              ),
             ),
           ),
           SizedBox(height: 24),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
               setState(() {});
             },
+            icon: Icon(FeatherIcons.refreshCw, size: 18),
+            label: Text('Try Again'),
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            child: Text(
-              'Retry',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
             ),
           ),
         ],
@@ -282,83 +524,45 @@ class _HouseholdServiceState extends State<HouseholdService> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.home_work_outlined, size: 80, color: Colors.black38),
+          Image.asset(
+            'assets/images/empty_house.png', // You'll need to add this asset
+            width: 180,
+            height: 180,
+            color: Colors.grey.shade300,
+          ),
           SizedBox(height: 16),
           Text(
             'No households yet',
             style: TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.w500,
-              color: Colors.black54,
+              fontWeight: FontWeight.w600,
+              color: textColor,
             ),
           ),
           SizedBox(height: 8),
-          Text(
-            'Create your first household to get started',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.black38,
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'Create your first household to start managing your inventory and family members',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: lightTextColor,
+              ),
             ),
           ),
           SizedBox(height: 32),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => _controller.createNewHousehold(context),
+            icon: Icon(FeatherIcons.plus, size: 18),
+            label: Text('Create New Household'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: accentColor,
+              backgroundColor: secondaryColor,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            ),
-            child: Text(
-              'Create New Household',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ],
-      )
-    );
-  }
-
-  Widget _buildHouseholdsList(AsyncSnapshot<List<Map<String, dynamic>>> snapshot) {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Your Households',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Select a household to manage its inventory',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.black54,
-            ),
-          ),
-          SizedBox(height: 24),
-          Expanded(
-            child: ListView.builder(
-              itemCount: snapshot.data!.length,
-              itemBuilder: (context, index) {
-                var household = snapshot.data![index];
-                return _buildHouseholdCard(
-                  household['name'],
-                  household['createdAt'],
-                  household['id'],
-                  context,
-                );
-              },
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -366,77 +570,133 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(FeatherIcons.search, size: 64, color: Colors.grey.shade300),
+          SizedBox(height: 16),
+          Text(
+            'No matching households',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Try a different search term',
+            style: TextStyle(
+              fontSize: 14,
+              color: lightTextColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHouseholdsList(List<Map<String, dynamic>> households) {
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+      itemCount: households.length,
+      itemBuilder: (context, index) {
+        var household = households[index];
+        return _buildHouseholdCard(
+          household['name'],
+          household['createdAt'],
+          household['id'],
+          context,
+        );
+      },
+    );
+  }
+
   Widget _buildHouseholdCard(String name, dynamic createdAt, String householdId, BuildContext context) {
     DateTime createdDate;
     
-    // Handle different types of createdAt values
     if (createdAt is Timestamp) {
       createdDate = createdAt.toDate();
     } else if (createdAt is DateTime) {
       createdDate = createdAt;
     } else {
-      // Fallback to current date if unknown type
       createdDate = DateTime.now();
     }
     
-    return Card(
-      elevation: 4,
+    return Container(
       margin: EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () => _controller.selectHousehold(name, context, householdId),
+      decoration: BoxDecoration(
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _controller.selectHousehold(name, context, householdId),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(FeatherIcons.home, color: primaryColor, size: 28),
                 ),
-                child: Icon(Icons.home_outlined, color: primaryColor, size: 30),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Created: ${_formatDate(createdDate)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
+                      SizedBox(height: 4),
+                      Text(
+                        'Created ${_formatDate(createdDate)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: lightTextColor,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: Icon(Icons.people_outline, color: primaryColor),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FamilyMembersPage(householdId: householdId),
-                    ),
-                  );
-                },
-                tooltip: 'Manage Family Members',
-              ),
-              Icon(Icons.chevron_right, color: Colors.black38),
-            ],
+                IconButton(
+                  icon: Icon(FeatherIcons.users, color: primaryColor, size: 20),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FamilyMembersPage(householdId: householdId),
+                      ),
+                    );
+                  },
+                  tooltip: 'Manage Family Members',
+                ),
+                Icon(FeatherIcons.chevronRight, color: lightTextColor, size: 20),
+              ],
+            ),
           ),
         ),
       ),
@@ -444,6 +704,20 @@ class _HouseholdServiceState extends State<HouseholdService> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      return 'today';
+    } else if (difference.inDays == 1) {
+      return 'yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return '$weeks ${weeks == 1 ? 'week' : 'weeks'} ago';
+    } else {
+      return 'on ${DateFormat('MMM d, y').format(date)}';
+    }
   }
 }
