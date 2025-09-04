@@ -525,7 +525,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Image.asset(
-            'assets/images/empty_house.png', // You'll need to add this asset
+            'assets/empty_house.png', // You'll need to add this asset
             width: 180,
             height: 180,
             color: Colors.grey.shade300,
