@@ -32,6 +32,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+
+    aaptOptions {
+    noCompress("tflite")
+    noCompress("lite")
+    }
 }
 
 flutter {
@@ -53,6 +59,9 @@ dependencies {
 
     // Firebase Storage (optional)
     implementation("com.google.firebase:firebase-storage")
+
+    implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
+
 }
 
 // Apply the Google services plugin at the bottom

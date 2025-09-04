@@ -3,10 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'household_service.dart';
-import 'login_page.dart';
 import 'inventory_list_page.dart';
 import 'chat_page.dart';
 import '../services/household_service_controller.dart';
+import 'add_item_page.dart';
+import 'expense_tracker_page.dart';
+import 'profile_page.dart';
+import 'dart:async';
 
 class DashboardPage extends StatefulWidget {
   final String? selectedHousehold;
@@ -18,19 +21,21 @@ class DashboardPage extends StatefulWidget {
   _DashboardPageState createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage> with SingleTickerProviderStateMixin {
   final HouseholdServiceController _householdServiceController = HouseholdServiceController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Color scheme
+  // Enhanced color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
+  final Color primaryLightColor = Color(0xFF5A8BA8);
   final Color secondaryColor = Color(0xFF4CAF50);
   final Color accentColor = Color(0xFFFF9800);
-  final Color backgroundColor = Color(0xFFF5F7F9);
+  final Color warningColor = Color(0xFFFF5722);
+  final Color backgroundColor = Color(0xFFF8FAFC);
   final Color cardColor = Colors.white;
-  final Color textColor = Color(0xFF333333);
-  final Color lightTextColor = Color(0xFF666666);
+  final Color textColor = Color(0xFF1E293B);
+  final Color lightTextColor = Color(0xFF64748B);
 
   String _currentHousehold = '';
   String _currentHouseholdId = '';
@@ -42,192 +47,197 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
+  
+  // Navigation index
+  int _currentIndex = 0;
+  
+  // Stream subscriptions for real-time updates
+  StreamSubscription<QuerySnapshot>? _inventorySubscription;
+  StreamSubscription<QuerySnapshot>? _activitiesSubscription;
+
+  // Animation controllers
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize animations
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 800),
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOut,
+      ),
+    );
+    
     _currentHousehold = widget.selectedHousehold ?? '';
     _currentHouseholdId = widget.householdId ?? '';
     
     if (_currentHouseholdId.isNotEmpty) {
-      _loadInventoryData();
+      _setupRealTimeListeners();
     } else {
       _isLoading = false;
     }
+    
+    // Start animations
+    _animationController.forward();
   }
 
-  Future<void> _loadInventoryData() async {
-    if (_currentHouseholdId.isEmpty) {
+  @override
+  void dispose() {
+    // Cancel all subscriptions when the widget is disposed
+    _inventorySubscription?.cancel();
+    _activitiesSubscription?.cancel();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _setupRealTimeListeners() {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null || userId.isEmpty || _currentHouseholdId.isEmpty) {
       setState(() {
         _isLoading = false;
+        _hasError = true;
+        _errorMessage = 'User not authenticated or household not selected';
       });
       return;
     }
 
     try {
-      // Get current user ID
-      final userId = _auth.currentUser?.uid;
-      if (userId == null || userId.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-          _errorMessage = 'User not authenticated';
-        });
-        return;
-      }
-
-      // Get inventory items
-      final inventorySnapshot = await _firestore
+      // Set up real-time listener for inventory
+      _inventorySubscription = _firestore
           .collection('users')
           .doc(userId)
           .collection('households')
           .doc(_currentHouseholdId)
           .collection('inventory')
-          .get();
+          .snapshots()
+          .listen((snapshot) {
+        _calculateStats(snapshot.docs);
+      }, onError: (error) {
+        print('Inventory stream error: $error');
+        if (!_hasError) {
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Failed to sync inventory: ${error.toString()}';
+          });
+        }
+      });
 
-      // Calculate statistics
-      int totalItems = inventorySnapshot.docs.length;
-      int lowStockItems = 0;
-      int totalCategories = 0;
-      double totalValue = 0.0;
-      Set<String> categories = Set();
-
-      for (var doc in inventorySnapshot.docs) {
-        final data = doc.data();
-        final quantity = (data['quantity'] ?? 0).toInt();
-        final price = (data['price'] ?? 0).toDouble();
-        
-        if (quantity < 5) lowStockItems++;
-        if (data['category'] != null) categories.add(data['category'] as String);
-        totalValue += quantity * price;
-      }
-
-      totalCategories = categories.length;
-
-      // Get recent activities
-      List<Map<String, dynamic>> recentActivities = [];
-      try {
-        final activitiesSnapshot = await _firestore
-            .collection('users')
-            .doc(userId)
-            .collection('households')
-            .doc(_currentHouseholdId)
-            .collection('activities')
-            .orderBy('timestamp', descending: true)
-            .limit(5)
-            .get();
-
-        for (var doc in activitiesSnapshot.docs) {
+      // Set up real-time listener for activities
+      _activitiesSubscription = _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('households')
+          .doc(_currentHouseholdId)
+          .collection('activities')
+          .orderBy('timestamp', descending: true)
+          .limit(5)
+          .snapshots()
+          .listen((snapshot) {
+        List<Map<String, dynamic>> recentActivities = [];
+        for (var doc in snapshot.docs) {
           recentActivities.add({
             'message': doc['message'] ?? 'No message',
             'timestamp': doc['timestamp'] ?? Timestamp.now(),
           });
         }
-      } catch (e) {
-        print('Error loading activities: $e');
+        setState(() {
+          _recentActivities = recentActivities;
+          _hasError = false;
+        });
+      }, onError: (error) {
+        print('Activities stream error: $error');
         // Activities are optional, so we don't treat this as a fatal error
-      }
-
-      // Update state
-      setState(() {
-        _totalItems = totalItems;
-        _lowStockItems = lowStockItems;
-        _totalCategories = totalCategories;
-        _totalValue = totalValue;
-        _recentActivities = recentActivities;
-        _isLoading = false;
-        _hasError = false;
       });
     } catch (e) {
-      print('Error loading inventory data: $e');
+      print('Error setting up real-time listeners: $e');
       setState(() {
         _isLoading = false;
         _hasError = true;
-        _errorMessage = 'Failed to load data: ${e.toString()}';
+        _errorMessage = 'Failed to set up real-time sync: ${e.toString()}';
       });
     }
   }
 
-  Future<void> _logout(BuildContext context) async {
-    try {
-      await _auth.signOut();
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => LoginPage()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      print('Error signing out: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error signing out: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  void _calculateStats(List<QueryDocumentSnapshot> inventoryDocs) {
+    int totalItems = inventoryDocs.length;
+    int lowStockItems = 0;
+    int totalCategories = 0;
+    double totalValue = 0.0;
+    Set<String> categories = Set();
+
+    for (var doc in inventoryDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final quantity = (data['quantity'] ?? 0).toInt();
+      final price = (data['price'] ?? 0).toDouble();
+      
+      if (quantity < 5) lowStockItems++;
+      if (data['category'] != null) categories.add(data['category'] as String);
+      totalValue += quantity * price;
     }
+
+    totalCategories = categories.length;
+
+    setState(() {
+      _totalItems = totalItems;
+      _lowStockItems = lowStockItems;
+      _totalCategories = totalCategories;
+      _totalValue = totalValue;
+      _isLoading = false;
+      _hasError = false;
+    });
   }
 
-  void _showSettingsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 8,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: primaryColor,
-                  ),
-                ),
-                SizedBox(height: 20),
-                ListTile(
-                  leading: Icon(Icons.person, color: primaryColor),
-                  title: Text('Profile Settings', style: TextStyle(color: textColor)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to profile settings
-                  },
-                ),
-                ListTile(
-                  leading: Icon(Icons.notifications, color: primaryColor),
-                  title: Text('Notification Settings', style: TextStyle(color: textColor)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to notification settings
-                  },
-                ),
-                Divider(),
-                ListTile(
-                  leading: Icon(Icons.logout, color: Colors.red),
-                  title: Text('Logout', style: TextStyle(color: Colors.red)),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _logout(context);
-                  },
-                ),
-                SizedBox(height: 10),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: TextStyle(color: lightTextColor)),
-                ),
-              ],
-            ),
-          ),
+  Future<void> _retryLoadData() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    
+    // Cancel existing subscriptions
+    _inventorySubscription?.cancel();
+    _activitiesSubscription?.cancel();
+    
+    // Set up new listeners
+    _setupRealTimeListeners();
+  }
+
+  // Navigation pages based on index
+  Widget _getPage(int index) {
+    switch (index) {
+      case 0: // Dashboard
+        return _buildDashboardContent();
+      case 1: // Inventory
+        return InventoryListPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
         );
-      },
-    );
+      case 2: // Add Item
+        return AddItemPage(
+          householdId: _currentHouseholdId,
+        );
+      case 3: // Expense Tracker
+        return ExpenseTrackerPage(householdId: _currentHouseholdId);
+      case 4: // Profile
+        return ProfilePage();
+      default:
+        return _buildDashboardContent();
+    }
   }
 
   @override
@@ -239,271 +249,425 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       child: Scaffold(
         backgroundColor: backgroundColor,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          title: Text(
-            _currentHousehold.isNotEmpty ? '$_currentHousehold Dashboard' : 'Dashboard',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-          backgroundColor: primaryColor,
-          elevation: 4,
-          iconTheme: IconThemeData(color: Colors.white),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
-          ),
-          actions: [
-            // Chat button
-            IconButton(
-              icon: Icon(Icons.chat, size: 24),
-              onPressed: _currentHouseholdId.isNotEmpty
-                  ? () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatPage(householdId: _currentHouseholdId),
-                        ),
-                      );
-                    }
-                  : null,
-              tooltip: 'Chat with AI Assistant',
-              color: _currentHouseholdId.isNotEmpty ? Colors.white : Colors.white.withOpacity(0.5),
-            ),
-            if (_currentHousehold.isNotEmpty)
-              IconButton(
-                icon: Icon(Icons.swap_horiz, size: 24),
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => HouseholdService()),
-                  );
-                },
-                tooltip: 'Switch Household',
-              ),
-            IconButton(
-              icon: Icon(Icons.settings, size: 24),
-              onPressed: () => _showSettingsDialog(context),
-              tooltip: 'Settings',
-            ),
-          ],
-        ),
+        appBar: _currentIndex == 0 ? _buildAppBar() : null,
         body: _hasError
             ? _buildErrorState()
             : _isLoading
                 ? _buildLoadingState()
                 : _currentHousehold.isNotEmpty
-                    ? _buildDashboardContent()
+                    ? _getPage(_currentIndex)
                     : _buildHouseholdSelection(),
+        bottomNavigationBar: _currentHousehold.isNotEmpty 
+            ? _buildBottomNavigationBar() 
+            : null,
+      ),
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: false,
+      title: Text(
+        _currentHousehold.isNotEmpty ? '$_currentHousehold Dashboard' : 'Dashboard',
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+        ),
+      ),
+      backgroundColor: primaryColor,
+      elevation: 0,
+      iconTheme: IconThemeData(color: Colors.white),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      actions: [
+        // Refresh button for manual sync
+        if (_hasError)
+          IconButton(
+            icon: Icon(Icons.refresh, size: 24),
+            onPressed: _retryLoadData,
+            tooltip: 'Retry Loading Data',
+          ),
+        // Chat button
+        IconButton(
+          icon: Icon(Icons.chat, size: 24),
+          onPressed: _currentHouseholdId.isNotEmpty
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatPage(householdId: _currentHouseholdId),
+                    ),
+                  );
+                }
+              : null,
+          tooltip: 'Chat with AI Assistant',
+          color: _currentHouseholdId.isNotEmpty ? Colors.white : Colors.white.withOpacity(0.5),
+        ),
+        if (_currentHousehold.isNotEmpty)
+          IconButton(
+            icon: Icon(Icons.swap_horiz, size: 24),
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => HouseholdService()),
+              );
+            },
+            tooltip: 'Switch Household',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(20),
+          topLeft: Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: cardColor,
+          selectedItemColor: primaryColor,
+          unselectedItemColor: lightTextColor,
+          selectedFontSize: 12,
+          unselectedFontSize: 12,
+          elevation: 8,
+          items: [
+            BottomNavigationBarItem(
+              icon: Container(
+                padding: EdgeInsets.all(6),
+                decoration: _currentIndex == 0
+                    ? BoxDecoration(
+                        color: primaryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      )
+                    : null,
+                child: Icon(Icons.dashboard, size: 24),
+              ),
+              label: 'Dashboard',
+            ),
+            BottomNavigationBarItem(
+              icon: Container(
+                padding: EdgeInsets.all(6),
+                decoration: _currentIndex == 1
+                    ? BoxDecoration(
+                        color: primaryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      )
+                    : null,
+                child: Icon(Icons.inventory, size: 24),
+              ),
+              label: 'Inventory',
+            ),
+            BottomNavigationBarItem(
+              icon: Container(
+                padding: EdgeInsets.all(6),
+                decoration: _currentIndex == 2
+                    ? BoxDecoration(
+                        color: primaryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      )
+                    : null,
+                child: Icon(Icons.add_circle_outline, size: 24),
+              ),
+              label: 'Add Item',
+            ),
+            BottomNavigationBarItem(
+              icon: Container(
+                padding: EdgeInsets.all(6),
+                decoration: _currentIndex == 3
+                    ? BoxDecoration(
+                        color: primaryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      )
+                    : null,
+                child: Icon(Icons.attach_money, size: 24),
+              ),
+              label: 'Expenses',
+            ),
+            BottomNavigationBarItem(
+              icon: Container(
+                padding: EdgeInsets.all(6),
+                decoration: _currentIndex == 4
+                    ? BoxDecoration(
+                        color: primaryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      )
+                    : null,
+                child: Icon(Icons.person, size: 24),
+              ),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildDashboardContent() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Welcome header
-          Container(
-            padding: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: primaryColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.home, color: primaryColor, size: 28),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome to $_currentHousehold',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Manage your household inventory efficiently',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: lightTextColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: 24),
-          
-          // Quick actions
-          Text(
-            'Quick Actions',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-          SizedBox(height: 12),
-          Row(
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: _buildActionButton(
-                  'Manage Inventory',
-                  Icons.inventory,
-                  secondaryColor,
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => InventoryListPage(
-                          householdId: _currentHouseholdId,
-                          householdName: _currentHousehold,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: _buildActionButton(
-                  'Add Item',
-                  Icons.add,
-                  accentColor,
-                  () {
-                    // Navigate to add item screen
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Navigate to add item screen'),
-                        backgroundColor: secondaryColor,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 24),
-          
-          // Statistics
-          Text(
-            'Inventory Overview',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-          SizedBox(height: 16),
-          GridView(
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 1.2,
-            ),
-            children: [
-              _buildStatCard('Total Items', _totalItems.toString(), Icons.inventory, primaryColor),
-              _buildStatCard('Low Stock', _lowStockItems.toString(), Icons.warning_amber, Colors.orange),
-              _buildStatCard('Categories', _totalCategories.toString(), Icons.category, secondaryColor),
-              _buildStatCard('Total Value', 'RM ${_totalValue.toStringAsFixed(2)}', Icons.attach_money, Colors.green),
-            ],
-          ),
-          SizedBox(height: 24),
-          
-          // Recent Activity
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+              // Welcome header with improved design
+              _buildWelcomeHeader(),
+              SizedBox(height: 24),
+              
+              // Connection status indicator
+              _buildConnectionStatus(),
+              SizedBox(height: 16),
+              
+              // Quick actions
               Text(
-                'Recent Activity',
+                'Quick Actions',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: textColor,
                 ),
               ),
-              if (_recentActivities.isNotEmpty)
-                TextButton(
-                  onPressed: () {
-                    // View all activities
-                  },
-                  child: Text('View All', style: TextStyle(color: primaryColor)),
+              SizedBox(height: 12),
+              _buildQuickActions(),
+              SizedBox(height: 24),
+              
+              // Statistics
+              Text(
+                'Inventory Overview',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
                 ),
+              ),
+              SizedBox(height: 16),
+              _buildStatsGrid(),
+              SizedBox(height: 24),
+              
+              // Recent Activity
+              _buildRecentActivitySection(),
             ],
           ),
-          SizedBox(height: 12),
-          _recentActivities.isEmpty
-              ? Container(
-                  padding: EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 8,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.history, size: 48, color: lightTextColor.withOpacity(0.5)),
-                      SizedBox(height: 12),
-                      Text(
-                        'No recent activity',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: lightTextColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : Container(
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 8,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemCount: _recentActivities.length,
-                    separatorBuilder: (context, index) => Divider(height: 1, indent: 16, endIndent: 16),
-                    itemBuilder: (context, index) {
-                      final activity = _recentActivities[index];
-                      return _buildActivityItem(
-                        activity['message'] ?? 'No message',
-                        _formatTimestamp(activity['timestamp']),
-                      );
-                    },
-                  ),
-                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWelcomeHeader() {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [primaryColor, primaryLightColor],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.3),
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          ),
         ],
       ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.home, color: Colors.white, size: 28),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome to $_currentHousehold',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Everything is up to date and running smoothly',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildActionButton(
+            'Manage Inventory',
+            Icons.inventory,
+            secondaryColor,
+            () {
+              setState(() {
+                _currentIndex = 1;
+              });
+            },
+          ),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: _buildActionButton(
+            'Add Item',
+            Icons.add,
+            accentColor,
+            () {
+              setState(() {
+                _currentIndex = 2;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsGrid() {
+    return GridView(
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 1.2,
+      ),
+      children: [
+        _buildStatCard('Total Items', _totalItems.toString(), Icons.inventory, primaryColor),
+        _buildStatCard('Low Stock', _lowStockItems.toString(), Icons.warning_amber, warningColor),
+        _buildStatCard('Categories', _totalCategories.toString(), Icons.category, secondaryColor),
+        _buildStatCard('Total Value', 'RM ${_totalValue.toStringAsFixed(2)}', Icons.attach_money, Colors.green),
+      ],
+    );
+  }
+
+  Widget _buildRecentActivitySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Recent Activity',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+            if (_recentActivities.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  // View all activities
+                },
+                child: Text('View All', style: TextStyle(color: primaryColor)),
+              ),
+          ],
+        ),
+        SizedBox(height: 12),
+        _recentActivities.isEmpty
+            ? Container(
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.history, size: 48, color: lightTextColor.withOpacity(0.5)),
+                    SizedBox(height: 12),
+                    Text(
+                      'No recent activity',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: lightTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Container(
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  physics: NeverScrollableScrollPhysics(),
+                  itemCount: _recentActivities.length,
+                  separatorBuilder: (context, index) => Divider(height: 1, indent: 16, endIndent: 16),
+                  itemBuilder: (context, index) {
+                    final activity = _recentActivities[index];
+                    return _buildActivityItem(
+                      activity['message'] ?? 'No message',
+                      _formatTimestamp(activity['timestamp']),
+                    );
+                  },
+                ),
+              ),
+      ],
     );
   }
 
@@ -600,7 +764,7 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red),
+            Icon(Icons.error_outline, size: 64, color: warningColor),
             SizedBox(height: 16),
             Text(
               'Something went wrong',
@@ -621,7 +785,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _loadInventoryData,
+              onPressed: _retryLoadData,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -633,6 +797,22 @@ class _DashboardPageState extends State<DashboardPage> {
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
+                ),
+              ),
+            ),
+            SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => HouseholdService()),
+                );
+              },
+              child: Text(
+                'Switch Household',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: primaryColor,
                 ),
               ),
             ),
@@ -691,6 +871,44 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildConnectionStatus() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: _hasError ? warningColor : secondaryColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            _hasError ? 'Offline' : 'Syncing in real-time',
+            style: TextStyle(
+              fontSize: 12,
+              color: _hasError ? warningColor : secondaryColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId) {
     DateTime createdDate = createdAt.toDate();
     
@@ -704,7 +922,7 @@ class _DashboardPageState extends State<DashboardPage> {
             _currentHouseholdId = householdId;
             _isLoading = true;
           });
-          _loadInventoryData();
+          _setupRealTimeListeners();
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(

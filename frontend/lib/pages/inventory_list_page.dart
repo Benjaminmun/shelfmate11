@@ -52,6 +52,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
+        automaticallyImplyLeading: false, 
         title: Text(
           '${widget.householdName} Inventory',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
@@ -62,14 +63,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add, size: 24),
-            onPressed: () {
-              _navigateToEditPage();
-            },
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -314,6 +307,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                               'Expiring Soon',
                               style: TextStyle(
                                 fontSize: 12,
+                                overflow: TextOverflow.ellipsis, // prevents overflow
                                 color: Colors.red,
                                 fontWeight: FontWeight.w500,
                               ),

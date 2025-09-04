@@ -9,7 +9,7 @@ class HouseholdServiceController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Get the user's households with details
+  // Get the user's households with details including householdId
   Future<List<Map<String, dynamic>>> getUserHouseholdsWithDetails() async {
     User? user = _auth.currentUser;
     if (user == null) {
@@ -27,6 +27,7 @@ class HouseholdServiceController {
       return snapshot.docs.map((doc) {
         return {
           'id': doc.id,
+          'householdId': doc.id, // Ensure householdId is included
           'name': doc['householdName'] as String,
           'createdAt': doc['createdAt'] as Timestamp,
         };
@@ -106,7 +107,7 @@ class HouseholdServiceController {
     }
   }
 
-  // Create a new household and get the householdId
+  // Create a new household and ensure householdId is properly stored
   Future<void> createNewHousehold(BuildContext context) async {
     User? user = _auth.currentUser;
     if (user == null) {
@@ -156,18 +157,19 @@ class HouseholdServiceController {
                       onPressed: () async {
                         if (householdName.isNotEmpty) {
                           try {
-                            // Add new household and capture the auto-generated ID
-                            var docRef = await _firestore
+                            // Create a new document with auto-generated ID
+                            var docRef = _firestore
                                 .collection('users')
                                 .doc(user.uid)
                                 .collection('households')
-                                .add({
+                                .doc();
+                            
+                            // Set data including the householdId field
+                            await docRef.set({
                               'householdName': householdName,
                               'createdAt': FieldValue.serverTimestamp(),
+                              'householdId': docRef.id, // Store the document ID as householdId
                             });
-
-                            // Capture the generated household ID
-                            String householdId = docRef.id;
 
                             Navigator.pop(context);
                             
@@ -178,8 +180,8 @@ class HouseholdServiceController {
                               ),
                             );
 
-                            // Pass the householdId to navigate or use it elsewhere
-                            selectHousehold(householdName, context, householdId);
+                            // Pass the householdId to navigate
+                            selectHousehold(householdName, context, docRef.id);
                           } catch (e) {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
