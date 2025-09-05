@@ -4,6 +4,10 @@ import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import '../services/household_service_controller.dart';
 import 'family_members_page.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 
 class HouseholdService extends StatefulWidget {
   @override
@@ -12,6 +16,8 @@ class HouseholdService extends StatefulWidget {
 
 class _HouseholdServiceState extends State<HouseholdService> {
   final HouseholdServiceController _controller = HouseholdServiceController();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color secondaryColor = Color(0xFF4CAF50);
   final Color backgroundColor = Color(0xFFF8FAF5);
@@ -293,6 +299,208 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
+  // Show options dialog for a household
+  void _showHouseholdOptions(BuildContext context, String householdId, String householdName) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.share, color: primaryColor),
+                title: Text('Share Invitation Code'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareHouseholdInvitation(context, householdId);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.copy, color: primaryColor),
+                title: Text('Copy Invitation Code'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _copyInvitationCode(context, householdId);
+                },
+              ),
+              Divider(),
+              ListTile(
+                leading: Icon(Icons.delete, color: Colors.red),
+                title: Text('Delete Household', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showDeleteConfirmation(context, householdId, householdName);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Share household invitation
+  void _shareHouseholdInvitation(BuildContext context, String householdId) async {
+    try {
+      final householdDoc = await _firestore
+          .collection('users')
+          .doc(_auth.currentUser!.uid)
+          .collection('households')
+          .doc(householdId)
+          .get();
+
+      if (householdDoc.exists) {
+        final invitationCode = householdDoc.data()!['invitationCode'] ?? '';
+        final householdName = householdDoc.data()!['householdName'] ?? '';
+        final shareText = 'Join my household "$householdName" on HomeHub! Use code: $invitationCode';
+        Share.share(shareText);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error sharing invitation: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Copy invitation code to clipboard
+  void _copyInvitationCode(BuildContext context, String householdId) async {
+    try {
+      final householdDoc = await _firestore
+          .collection('users')
+          .doc(_auth.currentUser!.uid)
+          .collection('households')
+          .doc(householdId)
+          .get();
+
+      if (householdDoc.exists) {
+        final invitationCode = householdDoc.data()!['invitationCode'] ?? '';
+        await Clipboard.setData(ClipboardData(text: invitationCode));
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invitation code copied to clipboard'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error copying invitation code: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Show delete confirmation dialog
+  void _showDeleteConfirmation(BuildContext context, String householdId, String householdName) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Delete Household'),
+          content: Text('Are you sure you want to delete "$householdName"? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _deleteHousehold(context, householdId);
+              },
+              child: Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Delete household
+  Future<void> _deleteHousehold(BuildContext context, String householdId) async {
+    try {
+      await _controller.deleteHousehold(householdId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Household deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      setState(() {}); // Refresh the list
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error deleting household: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Method to show create or join dialog
+  void _showCreateOrJoinDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Household Options',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2D5D7C),
+                  ),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _controller.createNewHousehold(context);
+                  },
+                  icon: Icon(FeatherIcons.plus),
+                  label: Text('Create New Household'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF4CAF50),
+                    foregroundColor: Colors.white,
+                    minimumSize: Size(250, 50),
+                  ),
+                ),
+                SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _controller.showJoinHouseholdDialog(context);
+                  },
+                  icon: Icon(FeatherIcons.users),
+                  label: Text('Join Existing Household'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Color(0xFF2D5D7C),
+                    side: BorderSide(color: Color(0xFF2D5D7C)),
+                    minimumSize: Size(250, 50),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -321,6 +529,13 @@ class _HouseholdServiceState extends State<HouseholdService> {
             icon: Icon(FeatherIcons.bell, size: 22),
             onPressed: () {},
             tooltip: 'Notifications',
+          ),
+          IconButton(
+            icon: Icon(FeatherIcons.plusCircle, size: 22),
+            onPressed: () {
+              _showCreateOrJoinDialog(context);
+            },
+            tooltip: 'Create or Join Household',
           ),
           IconButton(
             icon: Icon(FeatherIcons.settings, size: 22),
@@ -524,12 +739,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset(
-            'assets/empty_house.png', // You'll need to add this asset
-            width: 180,
-            height: 180,
-            color: Colors.grey.shade300,
-          ),
+          Icon(FeatherIcons.home, size: 64, color: Colors.grey.shade300),
           SizedBox(height: 16),
           Text(
             'No households yet',
@@ -642,6 +852,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _controller.selectHousehold(name, context, householdId),
+          onLongPress: () => _showHouseholdOptions(context, householdId, name),
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: EdgeInsets.all(20),
@@ -694,7 +905,38 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   },
                   tooltip: 'Manage Family Members',
                 ),
-                Icon(FeatherIcons.chevronRight, color: lightTextColor, size: 20),
+                PopupMenuButton(
+                  icon: Icon(FeatherIcons.moreVertical, color: lightTextColor, size: 20),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'share',
+                      child: Row(
+                        children: [
+                          Icon(FeatherIcons.share2, size: 18, color: primaryColor),
+                          SizedBox(width: 8),
+                          Text('Share Invitation'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(FeatherIcons.trash2, size: 18, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onSelected: (value) {
+                    if (value == 'share') {
+                      _shareHouseholdInvitation(context, householdId);
+                    } else if (value == 'delete') {
+                      _showDeleteConfirmation(context, householdId, name);
+                    }
+                  },
+                ),
               ],
             ),
           ),

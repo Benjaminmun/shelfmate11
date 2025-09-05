@@ -20,6 +20,15 @@ class _AddItemPageState extends State<AddItemPage> {
   final ImagePicker _picker = ImagePicker();
   final BarcodeScanner _barcodeScanner = BarcodeScanner();
 
+  // Using the same color scheme as DashboardPage
+  final Color primaryColor = Color(0xFF2D5D7C);
+  final Color backgroundColor = Color(0xFFF8FAFC);
+  final Color cardColor = Colors.white;
+  final Color textColor = Color(0xFF1E293B);
+  final Color lightTextColor = Color(0xFF64748B);
+  final Color secondaryColor = Color(0xFF4CAF50);
+  final Color accentColor = Color(0xFFFF9800);
+
   Future<void> _scanBarcode() async {
     setState(() => _isScanning = true);
 
@@ -39,12 +48,18 @@ class _AddItemPageState extends State<AddItemPage> {
         _fetchProductInfo(barcodeValue);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No barcode found')),
+          SnackBar(
+            content: Text('No barcode found'),
+            backgroundColor: primaryColor,
+          ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error scanning: $e')),
+        SnackBar(
+          content: Text('Error scanning: $e'),
+          backgroundColor: primaryColor,
+        ),
       );
     } finally {
       setState(() => _isScanning = false);
@@ -64,13 +79,19 @@ class _AddItemPageState extends State<AddItemPage> {
           _showProductDetails(product);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Product not found')),
+            SnackBar(
+              content: Text('Product not found'),
+              backgroundColor: primaryColor,
+            ),
           );
         }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error fetching product info: $e')),
+        SnackBar(
+          content: Text('Error fetching product info: $e'),
+          backgroundColor: primaryColor,
+        ),
       );
     }
   }
@@ -79,7 +100,11 @@ class _AddItemPageState extends State<AddItemPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(product['product_name']?.toString() ?? 'Unknown Product'),
+        backgroundColor: cardColor,
+        title: Text(
+          product['product_name']?.toString() ?? 'Unknown Product',
+          style: TextStyle(color: textColor),
+        ),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,29 +113,47 @@ class _AddItemPageState extends State<AddItemPage> {
               if (product['image_url'] != null)
                 Image.network(product['image_url'].toString()),
               const SizedBox(height: 12),
-              Text('Brand: ${product['brands']?.toString() ?? 'Unknown'}'),
+              Text(
+                'Brand: ${product['brands']?.toString() ?? 'Unknown'}',
+                style: TextStyle(color: textColor),
+              ),
               const SizedBox(height: 8),
-              Text('Quantity: ${product['quantity']?.toString() ?? 'N/A'}'),
+              Text(
+                'Quantity: ${product['quantity']?.toString() ?? 'N/A'}',
+                style: TextStyle(color: textColor),
+              ),
               const SizedBox(height: 8),
               if (product['categories'] != null)
-                Text('Category: ${product['categories']}'),
+                Text(
+                  'Category: ${product['categories']}',
+                  style: TextStyle(color: textColor),
+                ),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: lightTextColor),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
               // TODO: Save to Firestore with widget.householdId
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Item added to household')),
+                SnackBar(
+                  content: Text('Item added to household'),
+                  backgroundColor: primaryColor,
+                ),
               );
             },
-            child: const Text('Add to Household'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+            ),
+            child: Text('Add to Household'),
           ),
         ],
       ),
@@ -126,33 +169,113 @@ class _AddItemPageState extends State<AddItemPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('Add Item'),
-        backgroundColor: const Color(0xFF2D5D7C),
+        title: Text(
+          'Add Item',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: primaryColor,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildOptionCard(
-              title: 'Scan Barcode',
-              icon: Icons.qr_code_scanner,
-              description: 'Scan product barcode to quickly add items',
-              onTap: _isScanning ? null : _scanBarcode,
-              isLoading: _isScanning,
+            // Header
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [primaryColor, Color(0xFF5A8BA8)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryColor.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.add, color: Colors.white, size: 28),
+                  ),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Add New Item',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Scan barcode or add manually',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
-            _buildOptionCard(
-              title: 'Add Manually',
-              icon: Icons.edit,
-              description: 'Enter item details manually',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Manual entry form')),
-                );
-              },
+            SizedBox(height: 24),
+            
+            // Options
+            Expanded(
+              child: Column(
+                children: [
+                  _buildOptionCard(
+                    title: 'Scan Barcode',
+                    icon: Icons.qr_code_scanner,
+                    description: 'Scan product barcode to quickly add items',
+                    onTap: _isScanning ? null : _scanBarcode,
+                    isLoading: _isScanning,
+                  ),
+                  SizedBox(height: 20),
+                  _buildOptionCard(
+                    title: 'Add Manually',
+                    icon: Icons.edit,
+                    description: 'Enter item details manually',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Manual entry form'),
+                          backgroundColor: primaryColor,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -169,27 +292,61 @@ class _AddItemPageState extends State<AddItemPage> {
   }) {
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (isLoading)
-                const CircularProgressIndicator()
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                )
               else
-                Icon(icon, size: 48, color: const Color(0xFF2D5D7C)),
-              const SizedBox(height: 12),
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon, 
+                    size: 30, 
+                    color: primaryColor
+                  ),
+                ),
+              SizedBox(height: 16),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              SizedBox(height: 8),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 14, 
+                  color: lightTextColor,
+                ),
               ),
             ],
           ),

@@ -55,7 +55,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
         automaticallyImplyLeading: false, 
         title: Text(
           '${widget.householdName} Inventory',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: primaryColor,
         elevation: 4,
