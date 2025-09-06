@@ -1,10 +1,14 @@
-// login_page.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'household_service.dart';
 import 'signup_page.dart';
+import 'home_page.dart';
+import 'user_info_page.dart'; // Make sure to import your UserInfoPage
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -17,6 +21,7 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> _loginWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
@@ -39,8 +44,22 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      _showDialog('Success', 'Logged in successfully!');
-      _navigateToHouseholdService();  // Navigate to HouseholdPage after success
+      // Check if user info exists in Firestore
+      final userInfoExists = await _checkUserInfoExists(userCredential.user!.uid);
+      
+      if (userInfoExists) {
+        // Navigate directly to HouseholdService
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => HouseholdService()),
+        );
+      } else {
+        // Navigate to UserInfoPage to collect user information
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => UserInfoPage()),
+        );
+      }
 
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
@@ -53,11 +72,15 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _navigateToHouseholdService() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => HouseholdService()), 
-    );
+  Future<bool> _checkUserInfoExists(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      return doc.exists && 
+             doc.data()?['firstName'] != null && 
+             doc.data()?['lastName'] != null;
+    } catch (e) {
+      return false;
+    }
   }
 
   void _handleFirebaseAuthError(FirebaseAuthException e) {
@@ -94,16 +117,13 @@ class _LoginPageState extends State<LoginPage> {
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.of(context).pop();
-                      if (title == 'Success') {
-                        _navigateToHouseholdService();  // Navigate to HouseholdPage
-                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: title == 'Success' ? Color(0xFF4CAF50) : Color(0xFF2D5D7C),
                       padding: EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(title == 'Success' ? 'Continue to Household' : 'Try Again', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(title == 'Success' ? 'Continue' : 'Try Again', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -130,7 +150,10 @@ class _LoginPageState extends State<LoginPage> {
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     icon: Icon(Icons.arrow_back, color: Color(0xFF2D5D7C)),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => HomePage()),
+                    ),
                   ),
                 ),
                 SizedBox(height: 20),
@@ -145,7 +168,15 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ],
                   ),
-                  child: Image.asset('assets/logo.png', width: 140, height: 140),
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      color: Color(0xFF2D5D7C).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.inventory_2_outlined, size: 60, color: Color(0xFF2D5D7C)),
+                  ),
                 ),
                 SizedBox(height: 20),
                 ShaderMask(
@@ -232,7 +263,10 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     Text("Don't have an account? "),
                     GestureDetector(
-                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => SignUpPage())),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => SignUpPage()),
+                      ),
                       child: Text('Sign Up', style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.w600)),
                     ),
                   ],
@@ -253,6 +287,15 @@ class _LoginPageState extends State<LoginPage> {
         controller: controller,
         keyboardType: keyboardType,
         style: TextStyle(fontSize: 16),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Please enter your email';
+          }
+          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+            return 'Please enter a valid email';
+          }
+          return null;
+        },
         decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: Color(0xFF2D5D7C)), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none), filled: true, fillColor: Colors.transparent),
       ),
     );
@@ -265,6 +308,15 @@ class _LoginPageState extends State<LoginPage> {
         controller: controller,
         obscureText: obscureText,
         style: TextStyle(fontSize: 16),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Please enter your password';
+          }
+          if (value.length < 6) {
+            return 'Password must be at least 6 characters';
+          }
+          return null;
+        },
         decoration: InputDecoration(labelText: label, prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)), suffixIcon: IconButton(icon: Icon(obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Color(0xFF2D5D7C)), onPressed: onToggle), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none), filled: true, fillColor: Colors.transparent),
       ),
     );

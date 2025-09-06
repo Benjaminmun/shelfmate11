@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +13,45 @@ class HouseholdServiceController {
 
   User? get currentUser => _auth.currentUser;
 
+  // Get user role for a specific household - checks both locations
+  Future<String> getUserRole(String householdId) async {
+    if (currentUser == null) return 'member';
+    
+    try {
+      // First check the main household members collection (source of truth)
+      final householdMemberDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .get();
+      
+      if (householdMemberDoc.exists) {
+        return householdMemberDoc.data()?['userRole'] ?? 'member';
+      }
+      
+      // Fallback to user's personal collection
+      final userHouseholdDoc = await _firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('households')
+          .doc(householdId)
+          .get();
+          
+      return userHouseholdDoc.data()?['userRole'] ?? 'member';
+    } catch (e) {
+      debugPrint('Error getting user role: $e');
+      return 'member';
+    }
+  }
+
+  // Check if user is household owner
+  Future<bool> isHouseholdOwner(String householdId) async {
+    final role = await getUserRole(householdId);
+    return role == 'creator';
+  }
+
+  // Get households with user role information
   Future<List<Map<String, dynamic>>> getUserHouseholdsWithDetails() async {
     if (currentUser == null) return [];
 
@@ -33,6 +71,7 @@ class HouseholdServiceController {
           'name': data['householdName'] ?? 'Unnamed',
           'createdAt': data['createdAt'] ?? FieldValue.serverTimestamp(),
           'invitationCode': data['invitationCode'] ?? '',
+          'userRole': data['userRole'] ?? 'member',
         };
       }).toList();
     } catch (e) {
@@ -41,90 +80,7 @@ class HouseholdServiceController {
     }
   }
 
-  // Get invitation code for a specific household
-  Future<String> getInvitationCode(String householdId) async {
-    if (currentUser == null) return '';
-    
-    try {
-      final householdDoc = await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId)
-          .get();
-          
-      return householdDoc.data()?['invitationCode'] ?? '';
-    } catch (e) {
-      debugPrint('Error getting invitation code: $e');
-      return '';
-    }
-  }
-
-  Future<List<FamilyMember>> getFamilyMembers(String householdId) async {
-    if (currentUser == null) return [];
-
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId)
-          .collection('familyMembers')
-          .orderBy('firstName')
-          .get();
-
-      return snapshot.docs
-          .map((doc) => FamilyMember.fromMap(doc.data(), doc.id))
-          .toList();
-    } catch (e) {
-      debugPrint('Error fetching family members: $e');
-      return [];
-    }
-  }
-
-  Future<void> addFamilyMember(String householdId, FamilyMember member) async {
-    if (currentUser == null) return;
-
-    try {
-      await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId)
-          .collection('familyMembers')
-          .add(member.toMap());
-    } catch (e) {
-      debugPrint('Error adding family member: $e');
-    }
-  }
-
-  Future<void> deleteFamilyMember(String householdId, String memberId) async {
-    if (currentUser == null) return;
-
-    try {
-      await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId)
-          .collection('familyMembers')
-          .doc(memberId)
-          .delete();
-    } catch (e) {
-      debugPrint('Error deleting family member: $e');
-    }
-  }
-
-  // Generate a random invitation code
-  String _generateInvitationCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
-    return String.fromCharCodes(Iterable.generate(
-      6,
-      (_) => chars.codeUnitAt(random.nextInt(chars.length)),
-    ));
-  }
-
+  // Create new household with proper role assignment
   Future<void> createNewHousehold(BuildContext context) async {
     if (currentUser == null) return;
 
@@ -175,13 +131,12 @@ class HouseholdServiceController {
 
                         try {
                           final docRef = _firestore
-                              .collection('users')
-                              .doc(currentUser!.uid)
                               .collection('households')
                               .doc();
 
                           final invitationCode = _generateInvitationCode();
 
+                          // Create main household document
                           await docRef.set({
                             'householdName': householdName,
                             'createdAt': FieldValue.serverTimestamp(),
@@ -190,8 +145,18 @@ class HouseholdServiceController {
                             'ownerId': currentUser!.uid,
                           });
 
-                          // Also create a reference in the main households collection
+                          // Add user as member with creator role
+                          await docRef.collection('members').doc(currentUser!.uid).set({
+                            'userId': currentUser!.uid,
+                            'joinedAt': FieldValue.serverTimestamp(),
+                            'userRole': 'creator',
+                            'email': currentUser!.email,
+                          });
+
+                          // Create user household reference
                           await _firestore
+                              .collection('users')
+                              .doc(currentUser!.uid)
                               .collection('households')
                               .doc(docRef.id)
                               .set({
@@ -199,8 +164,8 @@ class HouseholdServiceController {
                             'createdAt': FieldValue.serverTimestamp(),
                             'householdId': docRef.id,
                             'invitationCode': invitationCode,
-                            'ownerId': currentUser!.uid,
-                            'members': [currentUser!.uid],
+                            'userRole': 'creator',
+                            'joinedAt': FieldValue.serverTimestamp(),
                           });
 
                           Navigator.pop(ctx);
@@ -213,9 +178,7 @@ class HouseholdServiceController {
                             ),
                           );
 
-                          // Show invitation code after creation
                           _showInvitationDialog(context, invitationCode, householdName);
-
                           selectHousehold(householdName, context, docRef.id);
                         } catch (e) {
                           Navigator.pop(ctx);
@@ -242,6 +205,226 @@ class HouseholdServiceController {
         );
       },
     );
+  }
+
+  // Join household with invitation code
+  Future<void> joinHousehold(BuildContext context, String invitationCode) async {
+    if (currentUser == null) return;
+
+    try {
+      // Find household with the invitation code
+      final querySnapshot = await _firestore
+          .collection('households')
+          .where('invitationCode', isEqualTo: invitationCode)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invalid invitation code'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final householdDoc = querySnapshot.docs.first;
+      final householdData = householdDoc.data();
+      final householdName = householdData['householdName'] ?? 'Unknown Household';
+      final householdId = householdDoc.id;
+      final ownerId = householdData['ownerId'];
+
+      // Check if user is the owner of this household
+      if (currentUser!.uid == ownerId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You are already the owner of this household'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Check if user already has this household
+      final userHouseholdRef = _firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('households')
+          .doc(householdId);
+
+      final userHouseholdDoc = await userHouseholdRef.get();
+
+      if (userHouseholdDoc.exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You already belong to this household'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Add user to household members with member role
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .set({
+            'userId': currentUser!.uid,
+            'joinedAt': FieldValue.serverTimestamp(),
+            'userRole': 'member',
+            'email': currentUser!.email,
+          });
+
+      // Add household to user's collection
+      await userHouseholdRef.set({
+        'householdName': householdName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'householdId': householdId,
+        'invitationCode': invitationCode,
+        'userRole': 'member',
+        'joinedAt': FieldValue.serverTimestamp(),
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Successfully joined $householdName'),
+          backgroundColor: const Color(0xFF4CAF50),
+        ),
+      );
+
+      Navigator.of(context).pop();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error joining household: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Delete household (only for owners)
+  Future<void> deleteHousehold(String householdId) async {
+    if (currentUser == null) return;
+
+    try {
+      final isOwner = await isHouseholdOwner(householdId);
+      if (!isOwner) {
+        throw Exception('Only household owners can delete households');
+      }
+
+      // Delete the household document from user's collection
+      await _firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('households')
+          .doc(householdId)
+          .delete();
+
+      // Delete the main household document (security rules will prevent if not owner)
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .delete();
+    } catch (e) {
+      debugPrint('Error deleting household: $e');
+      rethrow;
+    }
+  }
+
+  // Get family members with permission check
+  Future<List<FamilyMember>> getFamilyMembers(String householdId) async {
+    if (currentUser == null) return [];
+
+    try {
+      // Check if user has access to this household
+      final memberDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .get();
+
+      if (!memberDoc.exists) {
+        throw Exception('You do not have access to this household');
+      }
+
+      final snapshot = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('familyMembers')
+          .orderBy('firstName')
+          .get();
+
+      return snapshot.docs
+          .map((doc) => FamilyMember.fromMap(doc.data(), doc.id))
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching family members: $e');
+      return [];
+    }
+  }
+
+  // Add family member with permission check
+  Future<void> addFamilyMember(String householdId, FamilyMember member) async {
+    if (currentUser == null) return;
+
+    try {
+      // Check if user has write access to this household
+      final memberDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .get();
+
+      if (!memberDoc.exists) {
+        throw Exception('You do not have access to this household');
+      }
+
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('familyMembers')
+          .add(member.toMap());
+    } catch (e) {
+      debugPrint('Error adding family member: $e');
+      rethrow;
+    }
+  }
+
+  // Delete family member (only for owners)
+  Future<void> deleteFamilyMember(String householdId, String memberId) async {
+    if (currentUser == null) return;
+
+    try {
+      final isOwner = await isHouseholdOwner(householdId);
+      if (!isOwner) {
+        throw Exception('Only household owners can delete family members');
+      }
+
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('familyMembers')
+          .doc(memberId)
+          .delete();
+    } catch (e) {
+      debugPrint('Error deleting family member: $e');
+      rethrow;
+    }
+  }
+
+  // Generate random invitation code
+  String _generateInvitationCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    return String.fromCharCodes(Iterable.generate(
+      6,
+      (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+    ));
   }
 
   void _showInvitationDialog(BuildContext context, String invitationCode, String householdName) {
@@ -331,88 +514,7 @@ class HouseholdServiceController {
     Share.share(shareText);
   }
 
-  Future<void> joinHousehold(BuildContext context, String invitationCode) async {
-    if (currentUser == null) return;
-
-    try {
-      // Find household with the invitation code in the main households collection
-      final querySnapshot = await _firestore
-          .collection('households')
-          .where('invitationCode', isEqualTo: invitationCode)
-          .get();
-
-      if (querySnapshot.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invalid invitation code'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      final householdDoc = querySnapshot.docs.first;
-      final householdData = householdDoc.data();
-      final householdName = householdData['householdName'] ?? 'Unknown Household';
-      final householdId = householdDoc.id;
-
-      // Check if user already has this household
-      final userHouseholdRef = _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId);
-
-      final userHouseholdDoc = await userHouseholdRef.get();
-
-      if (userHouseholdDoc.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('You already belong to this household'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-
-      // Add household to user's collection
-      await userHouseholdRef.set({
-        'householdName': householdName,
-        'createdAt': FieldValue.serverTimestamp(),
-        'householdId': householdId,
-        'invitationCode': invitationCode,
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Add user to the household's members list
-      await _firestore
-          .collection('households')
-          .doc(householdId)
-          .update({
-            'members': FieldValue.arrayUnion([currentUser!.uid])
-          });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Successfully joined $householdName'),
-          backgroundColor: const Color(0xFF4CAF50),
-        ),
-      );
-
-      // Refresh the household list
-      Navigator.of(context).pop();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error joining household: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void selectHousehold(
-      String householdName, BuildContext context, String householdId) {
+  void selectHousehold(String householdName, BuildContext context, String householdId) {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -439,74 +541,6 @@ class HouseholdServiceController {
     }
   }
 
-  Future<void> deleteHousehold(String householdId) async {
-    if (currentUser == null) return;
-
-    try {
-      // Delete the household document from user's collection
-      await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId)
-          .delete();
-
-      // Also delete all family members under this household
-      final familyMembersSnapshot = await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .doc(householdId)
-          .collection('familyMembers')
-          .get();
-
-      final batch = _firestore.batch();
-      for (var doc in familyMembersSnapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-      
-      // Remove user from the main household's members list
-      await _firestore
-          .collection('households')
-          .doc(householdId)
-          .update({
-            'members': FieldValue.arrayRemove([currentUser!.uid])
-          });
-    } catch (e) {
-      debugPrint('Error deleting household: $e');
-      rethrow;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> fetchAllHouseholdsWithIds() async {
-    if (currentUser == null) return [];
-
-    try {
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(currentUser!.uid)
-          .collection('households')
-          .get();
-
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          'householdId': doc.id,
-          'name': data['householdName'] ?? 'Unnamed',
-          'createdAt': data['createdAt'] is Timestamp
-              ? (data['createdAt'] as Timestamp).toDate().toIso8601String()
-              : 'Unknown',
-        };
-      }).toList();
-    } catch (e) {
-      debugPrint('Error fetching all households: $e');
-      return [];
-    }
-  }
-
-  // Show dialog to join a household with an invitation code
   void showJoinHouseholdDialog(BuildContext context) {
     final TextEditingController codeController = TextEditingController();
 
@@ -582,5 +616,56 @@ class HouseholdServiceController {
         );
       },
     );
+  }
+
+  // Sync user role between main household and user collection
+  Future<void> syncUserRole(String householdId) async {
+    if (currentUser == null) return;
+    
+    try {
+      // Get role from main household collection
+      final householdMemberDoc = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .get();
+      
+      if (householdMemberDoc.exists) {
+        final role = householdMemberDoc.data()?['userRole'] ?? 'member';
+        
+        // Update user's personal collection
+        await _firestore
+            .collection('users')
+            .doc(currentUser!.uid)
+            .collection('households')
+            .doc(householdId)
+            .update({
+              'userRole': role,
+            });
+      }
+    } catch (e) {
+      debugPrint('Error syncing user role: $e');
+    }
+  }
+
+  // Repair role inconsistencies
+  Future<void> repairRoleInconsistencies() async {
+    if (currentUser == null) return;
+    
+    try {
+      final userHouseholds = await _firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('households')
+          .get();
+      
+      for (var householdDoc in userHouseholds.docs) {
+        final householdId = householdDoc.id;
+        await syncUserRole(householdId);
+      }
+    } catch (e) {
+      debugPrint('Error repairing role inconsistencies: $e');
+    }
   }
 }

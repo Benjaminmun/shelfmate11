@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-
 class HouseholdService extends StatefulWidget {
   @override
   _HouseholdServiceState createState() => _HouseholdServiceState();
@@ -299,8 +298,15 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
-  // Show options dialog for a household
-  void _showHouseholdOptions(BuildContext context, String householdId, String householdName) {
+  // Show options dialog for a household with permission check
+  void _showHouseholdOptions(BuildContext context, String householdId, String householdName, String userRole) async {
+    if (userRole != 'creator') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Only household creators can manage settings')),
+      );
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -345,8 +351,6 @@ class _HouseholdServiceState extends State<HouseholdService> {
   void _shareHouseholdInvitation(BuildContext context, String householdId) async {
     try {
       final householdDoc = await _firestore
-          .collection('users')
-          .doc(_auth.currentUser!.uid)
           .collection('households')
           .doc(householdId)
           .get();
@@ -371,8 +375,6 @@ class _HouseholdServiceState extends State<HouseholdService> {
   void _copyInvitationCode(BuildContext context, String householdId) async {
     try {
       final householdDoc = await _firestore
-          .collection('users')
-          .doc(_auth.currentUser!.uid)
           .collection('households')
           .doc(householdId)
           .get();
@@ -776,7 +778,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
           ),
         ],
-      ),
+      )
     );
   }
 
@@ -804,7 +806,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
           ),
         ],
-      ),
+      )
     );
   }
 
@@ -818,13 +820,14 @@ class _HouseholdServiceState extends State<HouseholdService> {
           household['name'],
           household['createdAt'],
           household['id'],
+          household['userRole'] ?? 'member',
           context,
         );
       },
     );
   }
 
-  Widget _buildHouseholdCard(String name, dynamic createdAt, String householdId, BuildContext context) {
+  Widget _buildHouseholdCard(String name, dynamic createdAt, String householdId, String userRole, BuildContext context) {
     DateTime createdDate;
     
     if (createdAt is Timestamp) {
@@ -852,7 +855,9 @@ class _HouseholdServiceState extends State<HouseholdService> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _controller.selectHousehold(name, context, householdId),
-          onLongPress: () => _showHouseholdOptions(context, householdId, name),
+          onLongPress: userRole == 'creator' 
+              ? () => _showHouseholdOptions(context, householdId, name, userRole)
+              : null,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: EdgeInsets.all(20),
@@ -890,6 +895,15 @@ class _HouseholdServiceState extends State<HouseholdService> {
                           color: lightTextColor,
                         ),
                       ),
+                      SizedBox(height: 4),
+                      Text(
+                        userRole == 'creator' ? 'Owner' : 'Member',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: userRole == 'creator' ? secondaryColor : lightTextColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -905,38 +919,39 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   },
                   tooltip: 'Manage Family Members',
                 ),
-                PopupMenuButton(
-                  icon: Icon(FeatherIcons.moreVertical, color: lightTextColor, size: 20),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'share',
-                      child: Row(
-                        children: [
-                          Icon(FeatherIcons.share2, size: 18, color: primaryColor),
-                          SizedBox(width: 8),
-                          Text('Share Invitation'),
-                        ],
+                if (userRole == 'creator')
+                  PopupMenuButton(
+                    icon: Icon(FeatherIcons.moreVertical, color: lightTextColor, size: 20),
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(FeatherIcons.share2, size: 18, color: primaryColor),
+                            SizedBox(width: 8),
+                            Text('Share Invitation'),
+                          ],
+                        ),
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(FeatherIcons.trash2, size: 18, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
-                        ],
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(FeatherIcons.trash2, size: 18, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                  onSelected: (value) {
-                    if (value == 'share') {
-                      _shareHouseholdInvitation(context, householdId);
-                    } else if (value == 'delete') {
-                      _showDeleteConfirmation(context, householdId, name);
-                    }
-                  },
-                ),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'share') {
+                        _shareHouseholdInvitation(context, householdId);
+                      } else if (value == 'delete') {
+                        _showDeleteConfirmation(context, householdId, name);
+                      }
+                    },
+                  ),
               ],
             ),
           ),

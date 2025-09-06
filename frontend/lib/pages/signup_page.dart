@@ -1,10 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
 
 class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key});
+
   @override
   _SignUpPageState createState() => _SignUpPageState();
 }
@@ -47,21 +48,10 @@ class _SignUpPageState extends State<SignUpPage> {
         'createdAt': FieldValue.serverTimestamp(),
         'uid': userId,
       });
-      
 
-// After successful signup, send email verification, show a success dialog, and navigate to the login page
+      // After successful signup, send email verification
       await userCredential.user!.sendEmailVerification();
       _showDialog('Success', 'Sign-up successful! Please verify your email.');
-
-      Future.delayed(Duration(seconds: 2), () {
-        Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginPage()),
-      );
-   });
-
-
-      await _sendTokenToBackend();
 
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
@@ -109,7 +99,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     onPressed: () {
                       Navigator.of(context).pop();
                       if (title == 'Success') {
-                        Navigator.pushReplacementNamed(context, '/login');
+                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginPage()));
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -126,24 +116,6 @@ class _SignUpPageState extends State<SignUpPage> {
         );
       },
     );
-  }
-
-  Future<void> _sendTokenToBackend() async {
-    try {
-      String? idToken = await FirebaseAuth.instance.currentUser!.getIdToken();
-      var response = await http.post(
-        Uri.parse('http://10.0.2.2:8000/secure-endpoint'),
-        headers: {'Authorization': 'Bearer $idToken'},
-      );
-
-      if (response.statusCode == 200) {
-        print("Token sent successfully");
-      } else {
-        _showDialog("Error", "Failed to send token to backend.");
-      }
-    } catch (e) {
-      _showDialog("Error", "Error sending token to backend: $e");
-    }
   }
 
   @override
@@ -177,7 +149,15 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                     ],
                   ),
-                  child: Image.asset('assets/logo.png', width: 140, height: 140),
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      color: Color(0xFF2D5D7C).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.inventory_2_outlined, size: 60, color: Color(0xFF2D5D7C)),
+                  ),
                 ),
                 SizedBox(height: 20),
                 ShaderMask(

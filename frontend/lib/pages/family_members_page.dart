@@ -19,15 +19,25 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
   
   List<FamilyMember> _familyMembers = [];
   bool _isLoading = true;
+  String _userRole = 'member';
+  bool _isOwner = false;
 
   @override
   void initState() {
     super.initState();
-    _loadFamilyMembers();
+    _loadData();
   }
 
-  Future<void> _loadFamilyMembers() async {
+  Future<void> _loadData() async {
     try {
+      // Get user role first
+      final role = await _controller.getUserRole(widget.householdId);
+      setState(() {
+        _userRole = role;
+        _isOwner = role == 'creator';
+      });
+
+      // Then load family members
       final members = await _controller.getFamilyMembers(widget.householdId);
       setState(() {
         _familyMembers = members;
@@ -169,7 +179,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                               
                               await _controller.addFamilyMember(widget.householdId, newMember);
                               Navigator.pop(context);
-                              _loadFamilyMembers();
+                              _loadData();
                               
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
@@ -277,9 +287,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                           leading: CircleAvatar(
                             backgroundColor: primaryColor.withOpacity(0.2),
                             child: Icon(
-                              member.relationship == 'Father' || member.relationship == 'Son' || member.relationship == 'Grandfather'
-                                  ? Icons.man
-                                  : Icons.woman,
+                              member.gender == 'Male' ? Icons.man : Icons.woman,
                               color: primaryColor,
                             ),
                           ),
@@ -290,7 +298,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                             ),
                           ),
                           subtitle: Text('${member.relationship}, ${member.age} years old'),
-                          trailing: IconButton(
+                          trailing: _isOwner ? IconButton(
                             icon: Icon(Icons.delete, color: Colors.red),
                             onPressed: () async {
                               final confirmed = await showDialog(
@@ -316,7 +324,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                               if (confirmed == true) {
                                 try {
                                   await _controller.deleteFamilyMember(widget.householdId, member.id!);
-                                  _loadFamilyMembers();
+                                  _loadData();
                                   
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -334,17 +342,17 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                                 }
                               }
                             },
-                          ),
+                          ) : null,
                         ),
                       );
                     },
                   ),
                 ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: _isOwner ? FloatingActionButton(
         onPressed: _showAddFamilyMemberDialog,
         backgroundColor: accentColor,
         child: Icon(Icons.add, color: Colors.white),
-      ),
+      ) : null,
     );
   }
 }
