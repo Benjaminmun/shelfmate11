@@ -230,6 +230,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
       case 2: // Add Item
         return AddItemPage(
           householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
         );
       case 3: // Expense Tracker
         return ExpenseTrackerPage(householdId: _currentHouseholdId);

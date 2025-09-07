@@ -1,4 +1,3 @@
-// inventory_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'inventory_item_model.dart';
@@ -56,14 +55,17 @@ class InventoryService {
     return collection.doc(itemId).delete();
   }
 
-  // Get a stream of inventory items for a household
-  Stream<QuerySnapshot> getItemsStream(String householdId) {
+  // Get a stream of inventory items for a household with sorting options
+  Stream<QuerySnapshot> getItemsStream(String householdId, {
+    String sortField = 'name', 
+    bool sortAscending = true
+  }) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
     }
     try {
       var collection = _getInventoryCollection(householdId);
-      return collection.orderBy('name').snapshots();
+      return collection.orderBy(sortField, descending: !sortAscending).snapshots();
     } catch (e) {
       return Stream.error(e);
     }
@@ -220,19 +222,63 @@ class InventoryService {
   }
 
   // Get items that need restocking (below minimum stock level)
-Stream<QuerySnapshot> getItemsNeedingRestockStream(String householdId) {
+  Stream<QuerySnapshot> getItemsNeedingRestockStream(String householdId, {int threshold = 5}) {
+    if (householdId.isEmpty) {
+      return Stream.error(Exception('Household ID cannot be empty'));
+    }
+    
+    try {
+      var collection = _getInventoryCollection(householdId);
+      return collection
+          .where('quantity', isLessThan: threshold)
+          .snapshots();
+    } catch (e) {
+      return Stream.error(e);
+    }
+  }
+
+  // NEW: Get items with pagination
+  // In your InventoryService class
+Future<Map<String, dynamic>> getItemsPaginated(
+  String householdId, {
+  DocumentSnapshot? lastDocument,
+  int limit = 20,
+  String sortField = 'name',
+  bool sortAscending = true,
+}) async {
   if (householdId.isEmpty) {
-    return Stream.error(Exception('Household ID cannot be empty'));
+    throw Exception('Household ID cannot be empty');
   }
   
   try {
-    var collection = _getInventoryCollection(householdId);
-    return collection
-        .where('quantity', isLessThanOrEqualTo: FieldPath.documentId)
-        .where('quantity', isLessThan: FieldPath.documentId)
-        .snapshots();
+    Query query = _getInventoryCollection(householdId)
+        .orderBy(sortField, descending: !sortAscending)
+        .limit(limit);
+
+    if (lastDocument != null) {
+      query = query.startAfterDocument(lastDocument);
+    }
+
+    final querySnapshot = await query.get();
+    final items = querySnapshot.docs.map((doc) {
+      return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+    }).toList();
+    
+    return {
+      'items': items,
+      'lastDocument': querySnapshot.docs.isNotEmpty ? querySnapshot.docs.last : null,
+    };
   } catch (e) {
-    return Stream.error(e);
+    print('Error getting paginated items: $e');
+    throw Exception('Failed to load items');
   }
- }
+}
+
+  // NEW: Get last document for pagination
+  DocumentSnapshot getLastDocument(QuerySnapshot snapshot) {
+    if (snapshot.docs.isEmpty) {
+      throw Exception('No documents available');
+    }
+    return snapshot.docs.last;
+  }
 }

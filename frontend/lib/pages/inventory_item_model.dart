@@ -1,4 +1,3 @@
-// inventory_item_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class InventoryItem {
@@ -16,6 +15,7 @@ class InventoryItem {
   final double? minStockLevel;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? imageUrl; // Added imageUrl property
 
   InventoryItem({
     this.id,
@@ -32,6 +32,7 @@ class InventoryItem {
     this.minStockLevel,
     this.createdAt,
     this.updatedAt,
+    this.imageUrl, // Added imageUrl parameter
   });
 
   Map<String, dynamic> toMap() {
@@ -47,6 +48,7 @@ class InventoryItem {
       'supplier': supplier,
       'barcode': barcode,
       'minStockLevel': minStockLevel,
+      'imageUrl': imageUrl, // Added imageUrl to map
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : Timestamp.now(),
       'updatedAt': Timestamp.now(),
     };
@@ -66,6 +68,7 @@ class InventoryItem {
       supplier: map['supplier'],
       barcode: map['barcode'],
       minStockLevel: map['minStockLevel']?.toDouble(),
+      imageUrl: map['imageUrl'], // Added imageUrl from map
       createdAt: map['createdAt'] != null ? (map['createdAt'] as Timestamp).toDate() : null,
       updatedAt: map['updatedAt'] != null ? (map['updatedAt'] as Timestamp).toDate() : null,
     );
@@ -86,6 +89,7 @@ class InventoryItem {
     double? minStockLevel,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? imageUrl, // Added imageUrl parameter
   }) {
     return InventoryItem(
       id: id ?? this.id,
@@ -100,6 +104,7 @@ class InventoryItem {
       supplier: supplier ?? this.supplier,
       barcode: barcode ?? this.barcode,
       minStockLevel: minStockLevel ?? this.minStockLevel,
+      imageUrl: imageUrl ?? this.imageUrl, // Added imageUrl to copyWith
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

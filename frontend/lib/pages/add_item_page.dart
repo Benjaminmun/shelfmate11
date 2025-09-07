@@ -4,11 +4,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+import 'inventory_edit_page.dart'; // Import the edit page
 
 class AddItemPage extends StatefulWidget {
   final String householdId;
+  final String householdName; // Add householdName parameter
 
-  const AddItemPage({Key? key, required this.householdId}) : super(key: key);
+  const AddItemPage({Key? key, required this.householdId, required this.householdName}) : super(key: key);
 
   @override
   _AddItemPageState createState() => _AddItemPageState();
@@ -20,7 +22,7 @@ class _AddItemPageState extends State<AddItemPage> {
   final ImagePicker _picker = ImagePicker();
   final BarcodeScanner _barcodeScanner = BarcodeScanner();
 
-  // Using the same color scheme as DashboardPage
+  // Color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color backgroundColor = Color(0xFFF8FAFC);
   final Color cardColor = Colors.white;
@@ -45,12 +47,16 @@ class _AddItemPageState extends State<AddItemPage> {
       if (barcodes.isNotEmpty) {
         final barcodeValue = barcodes.first.rawValue ?? '';
         setState(() => _scanResult = barcodeValue);
-        _fetchProductInfo(barcodeValue);
+        await _fetchProductInfo(barcodeValue);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('No barcode found'),
             backgroundColor: primaryColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -58,7 +64,11 @@ class _AddItemPageState extends State<AddItemPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error scanning: $e'),
-          backgroundColor: primaryColor,
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     } finally {
@@ -80,8 +90,12 @@ class _AddItemPageState extends State<AddItemPage> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Product not found'),
-              backgroundColor: primaryColor,
+              content: Text('Product not found in database'),
+              backgroundColor: Colors.orange.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           );
         }
@@ -90,7 +104,11 @@ class _AddItemPageState extends State<AddItemPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error fetching product info: $e'),
-          backgroundColor: primaryColor,
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -99,63 +117,216 @@ class _AddItemPageState extends State<AddItemPage> {
   void _showProductDetails(Map<String, dynamic> product) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: cardColor,
-        title: Text(
-          product['product_name']?.toString() ?? 'Unknown Product',
-          style: TextStyle(color: textColor),
-        ),
-        content: SingleChildScrollView(
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.all(20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 20,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (product['image_url'] != null)
-                Image.network(product['image_url'].toString()),
-              const SizedBox(height: 12),
-              Text(
-                'Brand: ${product['brands']?.toString() ?? 'Unknown'}',
-                style: TextStyle(color: textColor),
+              // Product image with gradient overlay
+              Stack(
+                children: [
+                  Container(
+                    height: 200,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      image: product['image_url'] != null
+                          ? DecorationImage(
+                              image: NetworkImage(product['image_url'].toString()),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                    ),
+                    child: product['image_url'] == null
+                        ? Center(
+                            child: Icon(
+                              Icons.image_not_supported,
+                              size: 50,
+                              color: lightTextColor,
+                            ),
+                          )
+                        : null,
+                  ),
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.5),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: Text(
+                      product['product_name']?.toString() ?? 'Unknown Product',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Quantity: ${product['quantity']?.toString() ?? 'N/A'}',
-                style: TextStyle(color: textColor),
-              ),
-              const SizedBox(height: 8),
-              if (product['categories'] != null)
-                Text(
-                  'Category: ${product['categories']}',
-                  style: TextStyle(color: textColor),
+              Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDetailRow(
+                      'Brand',
+                      product['brands']?.toString() ?? 'Unknown',
+                      Icons.business,
+                    ),
+                    SizedBox(height: 12),
+                    _buildDetailRow(
+                      'Quantity',
+                      product['quantity']?.toString() ?? 'N/A',
+                      Icons.scale,
+                    ),
+                    SizedBox(height: 12),
+                    if (product['categories'] != null)
+                      _buildDetailRow(
+                        'Category',
+                        product['categories'].toString(),
+                        Icons.category,
+                      ),
+                  ],
                 ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(color: primaryColor),
+                        ),
+                        child: Text('Cancel'),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // TODO: Save to Firestore with widget.householdId
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Item added to household'),
+                              backgroundColor: primaryColor,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text('Add to Household'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: lightTextColor),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              // TODO: Save to Firestore with widget.householdId
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Item added to household'),
-                  backgroundColor: primaryColor,
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, IconData icon) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: primaryColor,
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: lightTextColor,
+                  fontWeight: FontWeight.w500,
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-            ),
-            child: Text('Add to Household'),
+              ),
+              SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: textColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  // Add method to navigate to edit page for manual entry
+  void _navigateToEditPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InventoryEditPage(
+          householdId: widget.householdId,
+          householdName: widget.householdName,
+          // No item parameter means we're creating a new item
+        ),
       ),
     );
   }
@@ -185,14 +356,19 @@ class _AddItemPageState extends State<AddItemPage> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
-            Container(
+            // Animated Header
+            AnimatedContainer(
+              duration: Duration(milliseconds: 300),
               padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -265,14 +441,7 @@ class _AddItemPageState extends State<AddItemPage> {
                     title: 'Add Manually',
                     icon: Icons.edit,
                     description: 'Enter item details manually',
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Manual entry form'),
-                          backgroundColor: primaryColor,
-                        ),
-                      );
-                    },
+                    onTap: _navigateToEditPage, // Use the new navigation method
                   ),
                 ],
               ),
@@ -290,65 +459,100 @@ class _AddItemPageState extends State<AddItemPage> {
     required VoidCallback? onTap,
     bool isLoading = false,
   }) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: cardColor,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: TweenAnimationBuilder<double>(
+        duration: Duration(milliseconds: 200),
+        tween: Tween(begin: 1.0, end: onTap == null ? 1.0 : 1.0),
+        builder: (context, value, child) {
+          return Transform.scale(
+            scale: value,
+            child: child,
+          );
+        },
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: Offset(0, 4),
+            child: Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(16),
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (isLoading)
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                )
-              else
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (isLoading)
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                            strokeWidth: 3,
+                          ),
+                          Icon(
+                            Icons.qr_code_scanner,
+                            size: 24,
+                            color: primaryColor.withOpacity(0.7),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        icon, 
+                        size: 30, 
+                        color: primaryColor
+                      ),
+                    ),
+                  SizedBox(height: 16),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
                   ),
-                  child: Icon(
-                    icon, 
-                    size: 30, 
-                    color: primaryColor
+                  SizedBox(height: 8),
+                  Text(
+                    description,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14, 
+                      color: lightTextColor,
+                    ),
                   ),
-                ),
-              SizedBox(height: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
+                  if (isLoading) SizedBox(height: 12),
+                  if (isLoading)
+                    Text(
+                      'Scanning...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: primaryColor,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                ],
               ),
-              SizedBox(height: 8),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14, 
-                  color: lightTextColor,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

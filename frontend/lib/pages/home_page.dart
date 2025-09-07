@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
+  @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   // Color scheme from DashboardPage
   static const Color primaryColor = Color(0xFF2D5D7C);
   static const Color primaryLightColor = Color(0xFF5A8BA8);
@@ -15,6 +20,76 @@ class HomePage extends StatelessWidget {
   static const Color cardColor = Colors.white;
   static const Color textColor = Color(0xFF1E293B);
   static const Color lightTextColor = Color(0xFF64748B);
+
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 1200),
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    
+    _slideAnimation = Tween<Offset>(
+      begin: Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOut,
+      ),
+    );
+    
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOutBack,
+      ),
+    );
+    
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _navigateToPage(Widget page) {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          var curve = Curves.easeInOut;
+          var curveTween = CurveTween(curve: curve);
+          var begin = Offset(1.0, 0.0);
+          var end = Offset.zero;
+          var tween = Tween(begin: begin, end: end).chain(curveTween);
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          );
+        },
+        transitionDuration: Duration(milliseconds: 600),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,28 +104,73 @@ class HomePage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 const SizedBox(height: 40),
-                // Logo with enhanced shadow
-                _buildLogo(),
+                // Logo with enhanced shadow and animation
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: ScaleTransition(
+                      scale: _scaleAnimation,
+                      child: _buildLogo(),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 20),
-                // App name with gradient
-                _buildAppName(),
+                // App name with gradient and animation
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildAppName(),
+                  ),
+                ),
                 const SizedBox(height: 10),
-                // Tagline
-                _buildTagline(),
+                // Tagline with animation
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildTagline(),
+                  ),
+                ),
                 const SizedBox(height: 50),
-                // Feature cards similar to Dashboard stats
+                // Feature cards with staggered animation
                 _buildFeatureGrid(),
                 const SizedBox(height: 50),
-                // Sign up and Log in buttons
-                _buildButton(context, 'Get Started', const SignUpPage(), secondaryColor),
+                // Sign up and Log in buttons with animation
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildButton(context, 'Get Started', const SignUpPage(), secondaryColor),
+                  ),
+                ),
                 const SizedBox(height: 20),
-                _buildOutlinedButton(context, 'Log In', const LoginPage()),
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildOutlinedButton(context, 'Log In', const LoginPage()),
+                  ),
+                ),
                 const SizedBox(height: 40),
-                // Divider with text
-                _buildDividerWithText('Or continue with'),
+                // Divider with text and animation
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildDividerWithText('Or continue with'),
+                  ),
+                ),
                 const SizedBox(height: 30),
-                // Social media buttons
-                _buildSocialMediaButtons(),
+                // Social media buttons with animation
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: _buildSocialMediaButtons(),
+                  ),
+                ),
                 const SizedBox(height: 40),
               ],
             ),
@@ -76,12 +196,16 @@ class HomePage extends StatelessWidget {
         width: 160,
         height: 160,
         decoration: BoxDecoration(
-          color: primaryColor.withOpacity(0.1),
+          gradient: LinearGradient(
+            colors: [primaryColor, secondaryColor],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           shape: BoxShape.circle,
         ),
         child: Icon(
           Icons.inventory_2_outlined,
-          color: primaryColor,
+          color: Colors.white,
           size: 80,
         ),
       ),
@@ -159,54 +283,60 @@ class HomePage extends StatelessWidget {
   }
 
   Widget _buildFeatureCard(String title, String description, IconData icon, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(icon, color: color, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
                   ),
-                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: lightTextColor,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 12,
-                color: lightTextColor,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -217,7 +347,7 @@ class HomePage extends StatelessWidget {
       width: double.infinity,
       height: 58,
       child: ElevatedButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => page)),
+        onPressed: () => _navigateToPage(page),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           elevation: 2,
@@ -241,7 +371,7 @@ class HomePage extends StatelessWidget {
       width: double.infinity,
       height: 58,
       child: OutlinedButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => page)),
+        onPressed: () => _navigateToPage(page),
         style: OutlinedButton.styleFrom(
           foregroundColor: primaryColor,
           side: BorderSide(color: primaryColor, width: 2),
