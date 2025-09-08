@@ -200,7 +200,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                               SnackBar(
                                 content: Text('Please fill all required fields'),
                                 backgroundColor: Colors.orange,
-                              ),
+                              )
                             );
                           }
                         },
