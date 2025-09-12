@@ -424,21 +424,23 @@ class _InventoryListPageState extends State<InventoryListPage> {
     );
   }
 
-  void _navigateToEditPage({InventoryItem? item}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => InventoryEditPage(
-          householdId: widget.householdId,
-          householdName: widget.householdName,
-          item: item,
-        ),
+void _navigateToEditPage({InventoryItem? item}) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => InventoryEditPage(
+        householdId: widget.householdId,
+        householdName: widget.householdName,
+        item: item,
+        userRole: 'creator',  // Pass the userRole here
       ),
-    ).then((_) {
-      // Refresh data when returning from edit page
-      _refreshData();
-    });
-  }
+    ),
+  ).then((_) {
+    // Refresh data when returning from edit page
+    _refreshData();
+  });
+}
+
 
   Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
   final bool isLowStock = item.quantity < 5;

@@ -319,17 +319,18 @@ class _AddItemPageState extends State<AddItemPage> {
 
   // Add method to navigate to edit page for manual entry
   void _navigateToEditPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => InventoryEditPage(
-          householdId: widget.householdId,
-          householdName: widget.householdName,
-          // No item parameter means we're creating a new item
-        ),
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => InventoryEditPage(
+        householdId: widget.householdId,
+        householdName: widget.householdName,
+        userRole: 'creator',  // Pass the userRole here
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   @override
   void dispose() {
