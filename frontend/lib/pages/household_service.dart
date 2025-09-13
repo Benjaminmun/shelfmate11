@@ -17,12 +17,15 @@ class _HouseholdServiceState extends State<HouseholdService> {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final Color primaryColor = Color(0xFF2D5D7C);
-  final Color secondaryColor = Color(0xFF4CAF50);
-  final Color backgroundColor = Color(0xFFF8FAF5);
-  final Color cardColor = Colors.white;
-  final Color textColor = Color(0xFF2C3E50);
-  final Color lightTextColor = Color(0xFF7F8C8D);
+  
+  // Color scheme
+  static const Color primaryColor = Color(0xFF2D5D7C);
+  static const Color secondaryColor = Color(0xFF4CAF50);
+  static const Color backgroundColor = Color(0xFFF8FAF5);
+  static const Color cardColor = Colors.white;
+  static const Color textColor = Color(0xFF2C3E50);
+  static const Color lightTextColor = Color(0xFF7F8C8D);
+  static const Color warningColor = Color(0xFFFF5722);
 
   // Search functionality
   final TextEditingController _searchController = TextEditingController();
@@ -47,15 +50,9 @@ class _HouseholdServiceState extends State<HouseholdService> {
 
   // Refresh households
   Future<void> _refreshHouseholds() async {
-    setState(() {
-      _isRefreshing = true;
-    });
-    
-    await Future.delayed(Duration(milliseconds: 1500));
-    
-    setState(() {
-      _isRefreshing = false;
-    });
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(milliseconds: 1500));
+    setState(() => _isRefreshing = false);
   }
 
   // Enhanced settings dialog
@@ -64,13 +61,11 @@ class _HouseholdServiceState extends State<HouseholdService> {
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           elevation: 0,
           backgroundColor: Colors.transparent,
           child: Container(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -91,12 +86,12 @@ class _HouseholdServiceState extends State<HouseholdService> {
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.close, color: lightTextColor),
+                      icon: const Icon(Icons.close, color: lightTextColor),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 _buildSettingsOption(
                   icon: Icons.person_outline,
                   title: 'Profile Settings',
@@ -133,13 +128,13 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     // Navigate to help section
                   },
                 ),
-                SizedBox(height: 16),
-                Divider(),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 16),
                 Center(
                   child: TextButton(
                     onPressed: () => _controller.logout(context),
-                    child: Text(
+                    child: const Text(
                       'Logout',
                       style: TextStyle(
                         color: Colors.red,
@@ -176,19 +171,19 @@ class _HouseholdServiceState extends State<HouseholdService> {
       ),
       title: Text(
         title,
-        style: TextStyle(
+        style: const TextStyle(
           fontWeight: FontWeight.w600,
           color: textColor,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 12,
           color: lightTextColor,
         ),
       ),
-      trailing: Icon(Icons.chevron_right, color: lightTextColor),
+      trailing: const Icon(Icons.chevron_right, color: lightTextColor),
       onTap: onTap,
     );
   }
@@ -198,9 +193,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -215,24 +208,24 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     color: textColor,
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(
                   'Choose a household to manage its family members',
                   style: TextStyle(
                     color: lightTextColor,
                   ),
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 FutureBuilder<List<Map<String, dynamic>>>(
                   future: _controller.getUserHouseholdsWithDetails(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
+                      return const Center(child: CircularProgressIndicator());
                     }
                     
                     if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
                       return Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Text(
                           'No households available',
                           style: TextStyle(color: lightTextColor),
@@ -241,7 +234,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     }
                     
                     return Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: backgroundColor,
                         borderRadius: BorderRadius.circular(12),
@@ -255,7 +248,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                               value: household['id'],
                               child: Text(
                                 household['name'],
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                   color: textColor,
                                 ),
@@ -264,12 +257,14 @@ class _HouseholdServiceState extends State<HouseholdService> {
                           }).toList(),
                           onChanged: (householdId) {
                             Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FamilyMembersPage(householdId: householdId!),
-                              ),
-                            );
+                            if (householdId != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FamilyMembersPage(householdId: householdId),
+                                ),
+                              );
+                            }
                           },
                           hint: Text(
                             'Select a household',
@@ -280,13 +275,13 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     );
                   },
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel'),
+                      child: const Text('Cancel'),
                     ),
                   ],
                 ),
@@ -302,7 +297,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
   void _showHouseholdOptions(BuildContext context, String householdId, String householdName, String userRole) async {
     if (userRole != 'creator') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Only household creators can manage settings')),
+        const SnackBar(content: Text('Only household creators can manage settings')),
       );
       return;
     }
@@ -311,30 +306,30 @@ class _HouseholdServiceState extends State<HouseholdService> {
       context: context,
       builder: (BuildContext context) {
         return Container(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(Icons.share, color: primaryColor),
-                title: Text('Share Invitation Code'),
+                leading: const Icon(Icons.share, color: primaryColor),
+                title: const Text('Share Invitation Code'),
                 onTap: () {
                   Navigator.pop(context);
                   _shareHouseholdInvitation(context, householdId);
                 },
               ),
               ListTile(
-                leading: Icon(Icons.copy, color: primaryColor),
-                title: Text('Copy Invitation Code'),
+                leading: const Icon(Icons.copy, color: primaryColor),
+                title: const Text('Copy Invitation Code'),
                 onTap: () {
                   Navigator.pop(context);
                   _copyInvitationCode(context, householdId);
                 },
               ),
-              Divider(),
+              const Divider(),
               ListTile(
-                leading: Icon(Icons.delete, color: Colors.red),
-                title: Text('Delete Household', style: TextStyle(color: Colors.red)),
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Household', style: TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(context);
                   _showDeleteConfirmation(context, householdId, householdName);
@@ -384,7 +379,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
         await Clipboard.setData(ClipboardData(text: invitationCode));
         
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Invitation code copied to clipboard'),
             backgroundColor: Colors.green,
           ),
@@ -406,19 +401,19 @@ class _HouseholdServiceState extends State<HouseholdService> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Delete Household'),
+          title: const Text('Delete Household'),
           content: Text('Are you sure you want to delete "$householdName"? This action cannot be undone.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () async {
                 Navigator.pop(context);
                 await _deleteHousehold(context, householdId);
               },
-              child: Text('Delete', style: TextStyle(color: Colors.red)),
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -431,7 +426,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
     try {
       await _controller.deleteHousehold(householdId);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Household deleted successfully'),
           backgroundColor: Colors.green,
         ),
@@ -464,35 +459,35 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D5D7C),
+                    color: primaryColor,
                   ),
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
                     _controller.createNewHousehold(context);
                   },
-                  icon: Icon(FeatherIcons.plus),
-                  label: Text('Create New Household'),
+                  icon: const Icon(FeatherIcons.plus),
+                  label: const Text('Create New Household'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF4CAF50),
+                    backgroundColor: secondaryColor,
                     foregroundColor: Colors.white,
-                    minimumSize: Size(250, 50),
+                    minimumSize: const Size(250, 50),
                   ),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
                     _controller.showJoinHouseholdDialog(context);
                   },
-                  icon: Icon(FeatherIcons.users),
-                  label: Text('Join Existing Household'),
+                  icon: const Icon(FeatherIcons.users),
+                  label: const Text('Join Existing Household'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Color(0xFF2D5D7C),
-                    side: BorderSide(color: Color(0xFF2D5D7C)),
-                    minimumSize: Size(250, 50),
+                    foregroundColor: primaryColor,
+                    side: BorderSide(color: primaryColor),
+                    minimumSize: const Size(250, 50),
                   ),
                 ),
               ],
@@ -509,7 +504,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
       backgroundColor: backgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: Text(
+        title: const Text(
           "My Households",
           style: TextStyle(
             fontSize: 24,
@@ -519,28 +514,28 @@ class _HouseholdServiceState extends State<HouseholdService> {
         ),
         backgroundColor: primaryColor,
         elevation: 0,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(20),
           ),
         ),
         centerTitle: false,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: Icon(FeatherIcons.bell, size: 22),
+            icon: const Icon(FeatherIcons.bell, size: 22),
             onPressed: () {},
             tooltip: 'Notifications',
           ),
           IconButton(
-            icon: Icon(FeatherIcons.plusCircle, size: 22),
+            icon: const Icon(FeatherIcons.plusCircle, size: 22),
             onPressed: () {
               _showCreateOrJoinDialog(context);
             },
             tooltip: 'Create or Join Household',
           ),
           IconButton(
-            icon: Icon(FeatherIcons.settings, size: 22),
+            icon: const Icon(FeatherIcons.settings, size: 22),
             onPressed: () => _showSettingsDialog(context),
             tooltip: 'Settings',
           ),
@@ -554,12 +549,12 @@ class _HouseholdServiceState extends State<HouseholdService> {
           children: [
             // Search bar
             Padding(
-              padding: EdgeInsets.fromLTRB(16, 20, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
                       color: Colors.black12,
                       blurRadius: 8,
@@ -573,10 +568,10 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     hintText: 'Search households...',
                     prefixIcon: Icon(FeatherIcons.search, color: lightTextColor),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 16),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: Icon(FeatherIcons.x, size: 18),
+                            icon: const Icon(FeatherIcons.x, size: 18),
                             onPressed: () {
                               _searchController.clear();
                             },
@@ -595,7 +590,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   }
 
                   if (snapshot.hasError) {
-                    return _buildErrorState();
+                    return _buildErrorState(snapshot.error.toString());
                   }
 
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -622,7 +617,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
         onPressed: () => _controller.createNewHousehold(context),
         backgroundColor: secondaryColor,
         elevation: 4,
-        child: Icon(FeatherIcons.plus, color: Colors.white, size: 28),
+        child: const Icon(FeatherIcons.plus, color: Colors.white, size: 28),
         tooltip: 'Create New Household',
       ),
     );
@@ -633,7 +628,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
       itemCount: 3,
       itemBuilder: (context, index) {
         return Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: Container(
             height: 120,
             decoration: BoxDecoration(
@@ -642,7 +637,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
             child: Row(
               children: [
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Container(
                   width: 60,
                   height: 60,
@@ -651,7 +646,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     shape: BoxShape.circle,
                   ),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -662,7 +657,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                         height: 16,
                         color: Colors.grey.shade200,
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Container(
                         width: 80,
                         height: 12,
@@ -679,7 +674,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                     shape: BoxShape.circle,
                   ),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
               ],
             ),
           ),
@@ -688,97 +683,103 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
-  Widget _buildErrorState() {
+  Widget _buildErrorState(String error) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(FeatherIcons.alertCircle, size: 64, color: Colors.orange),
-          SizedBox(height: 16),
-          Text(
-            'Something went wrong',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-          SizedBox(height: 8),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 40),
-            child: Text(
-              'We couldn\'t load your households. Please check your connection and try again.',
-              textAlign: TextAlign.center,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(FeatherIcons.alertCircle, size: 64, color: Colors.orange),
+            const SizedBox(height: 16),
+            const Text(
+              'Something went wrong',
               style: TextStyle(
-                fontSize: 14,
-                color: lightTextColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: textColor,
               ),
             ),
-          ),
-          SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() {});
-            },
-            icon: Icon(FeatherIcons.refreshCw, size: 18),
-            label: Text('Try Again'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Error: $error',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: lightTextColor,
+                ),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-          ),
-        ],
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {});
+              },
+              icon: const Icon(FeatherIcons.refreshCw, size: 18),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildNoHouseholdsState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(FeatherIcons.home, size: 64, color: Colors.grey.shade300),
-          SizedBox(height: 16),
-          Text(
-            'No households yet',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-          SizedBox(height: 8),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 40),
-            child: Text(
-              'Create your first household to start managing your inventory and family members',
-              textAlign: TextAlign.center,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(FeatherIcons.home, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'No households yet',
               style: TextStyle(
-                fontSize: 14,
-                color: lightTextColor,
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: textColor,
               ),
             ),
-          ),
-          SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: () => _controller.createNewHousehold(context),
-            icon: Icon(FeatherIcons.plus, size: 18),
-            label: Text('Create New Household'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: secondaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Create your first household to start managing your inventory and family members',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: lightTextColor,
+                ),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-          ),
-        ],
-      )
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () => _controller.createNewHousehold(context),
+              icon: const Icon(FeatherIcons.plus, size: 18),
+              label: const Text('Create New Household'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: secondaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -788,8 +789,8 @@ class _HouseholdServiceState extends State<HouseholdService> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(FeatherIcons.search, size: 64, color: Colors.grey.shade300),
-          SizedBox(height: 16),
-          Text(
+          const SizedBox(height: 16),
+          const Text(
             'No matching households',
             style: TextStyle(
               fontSize: 18,
@@ -797,8 +798,8 @@ class _HouseholdServiceState extends State<HouseholdService> {
               color: textColor,
             ),
           ),
-          SizedBox(height: 8),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Try a different search term',
             style: TextStyle(
               fontSize: 14,
@@ -806,13 +807,13 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
           ),
         ],
-      )
+      ),
     );
   }
 
   Widget _buildHouseholdsList(List<Map<String, dynamic>> households) {
     return ListView.builder(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       itemCount: households.length,
       itemBuilder: (context, index) {
         var household = households[index];
@@ -839,11 +840,11 @@ class _HouseholdServiceState extends State<HouseholdService> {
     }
     
     return Container(
-      margin: EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 8,
@@ -860,7 +861,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
               : null,
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             child: Row(
               children: [
                 Container(
@@ -872,14 +873,14 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   ),
                   child: Icon(FeatherIcons.home, color: primaryColor, size: 28),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         name,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                           color: textColor,
@@ -887,15 +888,15 @@ class _HouseholdServiceState extends State<HouseholdService> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Created ${_formatDate(createdDate)}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           color: lightTextColor,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         userRole == 'creator' ? 'Owner' : 'Member',
                         style: TextStyle(
@@ -926,7 +927,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                       PopupMenuItem(
                         value: 'share',
                         child: Row(
-                          children: [
+                          children: const [
                             Icon(FeatherIcons.share2, size: 18, color: primaryColor),
                             SizedBox(width: 8),
                             Text('Share Invitation'),
@@ -936,7 +937,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                       PopupMenuItem(
                         value: 'delete',
                         child: Row(
-                          children: [
+                          children: const [
                             Icon(FeatherIcons.trash2, size: 18, color: Colors.red),
                             SizedBox(width: 8),
                             Text('Delete', style: TextStyle(color: Colors.red)),

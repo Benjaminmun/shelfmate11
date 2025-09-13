@@ -8,8 +8,14 @@ import 'dart:async';
 class InventoryListPage extends StatefulWidget {
   final String householdId;
   final String householdName;
+  final bool isReadOnly;
 
-  const InventoryListPage({Key? key, required this.householdId, required this.householdName}) : super(key: key);
+  const InventoryListPage({
+    Key? key,
+    required this.householdId,
+    required this.householdName,
+    this.isReadOnly = false,
+  }) : super(key: key);
 
   @override
   _InventoryListPageState createState() => _InventoryListPageState();
@@ -72,44 +78,44 @@ class _InventoryListPageState extends State<InventoryListPage> {
   }
 
   Future<void> _loadMoreItems() async {
-  if (_isLoadingMore || !_hasMoreItems) return;
-  
-  setState(() {
-    _isLoadingMore = true;
-  });
+    if (_isLoadingMore || !_hasMoreItems) return;
+    
+    setState(() {
+      _isLoadingMore = true;
+    });
 
-  try {
-    final result = await _inventoryService.getItemsPaginated(
-      widget.householdId,
-      lastDocument: _lastDocument,
-      limit: 20,
-      sortField: _sortField,
-      sortAscending: _sortAscending,
-    );
+    try {
+      final result = await _inventoryService.getItemsPaginated(
+        widget.householdId,
+        lastDocument: _lastDocument,
+        limit: 20,
+        sortField: _sortField,
+        sortAscending: _sortAscending,
+      );
 
-    final newItems = result['items'] as List<InventoryItem>;
-    final newLastDocument = result['lastDocument'] as DocumentSnapshot?;
+      final newItems = result['items'] as List<InventoryItem>;
+      final newLastDocument = result['lastDocument'] as DocumentSnapshot?;
 
-    if (newItems.isEmpty) {
+      if (newItems.isEmpty) {
+        setState(() {
+          _hasMoreItems = false;
+          _isLoadingMore = false;
+        });
+        return;
+      }
+
       setState(() {
-        _hasMoreItems = false;
+        _allItems.addAll(newItems);
+        _lastDocument = newLastDocument;
         _isLoadingMore = false;
       });
-      return;
+    } catch (e) {
+      setState(() {
+        _isLoadingMore = false;
+      });
+      print('Error loading more items: $e');
     }
-
-    setState(() {
-      _allItems.addAll(newItems);
-      _lastDocument = newLastDocument;
-      _isLoadingMore = false;
-    });
-  } catch (e) {
-    setState(() {
-      _isLoadingMore = false;
-    });
-    print('Error loading more items: $e');
   }
-}
 
   Future<void> _loadCategories() async {
     try {
@@ -412,230 +418,239 @@ class _InventoryListPageState extends State<InventoryListPage> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _navigateToEditPage();
-        },
-        backgroundColor: secondaryColor,
-        child: Icon(Icons.add, color: Colors.white, size: 28),
-        elevation: 4,
-        tooltip: 'Add new item',
+      // Only show FAB if not in read-only mode
+      floatingActionButton: widget.isReadOnly 
+          ? null 
+          : FloatingActionButton(
+              onPressed: () {
+                _navigateToEditPage();
+              },
+              backgroundColor: secondaryColor,
+              child: Icon(Icons.add, color: Colors.white, size: 28),
+              elevation: 4,
+              tooltip: 'Add new item',
+            ),
+    );
+  }
+
+  void _navigateToEditPage({InventoryItem? item}) {
+    // Don't navigate if in read-only mode
+    if (widget.isReadOnly) return;
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InventoryEditPage(
+          householdId: widget.householdId,
+          householdName: widget.householdName,
+          item: item,
+          userRole: 'creator',
+        ),
+      ),
+    ).then((_) {
+      // Refresh data when returning from edit page
+      _refreshData();
+    });
+  }
+
+  Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
+    final bool isLowStock = item.quantity < 5;
+    final bool isExpiringSoon = item.expiryDate != null && 
+        item.expiryDate!.isAfter(DateTime.now()) &&
+        item.expiryDate!.difference(DateTime.now()).inDays <= 7;
+    
+    return Card(
+      elevation: 4,
+      margin: EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: widget.isReadOnly 
+            ? null // Disable tap in read-only mode
+            : () {
+                _navigateToEditPage(item: item);
+              },
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Item thumbnail with fallback to icon
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  image: item.imageUrl != null ? DecorationImage(
+                    image: NetworkImage(item.imageUrl!),
+                    fit: BoxFit.cover,
+                  ) : null,
+                ),
+                child: item.imageUrl == null 
+                    ? Icon(Icons.inventory_2_outlined, color: primaryColor, size: 30)
+                    : null,
+              ),
+              SizedBox(width: 16),
+              
+              // Item details - This is the main content area
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            item.category,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: primaryColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (isLowStock) 
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.warning, size: 14, color: Colors.orange),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Low Stock',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (isExpiringSoon)
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline, size: 14, color: Colors.red),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Expiring Soon',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    // Quantity and price in a row with constraints
+                    Container(
+                      width: double.infinity,
+                      child: Wrap(
+                        spacing: 16,
+                        children: [
+                          _buildDetailItem(Icons.format_list_numbered, '${item.quantity} units'),
+                          _buildDetailItem(Icons.attach_money, '\$${item.price.toStringAsFixed(2)}'),
+                        ],
+                      ),
+                    ),
+                    if (item.expiryDate != null) ...[
+                      SizedBox(height: 8),
+                      _buildDetailItem(Icons.calendar_today, _formatDate(item.expiryDate!)),
+                    ],
+                    if (item.location != null) ...[
+                      SizedBox(height: 8),
+                      _buildDetailItem(Icons.location_on, item.location!),
+                    ],
+                  ],
+                ),
+              ),
+              
+              // Action buttons - Only show if not in read-only mode
+              if (!widget.isReadOnly) ...[
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit, color: primaryColor),
+                      onPressed: () {
+                        _navigateToEditPage(item: item);
+                      },
+                      tooltip: 'Edit item',
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      onPressed: () {
+                        _showDeleteDialog(item);
+                      },
+                      tooltip: 'Delete item',
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
 
-void _navigateToEditPage({InventoryItem? item}) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => InventoryEditPage(
-        householdId: widget.householdId,
-        householdName: widget.householdName,
-        item: item,
-        userRole: 'creator',  // Pass the userRole here
-      ),
-    ),
-  ).then((_) {
-    // Refresh data when returning from edit page
-    _refreshData();
-  });
-}
-
-
-  Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
-  final bool isLowStock = item.quantity < 5;
-  final bool isExpiringSoon = item.expiryDate != null && 
-      item.expiryDate!.isAfter(DateTime.now()) &&
-      item.expiryDate!.difference(DateTime.now()).inDays <= 7;
-  
-  return Card(
-    elevation: 4,
-    margin: EdgeInsets.only(bottom: 16),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        _navigateToEditPage(item: item);
-      },
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Item thumbnail with fallback to icon
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                image: item.imageUrl != null ? DecorationImage(
-                  image: NetworkImage(item.imageUrl!),
-                  fit: BoxFit.cover,
-                ) : null,
-              ),
-              child: item.imageUrl == null 
-                  ? Icon(Icons.inventory_2_outlined, color: primaryColor, size: 30)
-                  : null,
+  Widget _buildDetailItem(IconData icon, String text) {
+    return Container(
+      constraints: BoxConstraints(maxWidth: 150),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: lightTextColor),
+          SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 14, color: lightTextColor),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-            SizedBox(width: 16),
-            
-            // Item details - This is the main content area
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          item.category,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: primaryColor,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      if (isLowStock) 
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange, width: 1),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.warning, size: 14, color: Colors.orange),
-                              SizedBox(width: 4),
-                              Text(
-                                'Low Stock',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (isExpiringSoon)
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red, width: 1),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.error_outline, size: 14, color: Colors.red),
-                              SizedBox(width: 4),
-                              Text(
-                                'Expiring Soon',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  // Quantity and price in a row with constraints
-                  Container(
-                    width: double.infinity,
-                    child: Wrap(
-                      spacing: 16,
-                      children: [
-                        _buildDetailItem(Icons.format_list_numbered, '${item.quantity} units'),
-                        _buildDetailItem(Icons.attach_money, '\$${item.price.toStringAsFixed(2)}'),
-                      ],
-                    ),
-                  ),
-                  if (item.expiryDate != null) ...[
-                    SizedBox(height: 8),
-                    _buildDetailItem(Icons.calendar_today, _formatDate(item.expiryDate!)),
-                  ],
-                  if (item.location != null) ...[
-                    SizedBox(height: 8),
-                    _buildDetailItem(Icons.location_on, item.location!),
-                  ],
-                ],
-              ),
-            ),
-            
-            // Action buttons
-            Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                IconButton(
-                  icon: Icon(Icons.edit, color: primaryColor),
-                  onPressed: () {
-                    _navigateToEditPage(item: item);
-                  },
-                  tooltip: 'Edit item',
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete, color: Colors.red),
-                  onPressed: () {
-                    _showDeleteDialog(item);
-                  },
-                  tooltip: 'Delete item',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _buildDetailItem(IconData icon, String text) {
-  return Container(
-    constraints: BoxConstraints(maxWidth: 150), // Add constraint to prevent overflow
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 16, color: lightTextColor),
-        SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 14, color: lightTextColor),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildLoadingState() {
     return Center(
@@ -742,20 +757,23 @@ Widget _buildDetailItem(IconData icon, String text) {
               textAlign: TextAlign.center,
             ),
             SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () {
-                _navigateToEditPage();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: secondaryColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            // Only show the button if not in read-only mode
+            if (!widget.isReadOnly) ...[
+              ElevatedButton(
+                onPressed: () {
+                  _navigateToEditPage();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: secondaryColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
+                child: Text(
+                  'Add First Item',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
               ),
-              child: Text(
-                'Add First Item',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -805,6 +823,9 @@ Widget _buildDetailItem(IconData icon, String text) {
   }
 
   void _showDeleteDialog(InventoryItem item) {
+    // Don't show delete dialog in read-only mode
+    if (widget.isReadOnly) return;
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {

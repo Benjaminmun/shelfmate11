@@ -49,6 +49,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   DateTime? _expiryDate;
   bool _isLoading = false;
   bool _isEditMode = false;
+  bool _isReadOnly = false; // New flag for read-only mode
 
   // Color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
@@ -58,12 +59,15 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   final Color cardColor = Colors.white;
   final Color textColor = Color(0xFF333333);
   final Color lightTextColor = Color(0xFF666666);
+  final Color disabledColor = Color(0xFFCCCCCC); // New color for disabled state
 
   @override
   void initState() {
     super.initState();
     
     _isEditMode = widget.item?.id != null;
+    // Set read-only mode based on user role
+    _isReadOnly = widget.userRole == 'member';
     
     // Initialize controllers with existing item data or empty values
     _nameController = TextEditingController(text: widget.item?.name ?? '');
@@ -74,7 +78,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
     _locationController = TextEditingController(text: widget.item?.location ?? '');
     _supplierController = TextEditingController(text: widget.item?.supplier ?? '');
     _barcodeController = TextEditingController(text: widget.item?.barcode ?? '');
-    _minStockLevelController = TextEditingController(text: widget.item?.minStockLevel?.toString() ?? '5');
+    _minStockLevelController = TextEditingController(text: widget.item?.minStockLevel?.toString() ?? '1');
     
     _purchaseDate = widget.item?.purchaseDate;
     _expiryDate = widget.item?.expiryDate;
@@ -193,6 +197,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   Future<void> _selectDate(BuildContext context, bool isExpiryDate) async {
+    if (_isReadOnly) return; // Don't allow date selection in read-only mode
+    
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: isExpiryDate ? (_expiryDate ?? DateTime.now().add(Duration(days: 30))) : (_purchaseDate ?? DateTime.now()),
@@ -224,6 +230,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _clearDate(bool isExpiryDate) {
+    if (_isReadOnly) return; // Don't allow clearing in read-only mode
+    
     setState(() {
       if (isExpiryDate) {
         _expiryDate = null;
@@ -234,6 +242,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _incrementQuantity() {
+    if (_isReadOnly) return; // Don't allow increment in read-only mode
+    
     int current = int.tryParse(_quantityController.text) ?? 1;
     setState(() {
       _quantityController.text = (current + 1).toString();
@@ -241,6 +251,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _decrementQuantity() {
+    if (_isReadOnly) return; // Don't allow decrement in read-only mode
+    
     int current = int.tryParse(_quantityController.text) ?? 1;
     if (current > 1) {
       setState(() {
@@ -254,14 +266,14 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _isEditMode ? 'Edit ${widget.item?.name}' : 'Add New Item',
+          _isEditMode ? 'View ${widget.item?.name}' : 'Add New Item',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
         ),
         backgroundColor: primaryColor,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.white),
         actions: [
-          if (_isEditMode)
+          if (_isEditMode && !_isReadOnly) // Only show delete button if not read-only
             IconButton(
               icon: Icon(Icons.delete_outline, size: 26),
               onPressed: () {
@@ -380,34 +392,35 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
                       
                       SizedBox(height: 32),
                       
-                      // Save Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _saveItem,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 2,
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: _isLoading
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      // Save Button - Only show if not read-only
+                      if (!_isReadOnly)
+                        SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _saveItem,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 2,
+                              padding: EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: _isLoading
+                                ? SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : Text(
+                                    _isEditMode ? 'Update Item' : 'Add Item',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                   ),
-                                )
-                              : Text(
-                                  _isEditMode ? 'Update Item' : 'Add Item',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -447,9 +460,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
       {TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator, int maxLines = 1, String? prefixText}) {
     return TextFormField(
       controller: controller,
+      enabled: !_isReadOnly, // Disable field in read-only mode
       decoration: InputDecoration(
         labelText: isRequired ? '$label *' : label,
-        prefixIcon: Icon(icon, color: lightTextColor),
+        prefixIcon: Icon(icon, color: _isReadOnly ? disabledColor : lightTextColor),
         prefixText: prefixText,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -472,15 +486,15 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
           borderSide: BorderSide(color: Colors.red, width: 2),
         ),
         filled: true,
-        fillColor: Colors.grey[50],
-        labelStyle: TextStyle(color: lightTextColor),
+        fillColor: _isReadOnly ? Colors.grey[100] : Colors.grey[50], // Different background for read-only
+        labelStyle: TextStyle(color: _isReadOnly ? disabledColor : lightTextColor),
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      validator: validator,
+      validator: _isReadOnly ? null : validator, // Skip validation in read-only mode
       maxLines: maxLines,
-      style: TextStyle(fontSize: 15, color: textColor),
+      style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
     );
   }
 
@@ -489,7 +503,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
       value: _categoryController.text.isNotEmpty ? _categoryController.text : _categories[0],
       decoration: InputDecoration(
         labelText: 'Category *',
-        prefixIcon: Icon(Icons.category_outlined, color: lightTextColor),
+        prefixIcon: Icon(Icons.category_outlined, color: _isReadOnly ? disabledColor : lightTextColor),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -511,39 +525,40 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
           borderSide: BorderSide(color: Colors.red, width: 2),
         ),
         filled: true,
-        fillColor: Colors.grey[50],
-        labelStyle: TextStyle(color: lightTextColor),
+        fillColor: _isReadOnly ? Colors.grey[100] : Colors.grey[50],
+        labelStyle: TextStyle(color: _isReadOnly ? disabledColor : lightTextColor),
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       items: _categories.map((String category) {
         return DropdownMenuItem<String>(
           value: category,
-          child: Text(category, style: TextStyle(fontSize: 15, color: textColor)),
+          child: Text(category, style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor)),
         );
       }).toList(),
-      onChanged: (String? newValue) {
+      onChanged: _isReadOnly ? null : (String? newValue) { // Disable changes in read-only mode
         setState(() {
           _categoryController.text = newValue!;
         });
       },
-      validator: (value) {
+      validator: _isReadOnly ? null : (value) { // Skip validation in read-only mode
         if (value == null || value.isEmpty) {
           return 'Please select a category';
         }
         return null;
       },
       dropdownColor: Colors.white,
-      style: TextStyle(fontSize: 15, color: textColor),
-      icon: Icon(Icons.arrow_drop_down, color: lightTextColor),
+      style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
+      icon: Icon(Icons.arrow_drop_down, color: _isReadOnly ? disabledColor : lightTextColor),
     );
   }
 
   Widget _buildQuantityField() {
     return TextFormField(
       controller: _quantityController,
+      enabled: !_isReadOnly, // Disable field in read-only mode
       decoration: InputDecoration(
         labelText: 'Quantity *',
-        prefixIcon: Icon(Icons.format_list_numbered, color: lightTextColor),
+        prefixIcon: Icon(Icons.format_list_numbered, color: _isReadOnly ? disabledColor : lightTextColor),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -565,10 +580,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
           borderSide: BorderSide(color: Colors.red, width: 2),
         ),
         filled: true,
-        fillColor: Colors.grey[50],
-        labelStyle: TextStyle(color: lightTextColor),
+        fillColor: _isReadOnly ? Colors.grey[100] : Colors.grey[50],
+        labelStyle: TextStyle(color: _isReadOnly ? disabledColor : lightTextColor),
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        suffixIcon: Row(
+        suffixIcon: _isReadOnly ? null : Row( // Hide quantity controls in read-only mode
           mainAxisAlignment: MainAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -590,7 +605,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
       ),
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      validator: (value) {
+      validator: _isReadOnly ? null : (value) { // Skip validation in read-only mode
         if (value == null || value.isEmpty) {
           return 'Please enter a quantity';
         }
@@ -599,7 +614,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
         }
         return null;
       },
-      style: TextStyle(fontSize: 15, color: textColor),
+      style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
     );
   }
 
@@ -609,30 +624,31 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 14, color: lightTextColor, fontWeight: FontWeight.w500),
+          style: TextStyle(fontSize: 14, color: _isReadOnly ? disabledColor : lightTextColor, fontWeight: FontWeight.w500),
         ),
         SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey[300]!),
-            color: Colors.grey[50],
+            color: _isReadOnly ? Colors.grey[100] : Colors.grey[50],
           ),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
               children: [
-                IconButton(
-                  icon: Icon(Icons.calendar_today_outlined, color: lightTextColor, size: 20),
-                  onPressed: () => _selectDate(context, isExpiryDate),
-                ),
+                if (!_isReadOnly) // Only show calendar icon if not read-only
+                  IconButton(
+                    icon: Icon(Icons.calendar_today_outlined, color: lightTextColor, size: 20),
+                    onPressed: () => _selectDate(context, isExpiryDate),
+                  ),
                 Expanded(
                   child: Text(
                     date != null ? DateFormat('MMM dd, yyyy').format(date) : 'Not set',
-                    style: TextStyle(fontSize: 15, color: date != null ? textColor : lightTextColor),
+                    style: TextStyle(fontSize: 15, color: date != null ? (_isReadOnly ? disabledColor : textColor) : (_isReadOnly ? disabledColor : lightTextColor)),
                   ),
                 ),
-                if (date != null)
+                if (date != null && !_isReadOnly) // Only show clear button if not read-only
                   IconButton(
                     icon: Icon(Icons.clear, color: lightTextColor, size: 18),
                     onPressed: () => _clearDate(isExpiryDate),
@@ -646,6 +662,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _showDeleteDialog() {
+    if (_isReadOnly) return; // Don't show delete dialog in read-only mode
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {

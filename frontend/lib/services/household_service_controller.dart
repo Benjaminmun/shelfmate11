@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/family_member.dart';
 import '../pages/dashboard_page.dart';
+import '../pages/member_dashboard_page.dart'; // Add this import
 import '../pages/login_page.dart';
 
 class HouseholdServiceController {
@@ -179,7 +180,17 @@ class HouseholdServiceController {
                           );
 
                           _showInvitationDialog(context, invitationCode, householdName);
-                          selectHousehold(householdName, context, docRef.id);
+                          
+                          // Navigate to creator dashboard
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DashboardPage(
+                                selectedHousehold: householdName,
+                                householdId: docRef.id,
+                              ),
+                            ),
+                          );
                         } catch (e) {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -295,6 +306,17 @@ class HouseholdServiceController {
       );
 
       Navigator.of(context).pop();
+      
+      // Navigate to member dashboard after joining
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MemberDashboardPage(
+            selectedHousehold: householdName,
+            householdId: householdId,
+          ),
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -514,16 +536,46 @@ class HouseholdServiceController {
     Share.share(shareText);
   }
 
-  void selectHousehold(String householdName, BuildContext context, String householdId) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DashboardPage(
-          selectedHousehold: householdName,
-          householdId: householdId,
+  // Updated selectHousehold method with role-based navigation
+  void selectHousehold(String householdName, BuildContext context, String householdId) async {
+    try {
+      // Get the user's role for this household
+      final userRole = await getUserRole(householdId);
+      
+      if (userRole == 'creator') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DashboardPage(
+              selectedHousehold: householdName,
+              householdId: householdId,
+            ),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MemberDashboardPage(
+              selectedHousehold: householdName,
+              householdId: householdId,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error selecting household: $e');
+      // Fallback to regular dashboard if there's an error
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DashboardPage(
+            selectedHousehold: householdName,
+            householdId: householdId,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   Future<void> logout(BuildContext context) async {

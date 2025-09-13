@@ -25,13 +25,12 @@ class AIService {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return "Please log in to access your inventory.";
       if (householdId.isEmpty || householdId == 'null') {
-        return "I can’t access your inventory because no household is selected.";
+        return "I can't access your inventory because no household is selected.";
       }
 
       // ✅ Step 2: Get data
-      final householdContext = await _getHouseholdContext(user.uid, householdId);
-      final inventoryData =
-          await _getHouseholdInventoryData(user.uid, householdId);
+      final householdContext = await _getHouseholdContext(householdId);
+      final inventoryData = await _getHouseholdInventoryData(householdId);
 
       if (inventoryData['items'].isEmpty) {
         return "Your inventory is empty. Add items first by going to the Inventory tab.";
@@ -78,7 +77,7 @@ ${lowStockItems.map((i) => "- ${i['name']} (qty: ${i['quantity']})").join("\n")}
 
       // ✅ Step 6: Parse
       return _extractTextResponse(response) ??
-          "I wasn’t able to generate a proper response. Could you rephrase?";
+          "I wasn't able to generate a proper response. Could you rephrase?";
     } catch (e) {
       _log("Chat error: $e");
       return "⚠️ Something went wrong while processing your request. Please try again later.";
@@ -94,8 +93,7 @@ ${lowStockItems.map((i) => "- ${i['name']} (qty: ${i['quantity']})").join("\n")}
         return "Please select a household first.";
       }
 
-      final inventoryData =
-          await _getHouseholdInventoryData(user.uid, householdId);
+      final inventoryData = await _getHouseholdInventoryData(householdId);
       final lowStockItems = _filterLowStockItems(inventoryData);
 
       if (lowStockItems.isEmpty) {
@@ -159,11 +157,10 @@ INSTRUCTIONS:
   }
 
   static Future<Map<String, dynamic>> _getHouseholdInventoryData(
-      String userId, String householdId) async {
+      String householdId) async {
     try {
+      // FIXED: Access the main household collection instead of user subcollection
       final inventorySnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
           .collection('households')
           .doc(householdId)
           .collection('inventory')
@@ -195,12 +192,10 @@ INSTRUCTIONS:
     }
   }
 
-  static Future<String> _getHouseholdContext(
-      String userId, String householdId) async {
+  static Future<String> _getHouseholdContext(String householdId) async {
     try {
+      // FIXED: Access the main household collection instead of user subcollection
       final householdDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
           .collection('households')
           .doc(householdId)
           .get();
@@ -208,7 +203,7 @@ INSTRUCTIONS:
       final data = householdDoc.data() ?? {};
       return '''
 - ID: $householdId
-- Name: ${data['householdName'] ?? 'Unnamed'}
+- Name: ${data['name'] ?? data['householdName'] ?? 'Unnamed'}
 - Created: ${(data['createdAt'] is Timestamp) ? (data['createdAt'] as Timestamp).toDate().toIso8601String() : 'Unknown'}
 ''';
     } catch (e) {

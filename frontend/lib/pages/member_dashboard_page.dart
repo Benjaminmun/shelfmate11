@@ -6,100 +6,24 @@ import 'household_service.dart';
 import 'inventory_list_page.dart';
 import 'chat_page.dart';
 import '../services/household_service_controller.dart';
-import 'add_item_page.dart';
 import 'expense_tracker_page.dart';
 import 'profile_page.dart';
 import 'dart:async';
 
-class DashboardService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  
-  // Get inventory stats for a household
-  Future<Map<String, dynamic>> getInventoryStats(String householdId) async {
-    if (householdId.isEmpty) {
-      throw Exception('Household ID cannot be empty');
-    }
-    
-    try {
-      final snapshot = await _firestore
-          .collection('households')
-          .doc(householdId)
-          .collection('inventory')
-          .get();
-      
-      int totalItems = snapshot.docs.length;
-      int lowStockItems = 0;
-      int totalCategories = 0;
-      double totalValue = 0.0;
-      Set<String> categories = Set();
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final quantity = (data['quantity'] ?? 0).toInt();
-        final price = (data['price'] ?? 0).toDouble();
-        
-        if (quantity < 5) lowStockItems++;
-        if (data['category'] != null) categories.add(data['category'] as String);
-        totalValue += quantity * price;
-      }
-
-      totalCategories = categories.length;
-
-      return {
-        'totalItems': totalItems,
-        'lowStockItems': lowStockItems,
-        'totalCategories': totalCategories,
-        'totalValue': totalValue,
-      };
-    } catch (e) {
-      print('Error getting inventory stats: $e');
-      throw Exception('Failed to load inventory stats');
-    }
-  }
-
-  // Get recent activities for a household
-  Stream<List<Map<String, dynamic>>> getRecentActivitiesStream(String householdId) {
-    if (householdId.isEmpty) {
-      return Stream.value([]);
-    }
-    
-    try {
-      return _firestore
-          .collection('households')
-          .doc(householdId)
-          .collection('activities')
-          .orderBy('timestamp', descending: true)
-          .limit(5)
-          .snapshots()
-          .map((snapshot) {
-            return snapshot.docs.map((doc) {
-              return {
-                'message': doc['message'] ?? 'No message',
-                'timestamp': doc['timestamp'] ?? Timestamp.now(),
-              };
-            }).toList();
-          });
-    } catch (e) {
-      print('Error getting activities stream: $e');
-      return Stream.value([]);
-    }
-  }
-}
-
-class DashboardPage extends StatefulWidget {
+class MemberDashboardPage extends StatefulWidget {
   final String? selectedHousehold;
   final String? householdId;
 
-  const DashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
+  const MemberDashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
 
   @override
-  _DashboardPageState createState() => _DashboardPageState();
+  _MemberDashboardPageState createState() => _MemberDashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> with SingleTickerProviderStateMixin {
+class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTickerProviderStateMixin {
   final HouseholdServiceController _householdServiceController = HouseholdServiceController();
-  final DashboardService _dashboardService = DashboardService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   // Enhanced color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
@@ -127,7 +51,8 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   int _currentIndex = 0;
   
   // Stream subscriptions for real-time updates
-  StreamSubscription<List<Map<String, dynamic>>>? _activitiesSubscription;
+  StreamSubscription<QuerySnapshot>? _inventorySubscription;
+  StreamSubscription<QuerySnapshot>? _activitiesSubscription;
 
   // Animation controllers
   late AnimationController _animationController;
@@ -162,7 +87,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     _currentHouseholdId = widget.householdId ?? '';
     
     if (_currentHouseholdId.isNotEmpty) {
-      _loadDashboardData();
+      _setupRealTimeListeners();
     } else {
       _isLoading = false;
     }
@@ -174,66 +99,119 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   @override
   void dispose() {
     // Cancel all subscriptions when the widget is disposed
+    _inventorySubscription?.cancel();
     _activitiesSubscription?.cancel();
     _animationController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadDashboardData() async {
+  void _setupRealTimeListeners() {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null || userId.isEmpty || _currentHouseholdId.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage = 'User not authenticated or household not selected';
+      });
+      return;
+    }
+
+    try {
+      // Set up real-time listener for inventory (read-only for members)
+      // FIXED: Access the main household collection, not the user's subcollection
+      _inventorySubscription = _firestore
+          .collection('households')
+          .doc(_currentHouseholdId)
+          .collection('inventory')
+          .snapshots()
+          .listen((snapshot) {
+        _calculateStats(snapshot.docs);
+      }, onError: (error) {
+        print('Inventory stream error: $error');
+        if (!_hasError) {
+          setState(() {
+            _hasError = true;
+            _errorMessage = 'Failed to sync inventory: ${error.toString()}';
+          });
+        }
+      });
+
+      // Set up real-time listener for activities (read-only for members)
+      // FIXED: Access the main household collection, not the user's subcollection
+      _activitiesSubscription = _firestore
+          .collection('households')
+          .doc(_currentHouseholdId)
+          .collection('activities')
+          .orderBy('timestamp', descending: true)
+          .limit(5)
+          .snapshots()
+          .listen((snapshot) {
+        List<Map<String, dynamic>> recentActivities = [];
+        for (var doc in snapshot.docs) {
+          recentActivities.add({
+            'message': doc['message'] ?? 'No message',
+            'timestamp': doc['timestamp'] ?? Timestamp.now(),
+          });
+        }
+        setState(() {
+          _recentActivities = recentActivities;
+          _hasError = false;
+        });
+      }, onError: (error) {
+        print('Activities stream error: $error');
+        // Activities are optional, so we don't treat this as a fatal error
+      });
+    } catch (e) {
+      print('Error setting up real-time listeners: $e');
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage = 'Failed to set up real-time sync: ${e.toString()}';
+      });
+    }
+  }
+
+  void _calculateStats(List<QueryDocumentSnapshot> inventoryDocs) {
+    int totalItems = inventoryDocs.length;
+    int lowStockItems = 0;
+    int totalCategories = 0;
+    double totalValue = 0.0;
+    Set<String> categories = Set();
+
+    for (var doc in inventoryDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final quantity = (data['quantity'] ?? 0).toInt();
+      final price = (data['price'] ?? 0).toDouble();
+      
+      if (quantity < 5) lowStockItems++;
+      if (data['category'] != null) categories.add(data['category'] as String);
+      totalValue += quantity * price;
+    }
+
+    totalCategories = categories.length;
+
+    setState(() {
+      _totalItems = totalItems;
+      _lowStockItems = lowStockItems;
+      _totalCategories = totalCategories;
+      _totalValue = totalValue;
+      _isLoading = false;
+      _hasError = false;
+    });
+  }
+
+  Future<void> _retryLoadData() async {
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
     
-    try {
-      // Load inventory stats
-      final stats = await _dashboardService.getInventoryStats(_currentHouseholdId);
-      setState(() {
-        _totalItems = stats['totalItems'];
-        _lowStockItems = stats['lowStockItems'];
-        _totalCategories = stats['totalCategories'];
-        _totalValue = stats['totalValue'];
-      });
-      
-      // Set up activities stream
-      _setupActivitiesSubscription();
-      
-      setState(() {
-        _isLoading = false;
-        _hasError = false;
-      });
-    } catch (e) {
-      print('Error loading dashboard data: $e');
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = 'Failed to load dashboard data: ${e.toString()}';
-      });
-    }
-  }
-
-  void _setupActivitiesSubscription() {
-    _activitiesSubscription?.cancel(); // Cancel any existing subscription
+    // Cancel existing subscriptions
+    _inventorySubscription?.cancel();
+    _activitiesSubscription?.cancel();
     
-    if (_currentHouseholdId.isNotEmpty) {
-      _activitiesSubscription = _dashboardService
-          .getRecentActivitiesStream(_currentHouseholdId)
-          .listen((activities) {
-        if (mounted) {
-          setState(() {
-            _recentActivities = activities;
-          });
-        }
-      }, onError: (error) {
-        print('Activities stream error: $error');
-      });
-    }
-  }
-
-  Future<void> _retryLoadData() async {
-    if (_currentHouseholdId.isNotEmpty) {
-      await _loadDashboardData();
-    }
+    // Set up new listeners
+    _setupRealTimeListeners();
   }
 
   // Navigation pages based on index
@@ -241,19 +219,18 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     switch (index) {
       case 0: // Dashboard
         return _buildDashboardContent();
-      case 1: // Inventory
+      case 1: // Inventory (read-only for members)
         return InventoryListPage(
           householdId: _currentHouseholdId,
           householdName: _currentHousehold,
+          isReadOnly: true, 
         );
-      case 2: // Add Item
-        return AddItemPage(
+      case 2: // Expense Tracker (read-only for members)
+        return ExpenseTrackerPage(
           householdId: _currentHouseholdId,
-          householdName: _currentHousehold,
+          isReadOnly: true, 
         );
-      case 3: // Expense Tracker
-        return ExpenseTrackerPage(householdId: _currentHouseholdId);
-      case 4: // Profile
+      case 3: // Profile
         return ProfilePage();
       default:
         return _buildDashboardContent();
@@ -322,7 +299,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                   );
                 }
               : null,
-          tooltip: 'Chat with AI Assistant',
+          tooltip: 'Chat with Household Members',
           color: _currentHouseholdId.isNotEmpty ? Colors.white : Colors.white.withOpacity(0.5),
         ),
         if (_currentHousehold.isNotEmpty)
@@ -339,7 +316,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
       ],
     );
   }
-
 
   Widget _buildBottomNavigationBar() {
     return Container(
@@ -411,19 +387,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                         borderRadius: BorderRadius.circular(10),
                       )
                     : null,
-                child: Icon(Icons.add_circle_outline, size: 24),
-              ),
-              label: 'Add Item',
-            ),
-            BottomNavigationBarItem(
-              icon: Container(
-                padding: EdgeInsets.all(6),
-                decoration: _currentIndex == 3
-                    ? BoxDecoration(
-                        color: primaryColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      )
-                    : null,
                 child: Icon(Icons.attach_money, size: 24),
               ),
               label: 'Expenses',
@@ -431,7 +394,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
             BottomNavigationBarItem(
               icon: Container(
                 padding: EdgeInsets.all(6),
-                decoration: _currentIndex == 4
+                decoration: _currentIndex == 3
                     ? BoxDecoration(
                         color: primaryColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
@@ -465,19 +428,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               _buildConnectionStatus(),
               SizedBox(height: 16),
               
-              // Quick actions
-              Text(
-                'Quick Actions',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
-              ),
-              SizedBox(height: 12),
-              _buildQuickActions(),
-              SizedBox(height: 24),
-              
               // Statistics
               Text(
                 'Inventory Overview',
@@ -507,7 +457,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [primaryColor, primaryLightColor],
+        colors: [primaryColor, primaryLightColor],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -544,7 +494,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Everything is up to date and running smoothly',
+                  'Member Dashboard - View household information',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.white.withOpacity(0.8),
@@ -555,38 +505,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQuickActions() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildActionButton(
-            'Manage Inventory',
-            Icons.inventory,
-            secondaryColor,
-            () {
-              setState(() {
-                _currentIndex = 1;
-              });
-            },
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _buildActionButton(
-            'Add Item',
-            Icons.add,
-            accentColor,
-            () {
-              setState(() {
-                _currentIndex = 2;
-              });
-            },
-          ),
-        ),
-      ],
     );
   }
 
@@ -723,7 +641,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               ),
               SizedBox(height: 8),
               Text(
-                'Choose a household to manage its inventory',
+                'Choose a household to view its information',
                 style: TextStyle(
                   fontSize: 14,
                   color: lightTextColor,
@@ -862,29 +780,12 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
             ),
             SizedBox(height: 8),
             Text(
-              'Create your first household to get started',
+              'You need to be invited to a household to access this feature',
               style: TextStyle(
                 fontSize: 16,
                 color: lightTextColor,
               ),
               textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => _householdServiceController.createNewHousehold(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              ),
-              child: Text(
-                'Create New Household',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
             ),
           ],
         ),
@@ -943,7 +844,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
             _currentHouseholdId = householdId;
             _isLoading = true;
           });
-          _loadDashboardData(); // Fixed: Replaced non-existent method with correct one
+          _setupRealTimeListeners();
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -1052,33 +953,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildActionButton(String title, IconData icon, Color color, VoidCallback onPressed) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 20),
-          SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }
