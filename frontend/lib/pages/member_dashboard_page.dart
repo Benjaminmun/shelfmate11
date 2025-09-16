@@ -228,7 +228,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
       case 2: // Expense Tracker (read-only for members)
         return ExpenseTrackerPage(
           householdId: _currentHouseholdId,
-          isReadOnly: true, 
         );
       case 3: // Profile
         return ProfilePage();

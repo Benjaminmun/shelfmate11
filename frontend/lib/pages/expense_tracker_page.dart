@@ -3,59 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-class Expense {
-  final String id;
-  final String title;
-  final double amount;
-  final String category;
-  final DateTime date;
-  final String? description;
-  final String createdBy;
-
-  Expense({
-    required this.id,
-    required this.title,
-    required this.amount,
-    required this.category,
-    required this.date,
-    this.description,
-    required this.createdBy,
-  });
-
-  factory Expense.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map<String, dynamic>;
-    return Expense(
-      id: doc.id,
-      title: data['title'] ?? '',
-      amount: (data['amount'] ?? 0).toDouble(),
-      category: data['category'] ?? 'Other',
-      date: (data['date'] as Timestamp).toDate(),
-      description: data['description'],
-      createdBy: data['createdBy'] ?? '',
-    );
-  }
-
-  Map<String, dynamic> toFirestore() {
-    return {
-      'title': title,
-      'amount': amount,
-      'category': category,
-      'date': Timestamp.fromDate(date),
-      'description': description,
-      'createdBy': createdBy,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-  }
-}
-
 class ExpenseTrackerPage extends StatefulWidget {
   final String householdId;
-  final bool isReadOnly;
 
   const ExpenseTrackerPage({
     Key? key,
     required this.householdId,
-    this.isReadOnly = false,
   }) : super(key: key);
 
   @override
@@ -65,133 +18,100 @@ class ExpenseTrackerPage extends StatefulWidget {
 class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final List<String> _categories = [
-    'Food',
-    'Transportation',
-    'Utilities',
-    'Entertainment',
-    'Shopping',
-    'Healthcare',
-    'Other'
-  ];
 
   double _totalExpenses = 0.0;
   Map<String, double> _categoryTotals = {};
-  List<Expense> _expenses = [];
+  List<Map<String, dynamic>> _inventoryItems = [];
+  bool _isLoading = true;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _loadExpenses();
+    _loadInventoryData();
   }
 
-  Future<void> _loadExpenses() async {
+  // Load inventory data with better error handling
+  Future<void> _loadInventoryData() async {
     try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+
       final snapshot = await _firestore
           .collection('households')
           .doc(widget.householdId)
-          .collection('expenses')
-          .orderBy('date', descending: true)
+          .collection('inventory')
+          .orderBy('updatedAt', descending: true)
           .get();
+
+      print('Found ${snapshot.docs.length} inventory items'); // Debug info
 
       double total = 0.0;
       Map<String, double> categoryTotals = {};
-      List<Expense> expenses = [];
+      List<Map<String, dynamic>> items = [];
 
       for (var doc in snapshot.docs) {
-        final expense = Expense.fromFirestore(doc);
-        expenses.add(expense);
-        total += expense.amount;
+        final data = doc.data();
+        
+        // Debug print to see what data we're getting
+        print('Item data: $data');
+        
+        // Handle potential missing or incorrectly typed fields
+        final price = _parseDouble(data['price']);
+        final quantity = _parseDouble(data['quantity']);
+        final totalValue = price * quantity;
+        final category = data['category']?.toString() ?? 'Other';
+        
+        items.add({
+          'id': doc.id,
+          'name': data['name']?.toString() ?? 'Unnamed Item',
+          'category': category,
+          'quantity': quantity,
+          'price': price,
+          'totalValue': totalValue,
+          'addedByUserName': data['addedByUserName']?.toString() ?? 'Unknown',
+          'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          'description': data['description']?.toString() ?? '',
+        });
+
+        total += totalValue;
         categoryTotals.update(
-          expense.category,
-          (value) => value + expense.amount,
-          ifAbsent: () => expense.amount,
+          category,
+          (value) => value + totalValue,
+          ifAbsent: () => totalValue,
         );
       }
 
       setState(() {
-        _expenses = expenses;
+        _inventoryItems = items;
         _totalExpenses = total;
         _categoryTotals = categoryTotals;
+        _isLoading = false;
       });
     } catch (e) {
-      print('Error loading expenses: $e');
+      print('Error loading inventory data: $e');
+      setState(() {
+        _errorMessage = 'Failed to load data: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _addExpense() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    final result = await showDialog<Expense>(
-      context: context,
-      builder: (context) => ExpenseDialog(
-        categories: _categories,
-        userId: user.uid,
-      ),
-    );
-
-    if (result != null) {
-      try {
-        await _firestore
-            .collection('households')
-            .doc(widget.householdId)
-            .collection('expenses')
-            .add(result.toFirestore());
-
-        _loadExpenses(); // Reload expenses
-      } catch (e) {
-        print('Error adding expense: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add expense: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteExpense(String expenseId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Confirm Delete'),
-        content: Text('Are you sure you want to delete this expense?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await _firestore
-            .collection('households')
-            .doc(widget.householdId)
-            .collection('expenses')
-            .doc(expenseId)
-            .delete();
-
-        _loadExpenses(); // Reload expenses
-      } catch (e) {
-        print('Error deleting expense: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete expense: $e')),
-        );
-      }
-    }
+  // Helper method to parse different types to double
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
   }
 
   @override
   Widget build(BuildContext context) {
     final Color primaryColor = Color(0xFF2D5D7C);
     final Color backgroundColor = Color(0xFFF8FAFC);
-    final Color cardColor = Colors.white;
     final Color textColor = Color(0xFF1E293B);
     final Color lightTextColor = Color(0xFF64748B);
 
@@ -213,152 +133,167 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         ),
         actions: [
-          if (!widget.isReadOnly)
-            IconButton(
-              icon: Icon(Icons.add),
-              onPressed: _addExpense,
-              tooltip: 'Add Expense',
-            ),
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _loadInventoryData,
+          ),
         ],
       ),
-      body: Container(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Summary Card
-            Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [primaryColor, Color(0xFF5A8BA8)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: primaryColor.withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.attach_money, color: Colors.white, size: 28),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : _errorMessage.isNotEmpty
+              ? Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        Icon(Icons.error_outline, size: 64, color: Colors.red),
+                        SizedBox(height: 16),
                         Text(
-                          'Total Expenses',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                          _errorMessage,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16, color: Colors.red),
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'RM ${_totalExpenses.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
+                        SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadInventoryData,
+                          child: Text('Retry'),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            SizedBox(height: 24),
-
-            // Category Breakdown
-            Text(
-              'Expenses by Category',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-            SizedBox(height: 12),
-            _buildCategoryBreakdown(),
-
-            SizedBox(height: 24),
-
-            // Expenses List
-            Text(
-              'Recent Expenses',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-            SizedBox(height: 12),
-            Expanded(
-              child: _expenses.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.receipt,
-                            size: 64,
-                            color: lightTextColor.withOpacity(0.5),
+                )
+              : Container(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Summary Card
+                      Container(
+                        padding: EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [primaryColor, Color(0xFF5A8BA8)],
                           ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No expenses yet',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: lightTextColor,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withOpacity(0.3),
+                              blurRadius: 15,
+                              offset: Offset(0, 5),
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          if (!widget.isReadOnly)
-                            Text(
-                              'Tap the + button to add your first expense',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: lightTextColor,
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
                               ),
-                              textAlign: TextAlign.center,
+                              child: Icon(Icons.attach_money, color: Colors.white, size: 28),
                             ),
-                        ],
+                            SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Total Expenses',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'RM ${_totalExpenses.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: _expenses.length,
-                      itemBuilder: (context, index) {
-                        final expense = _expenses[index];
-                        return _buildExpenseItem(expense);
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: widget.isReadOnly
-          ? null
-          : FloatingActionButton(
-              onPressed: _addExpense,
-              backgroundColor: primaryColor,
-              child: Icon(Icons.add, color: Colors.white),
-            ),
+                      SizedBox(height: 24),
+
+                      // Category Breakdown
+                      Text(
+                        'Expenses by Category',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      _buildCategoryBreakdown(),
+
+                      SizedBox(height: 24),
+
+                      // Inventory Items List
+                      Text(
+                        'Inventory Items',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                      ),
+                      SizedBox(height: 12),
+                      Expanded(
+                        child: _inventoryItems.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory,
+                                      size: 64,
+                                      color: lightTextColor.withOpacity(0.5),
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'No inventory items yet',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: lightTextColor,
+                                      ),
+                                    ),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      'Items added to inventory will appear here',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: lightTextColor,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: _inventoryItems.length,
+                                itemBuilder: (context, index) {
+                                  final item = _inventoryItems[index];
+                                  return _buildInventoryItem(item);
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
     );
   }
 
@@ -432,11 +367,10 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
     );
   }
 
-  Widget _buildExpenseItem(Expense expense) {
+  Widget _buildInventoryItem(Map<String, dynamic> item) {
     final Color primaryColor = Color(0xFF2D5D7C);
-    final Color cardColor = Colors.white;
-    final Color textColor = Color(0xFF1E293B);
     final Color lightTextColor = Color(0xFF64748B);
+    final double totalAmount = item['price'] * item['quantity'];
 
     return Card(
       margin: EdgeInsets.only(bottom: 12),
@@ -450,12 +384,12 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
             borderRadius: BorderRadius.circular(25),
           ),
           child: Icon(
-            _getCategoryIcon(expense.category),
+            _getCategoryIcon(item['category']),
             color: primaryColor,
           ),
         ),
         title: Text(
-          expense.title,
+          item['name'],
           style: TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 16,
@@ -466,19 +400,28 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
           children: [
             SizedBox(height: 4),
             Text(
-              '${expense.category} • ${DateFormat('MMM dd, yyyy').format(expense.date)}',
+              '${item['category']} • ${DateFormat('MMM dd, yyyy').format(item['updatedAt'])}',
               style: TextStyle(color: lightTextColor),
             ),
-            if (expense.description != null && expense.description!.isNotEmpty)
+            if (item['description'] != null && item['description'].isNotEmpty)
               Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Text(
-                  expense.description!,
+                  item['description'],
                   style: TextStyle(color: lightTextColor, fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+            SizedBox(height: 4),
+            Text(
+              '${item['quantity']} × RM ${item['price'].toStringAsFixed(2)} = RM ${totalAmount.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: lightTextColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
         trailing: Column(
@@ -486,21 +429,18 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              'RM ${expense.amount.toStringAsFixed(2)}',
+              'RM ${totalAmount.toStringAsFixed(2)}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 color: primaryColor,
               ),
             ),
-            if (!widget.isReadOnly)
-              TextButton(
-                onPressed: () => _deleteExpense(expense.id),
-                child: Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red, fontSize: 12),
-                ),
-              ),
+            SizedBox(height: 4),
+            Text(
+              'Added by ${item['addedByUserName']}',
+              style: TextStyle(color: lightTextColor, fontSize: 10),
+            ),
           ],
         ),
       ),
@@ -522,162 +462,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
       case 'healthcare':
         return Icons.local_hospital;
       default:
-        return Icons.attach_money;
+        return Icons.category;
     }
-  }
-}
-
-class ExpenseDialog extends StatefulWidget {
-  final List<String> categories;
-  final String userId;
-  final Expense? existingExpense;
-
-  const ExpenseDialog({
-    Key? key,
-    required this.categories,
-    required this.userId,
-    this.existingExpense,
-  }) : super(key: key);
-
-  @override
-  _ExpenseDialogState createState() => _ExpenseDialogState();
-}
-
-class _ExpenseDialogState extends State<ExpenseDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _amountController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  String _selectedCategory = 'Other';
-  DateTime _selectedDate = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.existingExpense != null) {
-      _titleController.text = widget.existingExpense!.title;
-      _amountController.text = widget.existingExpense!.amount.toString();
-      _descriptionController.text = widget.existingExpense!.description ?? '';
-      _selectedCategory = widget.existingExpense!.category;
-      _selectedDate = widget.existingExpense!.date;
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _amountController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.existingExpense == null ? 'Add Expense' : 'Edit Expense'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: InputDecoration(labelText: 'Title'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a title';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _amountController,
-                decoration: InputDecoration(labelText: 'Amount (RM)'),
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter an amount';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
-                  }
-                  return null;
-                },
-              ),
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                decoration: InputDecoration(labelText: 'Category'),
-                items: widget.categories
-                    .map((category) => DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value!;
-                  });
-                },
-              ),
-              TextFormField(
-                controller: _descriptionController,
-                decoration: InputDecoration(labelText: 'Description (optional)'),
-                maxLines: 2,
-              ),
-              SizedBox(height: 16),
-              Row(
-                children: [
-                  Text('Date: ${DateFormat('MMM dd, yyyy').format(_selectedDate)}'),
-                  TextButton(
-                    onPressed: () => _selectDate(context),
-                    child: Text('Change'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_formKey.currentState!.validate()) {
-              final expense = Expense(
-                id: widget.existingExpense?.id ?? '',
-                title: _titleController.text,
-                amount: double.parse(_amountController.text),
-                category: _selectedCategory,
-                date: _selectedDate,
-                description: _descriptionController.text.isEmpty
-                    ? null
-                    : _descriptionController.text,
-                createdBy: widget.userId,
-              );
-              Navigator.of(context).pop(expense);
-            }
-          },
-          child: Text('Save'),
-        ),
-      ],
-    );
   }
 }

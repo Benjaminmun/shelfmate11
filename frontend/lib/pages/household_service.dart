@@ -25,8 +25,6 @@ class _HouseholdServiceState extends State<HouseholdService> {
   static const Color cardColor = Colors.white;
   static const Color textColor = Color(0xFF2C3E50);
   static const Color lightTextColor = Color(0xFF7F8C8D);
-  static const Color warningColor = Color(0xFFFF5722);
-
   // Search functionality
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';

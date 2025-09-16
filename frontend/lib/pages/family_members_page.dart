@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:timeago/timeago.dart' as timeago;
 import '../services/household_service_controller.dart';
-import '../models/family_member.dart';
 
 class FamilyMembersPage extends StatefulWidget {
   final String householdId;
@@ -11,214 +13,304 @@ class FamilyMembersPage extends StatefulWidget {
   _FamilyMembersPageState createState() => _FamilyMembersPageState();
 }
 
-class _FamilyMembersPageState extends State<FamilyMembersPage> {
+class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTickerProviderStateMixin {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color accentColor = Color(0xFF4CAF50);
   final Color backgroundColor = Color(0xFFE2E6E0);
+  final ScrollController _scrollController = ScrollController();
   
-  List<FamilyMember> _familyMembers = [];
+  List<Map<String, dynamic>> _householdMembers = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   String _userRole = 'member';
   bool _isOwner = false;
+  bool _isRemovingMember = false;
+  int? _removingMemberIndex;
+  DocumentSnapshot? _lastDocument;
+  bool _hasMore = true;
+  int _pageSize = 10;
+  AnimationController? _fabController;
+  bool _showFab = true;
 
   @override
   void initState() {
     super.initState();
+    _fabController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 300),
+    );
     _loadData();
+    
+    // Listen to scroll events to hide/show FAB
+    _scrollController.addListener(() {
+      if (_scrollController.position.userScrollDirection == ScrollDirection.forward) {
+        _showFloatingActionButton();
+      } else if (_scrollController.position.userScrollDirection == ScrollDirection.reverse) {
+        _hideFloatingActionButton();
+      }
+    });
   }
 
-  Future<void> _loadData() async {
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _fabController?.dispose();
+    super.dispose();
+  }
+
+  void _showFloatingActionButton() {
+    if (!_showFab) {
+      setState(() => _showFab = true);
+      _fabController?.forward();
+    }
+  }
+
+  void _hideFloatingActionButton() {
+    if (_showFab) {
+      setState(() => _showFab = false);
+      _fabController?.reverse();
+    }
+  }
+
+  Future<void> _loadData({bool loadMore = false}) async {
+    if (loadMore && (!_hasMore || _isLoadingMore)) return;
+    
     try {
+      setState(() {
+        if (loadMore) {
+          _isLoadingMore = true;
+        } else {
+          _isLoading = true;
+          _householdMembers = [];
+          _lastDocument = null;
+          _hasMore = true;
+        }
+      });
+
       // Get user role first
       final role = await _controller.getUserRole(widget.householdId);
+      
+      // Use getHouseholdMembers to load data from members subcollection
+      final result = await _controller.getHouseholdMembersPaginated(
+        widget.householdId, 
+        limit: _pageSize, 
+        startAfter: loadMore ? _lastDocument : null
+      );
+      
       setState(() {
         _userRole = role;
         _isOwner = role == 'creator';
-      });
-
-      // Then load family members
-      final members = await _controller.getFamilyMembers(widget.householdId);
-      setState(() {
-        _familyMembers = members;
-        _isLoading = false;
+        
+        if (loadMore) {
+          _householdMembers.addAll(result.members);
+          _isLoadingMore = false;
+        } else {
+          _householdMembers = result.members;
+          _isLoading = false;
+        }
+        
+        _lastDocument = result.lastDocument;
+        _hasMore = result.hasMore;
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
+        _isLoadingMore = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading family members: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _showAddFamilyMemberDialog() {
-    final firstNameController = TextEditingController();
-    final lastNameController = TextEditingController();
-    final relationshipController = TextEditingController();
-    final genderController = TextEditingController();
-    final ageController = TextEditingController();
-    final contactController = TextEditingController();
-
-    String selectedGender = 'Male';
-    String selectedRelationship = 'Father';
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Add Family Member',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: primaryColor,
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  TextField(
-                    controller: firstNameController,
-                    decoration: InputDecoration(
-                      labelText: 'First Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  TextField(
-                    controller: lastNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Last Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedRelationship,
-                    items: ['Father', 'Mother', 'Son', 'Daughter', 'Grandfather', 'Grandmother', 'Other']
-                        .map((relationship) => DropdownMenuItem<String>(
-                              value: relationship,
-                              child: Text(relationship),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      selectedRelationship = value!;
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'Relationship',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedGender,
-                    items: ['Male', 'Female', 'Other']
-                        .map((gender) => DropdownMenuItem<String>(
-                              value: gender,
-                              child: Text(gender),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      selectedGender = value!;
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'Gender',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  TextField(
-                    controller: ageController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Age',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  TextField(
-                    controller: contactController,
-                    decoration: InputDecoration(
-                      labelText: 'Contact Information (Optional)',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text('Cancel'),
-                      ),
-                      SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (firstNameController.text.isNotEmpty &&
-                              lastNameController.text.isNotEmpty &&
-                              ageController.text.isNotEmpty) {
-                            try {
-                              final newMember = FamilyMember(
-                                firstName: firstNameController.text,
-                                lastName: lastNameController.text,
-                                relationship: selectedRelationship,
-                                gender: selectedGender,
-                                age: int.parse(ageController.text),
-                                contactInformation: contactController.text,
-                              );
-                              
-                              await _controller.addFamilyMember(widget.householdId, newMember);
-                              Navigator.pop(context);
-                              _loadData();
-                              
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Family member added successfully'),
-                                  backgroundColor: accentColor,
-                                ),
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error adding family member: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Please fill all required fields'),
-                                backgroundColor: Colors.orange,
-                              )
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accentColor,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text('Add'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+      
+      String errorMessage = 'Error loading household members: $e';
+      bool isRetryable = false;
+      
+      if (e.toString().contains('Network') || e.toString().contains('socket')) {
+        errorMessage = 'Network issue. Please check your connection.';
+        isRetryable = true;
+      } else if (e.toString().contains('permission') || e.toString().contains('access')) {
+        errorMessage = 'You don\'t have permission to view household members.';
+      }
+      
+      if (isRetryable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                _loadData(loadMore: loadMore);
+              },
             ),
           ),
         );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Format role for better display
+  String _formatRole(String role) {
+    switch (role) {
+      case 'creator':
+        return 'Owner';
+      case 'member':
+        return 'Member';
+      default:
+        return role;
+    }
+  }
+
+  // Format date using timeago for relative time
+  String _formatDate(dynamic date) {
+    if (date == null) return 'Not joined yet';
+    
+    try {
+      if (date is Timestamp) {
+        return timeago.format(date.toDate());
+      }
+      return date.toString();
+    } catch (e) {
+      return 'Invalid date';
+    }
+  }
+
+  // Remove a member with confirmation and loading state
+  void _removeMember(int index) async {
+    final member = _householdMembers[index];
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Remove Member"),
+          content: Text("Are you sure you want to remove ${member['email'] ?? 'this member'} from the household?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text("Remove", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
       },
     );
+    
+    if (confirmed == true) {
+      setState(() {
+        _isRemovingMember = true;
+        _removingMemberIndex = index;
+      });
+      
+      try {
+        // Remove member from both collections
+        await _controller.removeHouseholdMember(widget.householdId, member['userId']);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("${member['email']} has been removed"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Refresh the list
+        _loadData();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to remove member: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } finally {
+        setState(() {
+          _isRemovingMember = false;
+          _removingMemberIndex = null;
+        });
+      }
+    }
+  }
+
+  Widget _buildMemberCard(Map<String, dynamic> member, int index) {
+    final bool isCreator = member['userRole'] == 'creator';
+    final bool isRemovingThisMember = _isRemovingMember && _removingMemberIndex == index;
+    
+    return Card(
+      elevation: 3,
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        leading: CircleAvatar(
+          backgroundColor: primaryColor.withOpacity(0.2),
+          child: Icon(
+            isCreator ? Icons.star : Icons.person,
+            color: primaryColor,
+          ),
+        ),
+        title: Text(
+          member['email'] ?? 'Unknown User',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Role: ${_formatRole(member['userRole'] ?? 'member')}'),
+            if (member['joinedAt'] != null)
+              Text('Joined: ${_formatDate(member['joinedAt'])}'),
+            if (member['lastSeen'] != null)
+              Text('Last seen: ${_formatDate(member['lastSeen'])}'),
+          ],
+        ),
+        trailing: _isOwner && !isCreator
+            ? isRemovingThisMember
+                ? SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: Icon(Icons.remove_circle_outline, color: Colors.red),
+                    onPressed: () => _removeMember(index),
+                  )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    if (_isLoadingMore) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    
+    if (_hasMore) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: ElevatedButton(
+            onPressed: () => _loadData(loadMore: true),
+            child: Text("Load More"),
+          ),
+        ),
+      );
+    }
+    
+    return Container();
   }
 
   @override
@@ -227,7 +319,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
       backgroundColor: backgroundColor,
       appBar: AppBar(
         title: Text(
-          "Family Members",
+          "Household Members",
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -240,6 +332,13 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
           icon: Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (_isOwner)
+            IconButton(
+              icon: Icon(Icons.refresh),
+              onPressed: () => _loadData(),
+            ),
+        ],
       ),
       body: _isLoading
           ? Center(
@@ -247,7 +346,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                 valueColor: AlwaysStoppedAnimation<Color>(accentColor),
               ),
             )
-          : _familyMembers.isEmpty
+          : _householdMembers.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -255,7 +354,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                       Icon(Icons.people_outline, size: 80, color: Colors.black38),
                       SizedBox(height: 16),
                       Text(
-                        'No family members yet',
+                        'No household members yet',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w500,
@@ -264,7 +363,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        'Add your first family member to get started',
+                        'Members will appear here once they join',
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.black38,
@@ -273,86 +372,31 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> {
                     ],
                   ),
                 )
-              : Padding(
-                  padding: EdgeInsets.all(16),
-                  child: ListView.builder(
-                    itemCount: _familyMembers.length,
-                    itemBuilder: (context, index) {
-                      final member = _familyMembers[index];
-                      return Card(
-                        elevation: 3,
-                        margin: EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: primaryColor.withOpacity(0.2),
-                            child: Icon(
-                              member.gender == 'Male' ? Icons.man : Icons.woman,
-                              color: primaryColor,
-                            ),
-                          ),
-                          title: Text(
-                            '${member.firstName} ${member.lastName}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text('${member.relationship}, ${member.age} years old'),
-                          trailing: _isOwner ? IconButton(
-                            icon: Icon(Icons.delete, color: Colors.red),
-                            onPressed: () async {
-                              final confirmed = await showDialog(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return AlertDialog(
-                                    title: Text('Confirm Delete'),
-                                    content: Text('Are you sure you want to delete ${member.firstName} ${member.lastName}?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        child: Text('Delete', style: TextStyle(color: Colors.red)),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                              
-                              if (confirmed == true) {
-                                try {
-                                  await _controller.deleteFamilyMember(widget.householdId, member.id!);
-                                  _loadData();
-                                  
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Family member deleted successfully'),
-                                      backgroundColor: accentColor,
-                                    ),
-                                  );
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error deleting family member: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                          ) : null,
-                        ),
-                      );
-                    },
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (ScrollNotification scrollInfo) {
+                    if (!_isLoadingMore && 
+                        _hasMore && 
+                        scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
+                      _loadData(loadMore: true);
+                      return true;
+                    }
+                    return false;
+                  },
+                  child: RefreshIndicator(
+                    onRefresh: () => _loadData(),
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: EdgeInsets.all(16),
+                      itemCount: _householdMembers.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == _householdMembers.length) {
+                          return _buildLoadMoreButton();
+                        }
+                        return _buildMemberCard(_householdMembers[index], index);
+                      },
+                    ),
                   ),
                 ),
-      floatingActionButton: _isOwner ? FloatingActionButton(
-        onPressed: _showAddFamilyMemberDialog,
-        backgroundColor: accentColor,
-        child: Icon(Icons.add, color: Colors.white),
-      ) : null,
     );
   }
 }

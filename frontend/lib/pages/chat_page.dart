@@ -5,7 +5,6 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/ai_service.dart';
-import '../services/auth_service.dart';
 import '../services/speech_service.dart';
 
 class ChatPage extends StatefulWidget {

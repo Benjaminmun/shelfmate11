@@ -12,10 +12,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   // Color scheme from DashboardPage
   static const Color primaryColor = Color(0xFF2D5D7C);
-  static const Color primaryLightColor = Color(0xFF5A8BA8);
   static const Color secondaryColor = Color(0xFF4CAF50);
   static const Color accentColor = Color(0xFFFF9800);
-  static const Color warningColor = Color(0xFFFF5722);
   static const Color backgroundColor = Color(0xFFF8FAFC);
   static const Color cardColor = Colors.white;
   static const Color textColor = Color(0xFF1E293B);

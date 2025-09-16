@@ -22,11 +22,6 @@ class _UserInfoPageState extends State<UserInfoPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Check if user info already exists
-  Future<bool> _checkUserInfoExists() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('userInfoCompleted_${_auth.currentUser?.uid}') ?? false;
-  }
 
   Future<void> _saveUserInfo() async {
     if (!_formKey.currentState!.validate()) return;

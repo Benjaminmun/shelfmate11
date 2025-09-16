@@ -252,7 +252,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           householdName: _currentHousehold,
         );
       case 3: // Expense Tracker
-        return ExpenseTrackerPage(householdId: _currentHouseholdId);
+        return ExpenseTrackerPage(householdId: _currentHouseholdId);  
       case 4: // Profile
         return ProfilePage();
       default:

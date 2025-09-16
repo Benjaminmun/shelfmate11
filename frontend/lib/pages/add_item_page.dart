@@ -8,9 +8,15 @@ import 'inventory_edit_page.dart'; // Import the edit page
 
 class AddItemPage extends StatefulWidget {
   final String householdId;
-  final String householdName; // Add householdName parameter
+  final String householdName;
+  final bool isReadOnly; // Add isReadOnly parameter
 
-  const AddItemPage({Key? key, required this.householdId, required this.householdName}) : super(key: key);
+  const AddItemPage({
+    Key? key, 
+    required this.householdId, 
+    required this.householdName,
+    this.isReadOnly = false, // Default to false
+  }) : super(key: key);
 
   @override
   _AddItemPageState createState() => _AddItemPageState();
@@ -30,8 +36,13 @@ class _AddItemPageState extends State<AddItemPage> {
   final Color lightTextColor = Color(0xFF64748B);
   final Color secondaryColor = Color(0xFF4CAF50);
   final Color accentColor = Color(0xFFFF9800);
+  final Color disabledColor = Color(0xFF9E9E9E);
+
+  
 
   Future<void> _scanBarcode() async {
+    if (widget.isReadOnly) return; // Skip if read-only
+    
     setState(() => _isScanning = true);
 
     try {
@@ -77,6 +88,8 @@ class _AddItemPageState extends State<AddItemPage> {
   }
 
   Future<void> _fetchProductInfo(String barcode) async {
+    if (widget.isReadOnly) return; // Skip if read-only
+    
     final url =
         Uri.parse('https://world.openfoodfacts.org/api/v0/product/$barcode.json');
 
@@ -115,6 +128,8 @@ class _AddItemPageState extends State<AddItemPage> {
   }
 
   void _showProductDetails(Map<String, dynamic> product) {
+    if (widget.isReadOnly) return; // Skip if read-only
+    
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -319,18 +334,19 @@ class _AddItemPageState extends State<AddItemPage> {
 
   // Add method to navigate to edit page for manual entry
   void _navigateToEditPage() {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => InventoryEditPage(
-        householdId: widget.householdId,
-        householdName: widget.householdName,
-        userRole: 'creator',  // Pass the userRole here
+    if (widget.isReadOnly) return; // Skip if read-only
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InventoryEditPage(
+          householdId: widget.householdId,
+          householdName: widget.householdName,
+          userRole: 'creator',  // Pass the userRole here
+        ),
       ),
-    ),
-  );
-}
-
+    );
+  }
 
   @override
   void dispose() {
@@ -345,14 +361,14 @@ class _AddItemPageState extends State<AddItemPage> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(
-          'Add Item',
+          widget.isReadOnly ? 'View Item Options' : 'Add Item',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
         ),
-        backgroundColor: primaryColor,
+        backgroundColor: widget.isReadOnly ? disabledColor : primaryColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -375,12 +391,14 @@ class _AddItemPageState extends State<AddItemPage> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [primaryColor, Color(0xFF5A8BA8)],
+                  colors: widget.isReadOnly 
+                    ? [disabledColor, Color(0xFFBDBDBD)] 
+                    : [primaryColor, Color(0xFF5A8BA8)],
                 ),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: primaryColor.withOpacity(0.3),
+                    color: (widget.isReadOnly ? disabledColor : primaryColor).withOpacity(0.3),
                     blurRadius: 15,
                     offset: Offset(0, 5),
                   ),
@@ -395,7 +413,11 @@ class _AddItemPageState extends State<AddItemPage> {
                       color: Colors.white.withOpacity(0.2),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.add, color: Colors.white, size: 28),
+                    child: Icon(
+                      widget.isReadOnly ? Icons.visibility : Icons.add, 
+                      color: Colors.white, 
+                      size: 28
+                    ),
                   ),
                   SizedBox(width: 16),
                   Expanded(
@@ -403,7 +425,7 @@ class _AddItemPageState extends State<AddItemPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Add New Item',
+                          widget.isReadOnly ? 'View Item Options' : 'Add New Item',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -412,7 +434,9 @@ class _AddItemPageState extends State<AddItemPage> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          'Scan barcode or add manually',
+                          widget.isReadOnly 
+                            ? 'View item addition options (read-only)' 
+                            : 'Scan barcode or add manually',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withOpacity(0.8),
@@ -433,16 +457,22 @@ class _AddItemPageState extends State<AddItemPage> {
                   _buildOptionCard(
                     title: 'Scan Barcode',
                     icon: Icons.qr_code_scanner,
-                    description: 'Scan product barcode to quickly add items',
-                    onTap: _isScanning ? null : _scanBarcode,
+                    description: widget.isReadOnly 
+                      ? 'Scan product barcode (read-only)' 
+                      : 'Scan product barcode to quickly add items',
+                    onTap: widget.isReadOnly ? null : _scanBarcode,
                     isLoading: _isScanning,
+                    isReadOnly: widget.isReadOnly,
                   ),
                   SizedBox(height: 20),
                   _buildOptionCard(
                     title: 'Add Manually',
                     icon: Icons.edit,
-                    description: 'Enter item details manually',
-                    onTap: _navigateToEditPage, // Use the new navigation method
+                    description: widget.isReadOnly 
+                      ? 'View manual entry options (read-only)' 
+                      : 'Enter item details manually',
+                    onTap: widget.isReadOnly ? null : _navigateToEditPage,
+                    isReadOnly: widget.isReadOnly,
                   ),
                 ],
               ),
@@ -459,12 +489,13 @@ class _AddItemPageState extends State<AddItemPage> {
     required String description,
     required VoidCallback? onTap,
     bool isLoading = false,
+    bool isReadOnly = false,
   }) {
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
       child: TweenAnimationBuilder<double>(
         duration: Duration(milliseconds: 200),
-        tween: Tween(begin: 1.0, end: onTap == null ? 1.0 : 1.0),
+        tween: Tween(begin: 1.0, end: onTap == null ? 0.95 : 1.0),
         builder: (context, value, child) {
           return Transform.scale(
             scale: value,
@@ -480,7 +511,7 @@ class _AddItemPageState extends State<AddItemPage> {
             child: Container(
               padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: cardColor,
+                color: isReadOnly ? Colors.grey[100] : cardColor,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -491,20 +522,22 @@ class _AddItemPageState extends State<AddItemPage> {
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
+                        color: (isReadOnly ? disabledColor : primaryColor).withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
                           CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              isReadOnly ? disabledColor : primaryColor
+                            ),
                             strokeWidth: 3,
                           ),
                           Icon(
                             Icons.qr_code_scanner,
                             size: 24,
-                            color: primaryColor.withOpacity(0.7),
+                            color: (isReadOnly ? disabledColor : primaryColor).withOpacity(0.7),
                           ),
                         ],
                       ),
@@ -514,13 +547,13 @@ class _AddItemPageState extends State<AddItemPage> {
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: primaryColor.withOpacity(0.1),
+                        color: (isReadOnly ? disabledColor : primaryColor).withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         icon, 
                         size: 30, 
-                        color: primaryColor
+                        color: isReadOnly ? disabledColor : primaryColor
                       ),
                     ),
                   SizedBox(height: 16),
@@ -529,7 +562,7 @@ class _AddItemPageState extends State<AddItemPage> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: textColor,
+                      color: isReadOnly ? disabledColor : textColor,
                     ),
                   ),
                   SizedBox(height: 8),
@@ -538,7 +571,7 @@ class _AddItemPageState extends State<AddItemPage> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14, 
-                      color: lightTextColor,
+                      color: isReadOnly ? disabledColor : lightTextColor,
                     ),
                   ),
                   if (isLoading) SizedBox(height: 12),
@@ -547,7 +580,17 @@ class _AddItemPageState extends State<AddItemPage> {
                       'Scanning...',
                       style: TextStyle(
                         fontSize: 12,
-                        color: primaryColor,
+                        color: isReadOnly ? disabledColor : primaryColor,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  if (isReadOnly) SizedBox(height: 12),
+                  if (isReadOnly)
+                    Text(
+                      'Read-only access',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: disabledColor,
                         fontStyle: FontStyle.italic,
                       ),
                     ),

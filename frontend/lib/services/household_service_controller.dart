@@ -3,10 +3,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
-import '../models/family_member.dart';
 import '../pages/dashboard_page.dart';
-import '../pages/member_dashboard_page.dart'; // Add this import
+import '../pages/member_dashboard_page.dart';
 import '../pages/login_page.dart';
+
+class PaginationResult {
+  final List<Map<String, dynamic>> members;
+  final DocumentSnapshot? lastDocument;
+  final bool hasMore;
+
+  PaginationResult({
+    required this.members,
+    required this.lastDocument,
+    required this.hasMore,
+  });
+}
 
 class HouseholdServiceController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -356,8 +367,8 @@ class HouseholdServiceController {
     }
   }
 
-  // Get family members with permission check
-  Future<List<FamilyMember>> getFamilyMembers(String householdId) async {
+  // Get all members from the household
+  Future<List<Map<String, dynamic>>> getHouseholdMembers(String householdId) async {
     if (currentUser == null) return [];
 
     try {
@@ -376,25 +387,36 @@ class HouseholdServiceController {
       final snapshot = await _firestore
           .collection('households')
           .doc(householdId)
-          .collection('familyMembers')
-          .orderBy('firstName')
+          .collection('members')
+          .orderBy('joinedAt')
           .get();
 
       return snapshot.docs
-          .map((doc) => FamilyMember.fromMap(doc.data(), doc.id))
+          .map((doc) {
+            final data = doc.data();
+            return {
+              'id': doc.id,
+              'userId': data['userId'],
+              'email': data['email'],
+              'userRole': data['userRole'],
+              'joinedAt': data['joinedAt'],
+            };
+          })
           .toList();
     } catch (e) {
-      debugPrint('Error fetching family members: $e');
+      debugPrint('Error fetching household members: $e');
       return [];
     }
   }
 
-  // Add family member with permission check
-  Future<void> addFamilyMember(String householdId, FamilyMember member) async {
-    if (currentUser == null) return;
-
+  // Get paginated household members
+  Future<PaginationResult> getHouseholdMembersPaginated(
+    String householdId, {
+    int limit = 10,
+    DocumentSnapshot? startAfter,
+  }) async {
     try {
-      // Check if user has write access to this household
+      // Check if user has access to this household
       final memberDoc = await _firestore
           .collection('households')
           .doc(householdId)
@@ -406,36 +428,65 @@ class HouseholdServiceController {
         throw Exception('You do not have access to this household');
       }
 
-      await _firestore
+      Query query = _firestore
           .collection('households')
           .doc(householdId)
-          .collection('familyMembers')
-          .add(member.toMap());
+          .collection('members')
+          .orderBy('joinedAt', descending: true)
+          .limit(limit);
+
+      if (startAfter != null) {
+        query = query.startAfterDocument(startAfter);
+      }
+
+      QuerySnapshot querySnapshot = await query.get();
+
+      List<Map<String, dynamic>> members = [];
+      for (var doc in querySnapshot.docs) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        data['userId'] = doc.id; // Add the document ID as userId
+        members.add(data);
+      }
+
+      DocumentSnapshot? lastDoc = 
+          querySnapshot.docs.isNotEmpty ? querySnapshot.docs.last : null;
+
+      return PaginationResult(
+        members: members,
+        lastDocument: lastDoc,
+        hasMore: members.length == limit,
+      );
     } catch (e) {
-      debugPrint('Error adding family member: $e');
-      rethrow;
+      throw Exception('Error fetching paginated members: $e');
     }
   }
 
-  // Delete family member (only for owners)
-  Future<void> deleteFamilyMember(String householdId, String memberId) async {
-    if (currentUser == null) return;
-
+  // Remove a household member
+  Future<void> removeHouseholdMember(String householdId, String userId) async {
     try {
-      final isOwner = await isHouseholdOwner(householdId);
-      if (!isOwner) {
-        throw Exception('Only household owners can delete family members');
+      // Check if current user is the owner
+      final role = await getUserRole(householdId);
+      if (role != 'creator') {
+        throw Exception('Only household owners can remove members');
       }
 
+      // Remove from household members collection
       await _firestore
           .collection('households')
           .doc(householdId)
-          .collection('familyMembers')
-          .doc(memberId)
+          .collection('members')
+          .doc(userId)
+          .delete();
+
+      // Remove from user's households collection
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('households')
+          .doc(householdId)
           .delete();
     } catch (e) {
-      debugPrint('Error deleting family member: $e');
-      rethrow;
+      throw Exception('Error removing household member: $e');
     }
   }
 
