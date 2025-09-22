@@ -184,6 +184,17 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   void _removeMember(int index) async {
     final member = _householdMembers[index];
     
+    // Check if the member has a userId
+    if (member['userId'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Cannot remove member: Missing user ID"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -272,7 +283,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
               Text('Last seen: ${_formatDate(member['lastSeen'])}'),
           ],
         ),
-        trailing: _isOwner && !isCreator
+        trailing: _isOwner && !isCreator && member['userId'] != null
             ? isRemovingThisMember
                 ? SizedBox(
                     width: 24,

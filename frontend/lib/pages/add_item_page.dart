@@ -261,7 +261,6 @@ class _AddItemPageState extends State<AddItemPage> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
-                          // TODO: Save to Firestore with widget.householdId
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(

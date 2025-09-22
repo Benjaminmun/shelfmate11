@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_feather_icons/flutter_feather_icons.dart';
+import 'user_info_page.dart';
 import '../services/household_service_controller.dart';
 import 'family_members_page.dart';
 import 'package:intl/intl.dart';
@@ -97,6 +98,12 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   onTap: () {
                     Navigator.pop(context);
                     // Navigate to profile settings
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => UserInfoPage(),
+                      ),
+                    );
                   },
                 ),
                 _buildSettingsOption(

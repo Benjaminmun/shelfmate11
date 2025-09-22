@@ -182,9 +182,17 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   Future<bool> _checkUserInfoExists(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
-      return doc.exists && 
-             doc.data()?['firstName'] != null && 
-             doc.data()?['lastName'] != null;
+      // Check if the document exists and has the required fields
+      if (doc.exists) {
+        final data = doc.data();
+        // Check if the user has completed their profile (has phone and address)
+        return data != null && 
+               data['phone'] != null && 
+               data['phone'].toString().isNotEmpty &&
+               data['address'] != null &&
+               data['address'].toString().isNotEmpty;
+      }
+      return false;
     } catch (e) {
       return false;
     }

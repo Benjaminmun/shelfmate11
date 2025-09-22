@@ -42,7 +42,7 @@ dependencies:
   google_mlkit_barcode_scanning: ^0.14.1
   image_picker: ^1.0.4
   camera: ^0.11.2
-  fl_chart: ^0.55.2
+  fl_chart: ^0.68.0
   share_plus: ^7.0.0
   firebase_storage: ^13.0.1
   timeago: ^3.7.1
