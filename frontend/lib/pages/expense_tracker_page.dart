@@ -5,10 +5,12 @@ import 'package:intl/intl.dart';
 
 class ExpenseTrackerPage extends StatefulWidget {
   final String householdId;
+  final bool isReadOnly;
 
   const ExpenseTrackerPage({
     Key? key,
     required this.householdId,
+    required this.isReadOnly,
   }) : super(key: key);
 
   @override
@@ -24,6 +26,10 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
   List<Map<String, dynamic>> _inventoryItems = [];
   bool _isLoading = true;
   String _errorMessage = '';
+  
+  // User role and permissions
+  String _currentUserRole = 'member';
+  String _currentUserId = '';
   
   // Search and filter state
   TextEditingController _searchController = TextEditingController();
@@ -56,7 +62,35 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
   @override
   void initState() {
     super.initState();
+    _getCurrentUserInfo();
     _loadInventoryData();
+  }
+
+  Future<void> _getCurrentUserInfo() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        setState(() {
+          _currentUserId = user.uid;
+        });
+
+        // Get user role from household members
+        final memberDoc = await _firestore
+            .collection('households')
+            .doc(widget.householdId)
+            .collection('members')
+            .doc(user.uid)
+            .get();
+
+        if (memberDoc.exists) {
+          setState(() {
+            _currentUserRole = memberDoc.data()?['role']?.toString() ?? 'member';
+          });
+        }
+      }
+    } catch (e) {
+      print('Error getting user info: $e');
+    }
   }
 
   Future<void> _loadInventoryData() async {
@@ -84,6 +118,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
         final quantity = _parseDouble(data['quantity']);
         final totalValue = price * quantity;
         final category = data['category']?.toString() ?? 'Other';
+        final addedByUserId = data['addedByUserId']?.toString() ?? '';
         
         items.add({
           'id': doc.id,
@@ -93,6 +128,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
           'price': price,
           'totalValue': totalValue,
           'addedByUserName': data['addedByUserName']?.toString() ?? 'Unknown',
+          'addedByUserId': addedByUserId,
           'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           'description': data['description']?.toString() ?? '',
         });
@@ -154,6 +190,23 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
     }
   }
 
+  // Check if current user can delete the item
+  bool _canDeleteItem(Map<String, dynamic> item) {
+    // If page is read-only, no one can delete
+    if (widget.isReadOnly) return false;
+    
+    // Admins can delete any item
+    if (_currentUserRole == 'admin') return true;
+    
+    // Users can only delete their own items
+    if (_currentUserRole == 'user' && item['addedByUserId'] == _currentUserId) {
+      return true;
+    }
+    
+    // Members cannot delete any items
+    return false;
+  }
+
   Future<void> _deleteItem(String itemId) async {
     try {
       await _firestore.collection('households')
@@ -163,6 +216,15 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
         .delete();
       
       _loadInventoryData();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Item deleted successfully'),
+          backgroundColor: successColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -175,6 +237,208 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
     }
   }
 
+  Widget _buildInventoryItem(Map<String, dynamic> item) {
+    final double totalAmount = item['price'] * item['quantity'];
+    final categoryColor = categoryColors[item['category']] ?? categoryColors['Other']!;
+    final date = DateFormat('MMM dd').format(item['updatedAt']);
+    final canDelete = _canDeleteItem(item);
+
+    Widget itemContent = Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: categoryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(_getCategoryIcon(item['category']), color: categoryColor),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(item['name'], 
+                        style: TextStyle(fontWeight: FontWeight.w600, color: textColor, fontSize: 16)),
+                    Text("RM ${totalAmount.toStringAsFixed(2)}",
+                        style: TextStyle(fontWeight: FontWeight.w700, color: textColor, fontSize: 16)),
+                  ],
+                ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: categoryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        item['category'],
+                        style: TextStyle(color: categoryColor, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      date,
+                      style: TextStyle(color: lightTextColor, fontSize: 12),
+                    ),
+                    if (!canDelete && !widget.isReadOnly)
+                      Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Icon(Icons.lock_outline, size: 12, color: lightTextColor),
+                      ),
+                  ],
+                ),
+                if (item['description'] != null && item['description'].isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      item['description'],
+                      style: TextStyle(color: lightTextColor, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.person, size: 12, color: lightTextColor),
+                    SizedBox(width: 4),
+                    Text(
+                      "by ${item['addedByUserName']}",
+                      style: TextStyle(color: lightTextColor, fontSize: 10),
+                    ),
+                    if (item['addedByUserId'] == _currentUserId)
+                      Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Text(
+                          "(You)",
+                          style: TextStyle(color: primaryColor, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (canDelete)
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: dangerColor),
+              onPressed: () => _showDeleteConfirmation(item),
+            ),
+        ],
+      ),
+    );
+
+    // Only make it dismissible if user has permission to delete
+    if (canDelete) {
+      return Dismissible(
+        key: Key(item['id']),
+        background: Container(
+          decoration: BoxDecoration(
+            color: dangerColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          alignment: Alignment.centerRight,
+          padding: EdgeInsets.only(right: 20),
+          child: Icon(Icons.delete, color: Colors.white, size: 30),
+        ),
+        direction: DismissDirection.endToStart,
+        confirmDismiss: (direction) async {
+          return await _showDeleteConfirmation(item);
+        },
+        onDismissed: (direction) {
+          _deleteItem(item['id']);
+        },
+        child: itemContent,
+      );
+    } else {
+      return itemContent;
+    }
+  }
+
+  Future<bool?> _showDeleteConfirmation(Map<String, dynamic> item) async {
+    return await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning, color: dangerColor, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  "Delete Item",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: textColor),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "Are you sure you want to delete ${item['name']}?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: lightTextColor),
+                ),
+                SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          side: BorderSide(color: lightTextColor.withOpacity(0.3)),
+                        ),
+                        child: Text("Cancel", style: TextStyle(color: lightTextColor)),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: dangerColor,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text("Delete", style: TextStyle(color: Colors.white)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ... (Keep all other existing methods: _buildSummaryCard, _buildCategoryCard, 
+  // _buildSearchBar, _buildSortFilterChip, _buildEmptyState, _getCategoryIcon, etc.)
+
+  // The rest of your existing methods remain the same...
   Widget _buildSummaryCard() {
     return Container(
       padding: EdgeInsets.all(24),
@@ -365,174 +629,6 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
     );
   }
 
-  Widget _buildInventoryItem(Map<String, dynamic> item) {
-    final double totalAmount = item['price'] * item['quantity'];
-    final categoryColor = categoryColors[item['category']] ?? categoryColors['Other']!;
-    final date = DateFormat('MMM dd').format(item['updatedAt']);
-
-    return Dismissible(
-      key: Key(item['id']),
-      background: Container(
-        decoration: BoxDecoration(
-          color: dangerColor,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        alignment: Alignment.centerRight,
-        padding: EdgeInsets.only(right: 20),
-        child: Icon(Icons.delete, color: Colors.white, size: 30),
-      ),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (direction) async {
-        return await showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning, color: dangerColor, size: 48),
-                    SizedBox(height: 16),
-                    Text(
-                      "Delete Item",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: textColor),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      "Are you sure you want to delete ${item['name']}?",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: lightTextColor),
-                    ),
-                    SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            style: OutlinedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              side: BorderSide(color: lightTextColor.withOpacity(0.3)),
-                            ),
-                            child: Text("Cancel", style: TextStyle(color: lightTextColor)),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: dangerColor,
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: Text("Delete", style: TextStyle(color: Colors.white)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-      onDismissed: (direction) {
-        _deleteItem(item['id']);
-      },
-      child: Container(
-        margin: EdgeInsets.only(bottom: 12),
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: categoryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(_getCategoryIcon(item['category']), color: categoryColor),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(item['name'], 
-                          style: TextStyle(fontWeight: FontWeight.w600, color: textColor, fontSize: 16)),
-                      Text("RM ${totalAmount.toStringAsFixed(2)}",
-                          style: TextStyle(fontWeight: FontWeight.w700, color: textColor, fontSize: 16)),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: categoryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          item['category'],
-                          style: TextStyle(color: categoryColor, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        date,
-                        style: TextStyle(color: lightTextColor, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                  if (item['description'] != null && item['description'].isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(top: 8),
-                      child: Text(
-                        item['description'],
-                        style: TextStyle(color: lightTextColor, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.person, size: 12, color: lightTextColor),
-                      SizedBox(width: 4),
-                      Text(
-                        "by ${item['addedByUserName']}",
-                        style: TextStyle(color: lightTextColor, fontSize: 10),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyState() {
     return Container(
       padding: EdgeInsets.all(32),
@@ -583,23 +679,24 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
   }
 
   IconData _getCategoryIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'food':
-        return Icons.restaurant;
-      case 'transportation':
-        return Icons.directions_car;
-      case 'utilities':
-        return Icons.bolt;
-      case 'entertainment':
-        return Icons.movie;
-      case 'shopping':
-        return Icons.shopping_bag;
-      case 'healthcare':
-        return Icons.local_hospital;
-      default:
-        return Icons.category;
-    }
+  switch (category.toLowerCase()) {
+    case 'food':
+      return Icons.restaurant;
+    case 'beverages':
+      return Icons.local_bar; 
+    case 'cleaning supplies':
+      return Icons.cleaning_services; 
+    case 'personal care':
+      return Icons.self_improvement; 
+    case 'medication':
+      return Icons.medical_services; 
+    case 'other':
+      return Icons.category;
+    default:
+      return Icons.category;
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -744,12 +841,13 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
                                 color: textColor,
                               ),
                             ),
-                            IconButton(
-                              icon: Icon(Icons.filter_list, color: primaryColor),
-                              onPressed: () {
-                                // TODO: Implement filter dialog
-                              },
-                            ),
+                            if (!widget.isReadOnly)
+                              IconButton(
+                                icon: Icon(Icons.filter_list, color: primaryColor),
+                                onPressed: () {
+                                  // TODO: Implement filter dialog
+                                },
+                              ),
                           ],
                         ),
                         SizedBox(height: 16),
@@ -765,6 +863,34 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
                           ],
                         ),
                         SizedBox(height: 20),
+
+                        // Permission notice for members
+                        if (_currentUserRole == 'member' && !widget.isReadOnly)
+                          Container(
+                            padding: EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: warningColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: warningColor.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, color: warningColor, size: 16),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Members can view expenses but cannot delete them',
+                                    style: TextStyle(
+                                      color: warningColor,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_currentUserRole == 'member' && !widget.isReadOnly)
+                          SizedBox(height: 16),
 
                         // Inventory Items List
                         _filteredItems.isEmpty

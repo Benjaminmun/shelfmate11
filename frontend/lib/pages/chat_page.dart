@@ -27,21 +27,38 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
   late Animation<double> _typingAnimation;
   final FocusNode _messageFocusNode = FocusNode();
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  bool _showQuickActions = true;
+
+  // Enhanced Color Palette
+  final Color _primaryColor = Color(0xFF2D5D7C); // More vibrant blue
+  final Color _secondaryColor = Color(0xFF2D5D7C);
+  final Color _accentColor = Color(0xFF10B981); // Emerald green
+  final Color _warningColor = Color(0xFFF59E0B); // Amber
+  final Color _errorColor = Color(0xFFEF4444); // Red
+  final Color _textPrimary = Color(0xFF1F2937); // Almost black
+  final Color _textSecondary = Color(0xFF6B7280); // Gray
+  final Color _textLight = Color(0xFF9CA3AF); // Light gray
+  final Color _backgroundLight = Color(0xFFF9FAFB); // Very light gray
+
+  // Typography Scale
+  final double _fontSizeLarge = 18.0;
+  final double _fontSizeMedium = 16.0;
+  final double _fontSizeSmall = 14.0;
+  final double _fontSizeXSmall = 12.0;
 
   @override
   void initState() {
     super.initState();
-    // Initialize timeago messages
+    
     timeago.setLocaleMessages('en', timeago.EnMessages());
     
-    // Add a welcome message
+    // Enhanced welcome message with better formatting
     _messages.add(ChatMessage(
-      text: 'Hi! I\'m your inventory assistant. I can help you manage your household items. What would you like to know about your inventory?',
+      text: 'Hello! I\'m your inventory assistant. I can help you manage your household items. \n\n🔍 **What you can ask me:**\n• Items currently in stock\n• Low inventory alerts  \n• Expiration dates tracking\n• Adding new items to inventory\n• Search specific products',
       sender: 'ai',
       timestamp: DateTime.now(),
     ));
     
-    // Initialize typing animation
     _typingController = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -52,10 +69,8 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
       curve: Curves.easeInOut,
     );
     
-    // Check network connection
     _checkConnection();
     
-    // Listen for connectivity changes
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
       setState(() {
         _isConnected = result != ConnectivityResult.none;
@@ -91,9 +106,14 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
 
     final String message = _messageController.text;
     _messageController.clear();
-    FocusScope.of(context).unfocus(); // Unfocus the text field
+    FocusScope.of(context).unfocus();
     
-    // Add user message
+    if (_showQuickActions) {
+      setState(() {
+        _showQuickActions = false;
+      });
+    }
+    
     setState(() {
       _messages.add(ChatMessage(
         text: message,
@@ -103,16 +123,13 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
       _isLoading = true;
     });
 
-    // Scroll to bottom when new message is added
     _scrollToBottom();
 
-    // Get AI response with household context
     try {
       if (!_isConnected) {
         throw Exception('No internet connection');
       }
       
-      // Use timeout for the AI service call
       final String response = await AIService.chat(widget.householdId, message)
           .timeout(const Duration(seconds: 30), onTimeout: () {
             return 'I\'m taking longer than usual to respond. Please check your connection or try again.';
@@ -127,7 +144,6 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
         _isLoading = false;
       });
       
-      // Scroll to bottom after AI response
       _scrollToBottom();
     } catch (e) {
       setState(() {
@@ -154,73 +170,140 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
     });
   }
 
-  // Quick action buttons for common inventory queries
   Widget _buildQuickActions() {
+    if (!_showQuickActions) return SizedBox.shrink();
+
     final List<Map<String, dynamic>> actions = [
       {
-        'label': 'Show all items',
-        'icon': Icons.list_alt,
+        'label': 'Show All Items',
+        'icon': Icons.inventory_2_rounded,
         'action': () {
           _messageController.text = 'What items do I have in my inventory?';
           _sendMessage();
         },
-        'color': Color(0xFF2D5D7C),
+        'color': _primaryColor,
       },
       {
-        'label': 'Low stock items',
-        'icon': Icons.warning,
+        'label': 'Low Stock',
+        'icon': Icons.warning_amber_rounded,
         'action': () {
           _messageController.text = 'What items are running low in my inventory?';
           _sendMessage();
         },
-        'color': Colors.orange,
+        'color': _warningColor,
       },
       {
-        'label': 'Add an item',
-        'icon': Icons.add_circle,
+        'label': 'Add Item',
+        'icon': Icons.add_circle_outline_rounded,
         'action': () {
           Navigator.pushNamed(context, '/add_item');
         },
-        'color': Colors.green,
+        'color': _accentColor,
       },
       {
-        'label': 'Expiring soon',
-        'icon': Icons.calendar_today,
+        'label': 'Expiring Soon',
+        'icon': Icons.calendar_today_rounded,
         'action': () {
           _messageController.text = 'What items are expiring soon?';
           _sendMessage();
         },
-        'color': Colors.red,
+        'color': _errorColor,
       },
     ];
 
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      color: Colors.grey[50],
+      padding: EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Text(
-              'Quick Actions',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-                fontSize: 14,
+          Row(
+            children: [
+              Icon(Icons.bolt_rounded, color: _primaryColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Quick Actions',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: _textPrimary,
+                  fontSize: _fontSizeLarge,
+                  letterSpacing: -0.3,
+                ),
               ),
-            ),
+              Spacer(),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showQuickActions = false;
+                  });
+                },
+                child: Container(
+                  padding: EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: _textLight.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.close_rounded, color: _textSecondary, size: 18),
+                ),
+              ),
+            ],
           ),
+          SizedBox(height: 16),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 12,
+            runSpacing: 12,
             children: actions.map((action) {
-              return ActionChip(
-                label: Text(action['label']),
-                avatar: Icon(action['icon'], size: 18, color: action['color']),
-                onPressed: action['action'],
-                backgroundColor: action['color'].withOpacity(0.1),
-                labelStyle: TextStyle(color: action['color']),
+              return Container(
+                decoration: BoxDecoration(
+                  color: action['color'].withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: action['color'].withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: action['action'],
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(action['icon'], 
+                            size: 18, 
+                            color: action['color']
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            action['label'],
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: _fontSizeSmall,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               );
             }).toList(),
           ),
@@ -232,15 +315,30 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
   Widget _buildConnectionStatus() {
     if (!_isConnected) {
       return Container(
-        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        color: Colors.orange[50],
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+        decoration: BoxDecoration(
+          color: _warningColor.withOpacity(0.1),
+          border: Border(
+            bottom: BorderSide(
+              color: _warningColor.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+        ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.wifi_off, size: 16, color: Colors.orange),
-            SizedBox(width: 8),
+            Icon(Icons.wifi_off_rounded, size: 18, color: _warningColor),
+            SizedBox(width: 10),
             Text(
               'No internet connection',
-              style: TextStyle(color: Colors.orange[800], fontSize: 12),
+              style: TextStyle(
+                color: _warningColor,
+                fontSize: _fontSizeSmall,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+              ),
             ),
           ],
         ),
@@ -251,20 +349,20 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
 
   Widget _buildTypingIndicator() {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8.0),
+      padding: EdgeInsets.symmetric(vertical: 12.0),
       child: Row(
         children: [
           SizedBox(width: 16),
           Container(
-            padding: EdgeInsets.all(12),
+            padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
@@ -272,19 +370,21 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
-                  width: 24,
-                  height: 24,
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2D5D7C)),
+                    valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
                   ),
                 ),
-                SizedBox(width: 8),
+                SizedBox(width: 12),
                 Text(
-                  'Accessing your inventory...',
+                  'Searching your inventory...',
                   style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
+                    color: _textSecondary,
+                    fontSize: _fontSizeSmall,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.2,
                   ),
                 ),
               ],
@@ -295,138 +395,259 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
     );
   }
 
+  Widget _buildInputField() {
+    return Container(
+      margin: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: Offset(0, 8),
+          ),
+        ],
+        border: Border.all(
+          color: Colors.black.withOpacity(0.05),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Voice input button
+          Container(
+            margin: EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: _isListening ? _errorColor : _primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(
+                _isListening ? Icons.mic_off_rounded : Icons.mic_rounded,
+                color: _isListening ? Colors.white : _primaryColor,
+                size: 22,
+              ),
+              onPressed: _handleVoiceInput,
+              tooltip: 'Voice input',
+            ),
+          ),
+          
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8.0),
+              child: TextField(
+                controller: _messageController,
+                focusNode: _messageFocusNode,
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontSize: _fontSizeMedium,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: -0.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Ask about your inventory...',
+                  hintStyle: TextStyle(
+                    color: _textLight,
+                    fontSize: _fontSizeMedium,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.2,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                ),
+                maxLines: 3,
+                minLines: 1,
+                maxLength: 500,
+                onSubmitted: (_) => _sendMessage(),
+              ),
+            ),
+          ),
+          
+          // Send button
+          Container(
+            margin: EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_primaryColor, _secondaryColor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _primaryColor.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: Icon(Icons.send_rounded, color: Colors.white, size: 22),
+              onPressed: _sendMessage,
+              tooltip: 'Send message',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleVoiceInput() async {
+    try {
+      final hasPermission = await _checkMicrophonePermission();
+      if (!hasPermission) {
+        _showSnackBar('Microphone permission is required for voice input');
+        return;
+      }
+
+      setState(() {
+        _isListening = true;
+      });
+      
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return _VoiceInputDialog(
+            onCancel: () {
+              Navigator.of(context).pop();
+              SpeechService.stopListening();
+              setState(() {
+                _isListening = false;
+              });
+            },
+          );
+        },
+      );
+      
+      final String speechResult = await SpeechService.getSpeechInput(context);
+      
+      Navigator.of(context).pop();
+      
+      setState(() {
+        _isListening = false;
+      });
+      
+      if (speechResult.isNotEmpty) {
+        _messageController.text = speechResult;
+        _sendMessage();
+      } else {
+        _showSnackBar('No speech recognized. Please try again.');
+      }
+    } catch (e) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      
+      setState(() {
+        _isListening = false;
+      });
+      
+      _showSnackBar('Voice input failed: ${e.toString()}');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: _fontSizeSmall,
+          ),
+        ),
+        backgroundColor: _textPrimary,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: EdgeInsets.all(16),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _backgroundLight,
       appBar: AppBar(
-        title: Text('Inventory Assistant'),
-        backgroundColor: Color(0xFF2D5D7C),
+        title: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.inventory_2_rounded, size: 22),
+            ),
+            SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Inventory Assistant',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: _fontSizeLarge,
+                    letterSpacing: -0.4,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Always here to help',
+                  style: TextStyle(
+                    fontSize: _fontSizeXSmall,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withOpacity(0.9),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        backgroundColor: _primaryColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(16),
+            bottom: Radius.circular(24),
           ),
         ),
         actions: [
           IconButton(
-            icon: Icon(_isListening ? Icons.mic_off : Icons.mic, color: Colors.white),
-            onPressed: () async {
-              try {
-                // Check microphone permission first
-                final hasPermission = await _checkMicrophonePermission();
-                if (!hasPermission) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Microphone permission is required for voice input')),
-                  );
-                  return;
-                }
-
-                setState(() {
-                  _isListening = true;
-                });
-                
-                // Show a dialog or indicator that we're listening
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: Text("Listening..."),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text("Speak now"),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            SpeechService.stopListening();
-                            setState(() {
-                              _isListening = false;
-                            });
-                          },
-                          child: Text("Cancel"),
-                        ),
-                      ],
-                    );
-                  },
-                );
-                
-                final String speechResult = await SpeechService.getSpeechInput(context);
-                
-                // Dismiss the dialog
-                Navigator.of(context).pop();
-                
-                setState(() {
-                  _isListening = false;
-                });
-                
-                if (speechResult.isNotEmpty) {
-                  _messageController.text = speechResult;
-                  _sendMessage();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('No speech recognized. Please try again.')),
-                  );
-                }
-              } catch (e) {
-                // Dismiss the dialog if it's still open
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                }
-                
-                setState(() {
-                  _isListening = false;
-                });
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Voice input failed: ${e.toString()}')),
-                );
-              }
-            },
-            tooltip: 'Voice input',
-          ),
-          IconButton(
-            icon: Icon(Icons.refresh, color: Colors.white),
+            icon: Icon(Icons.refresh_rounded, color: Colors.white, size: 24),
             onPressed: () {
               setState(() {
                 _isLoading = true;
               });
-              // Simulate a refresh
               Future.delayed(Duration(seconds: 1), () {
                 setState(() {
                   _isLoading = false;
                 });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Refreshed inventory data')),
-                );
+                _showSnackBar('Inventory data refreshed');
               });
             },
             tooltip: 'Refresh inventory data',
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF2D5D7C).withOpacity(0.1),
-              Color(0xFF2D5D7C).withOpacity(0.05),
-              Colors.white,
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            _buildConnectionStatus(),
-            _buildQuickActions(),
-            Expanded(
+      body: Column(
+        children: [
+          _buildConnectionStatus(),
+          _buildQuickActions(),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    _primaryColor.withOpacity(0.02),
+                  ],
+                ),
+              ),
               child: ListView.builder(
                 controller: _scrollController,
                 padding: EdgeInsets.all(16.0),
@@ -439,6 +660,15 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                       isUser: message.sender == 'user',
                       timestamp: message.timestamp,
                       isError: message.isError,
+                      primaryColor: _primaryColor,
+                      accentColor: _accentColor,
+                      errorColor: _errorColor,
+                      textPrimary: _textPrimary,
+                      textSecondary: _textSecondary,
+                      textLight: _textLight,
+                      fontSizeMedium: _fontSizeMedium,
+                      fontSizeSmall: _fontSizeSmall,
+                      fontSizeXSmall: _fontSizeXSmall,
                     );
                   } else {
                     return _buildTypingIndicator();
@@ -446,51 +676,132 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
                 },
               ),
             ),
-            Container(
-              margin: EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 6,
-                    offset: Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0),
-                      child: TextField(
-                        controller: _messageController,
-                        focusNode: _messageFocusNode,
-                        decoration: InputDecoration(
-                          hintText: 'Ask about your inventory...',
-                          border: InputBorder.none,
-                          hintStyle: TextStyle(color: Colors.grey[500]),
-                        ),
-                        maxLines: 3,
-                        minLines: 1,
-                        maxLength: 500,
-                        onSubmitted: (_) => _sendMessage(),
+          ),
+          _buildInputField(),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceInputDialog extends StatefulWidget {
+  final VoidCallback onCancel;
+
+  const _VoiceInputDialog({required this.onCancel});
+
+  @override
+  __VoiceInputDialogState createState() => __VoiceInputDialogState();
+}
+
+class __VoiceInputDialogState extends State<_VoiceInputDialog> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: Duration(milliseconds: 800),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 32,
+              offset: Offset(0, 16),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                return Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0xFF2563EB).withOpacity(0.4),
+                        blurRadius: 15 + (_animation.value * 15),
+                        spreadRadius: _animation.value * 8,
                       ),
-                    ),
+                    ],
                   ),
-                  Container(
-                    margin: EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Color(0xFF2D5D7C),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(Icons.send, color: Colors.white),
-                      onPressed: _sendMessage,
-                    ),
+                  child: Icon(
+                    Icons.mic_rounded,
+                    color: Colors.white,
+                    size: 40,
                   ),
-                ],
+                );
+              },
+            ),
+            SizedBox(height: 24),
+            Text(
+              "Listening...",
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1F2937),
+                letterSpacing: -0.5,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              "Speak now to ask about your inventory",
+              style: TextStyle(
+                color: Color(0xFF6B7280),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24),
+            TextButton(
+              onPressed: widget.onCancel,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                "Cancel",
+                style: TextStyle(
+                  color: Color(0xFF6B7280),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  letterSpacing: -0.2,
+                ),
               ),
             ),
           ],
@@ -519,6 +830,15 @@ class ChatBubble extends StatelessWidget {
   final bool isUser;
   final DateTime timestamp;
   final bool isError;
+  final Color primaryColor;
+  final Color accentColor;
+  final Color errorColor;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textLight;
+  final double fontSizeMedium;
+  final double fontSizeSmall;
+  final double fontSizeXSmall;
 
   const ChatBubble({
     Key? key, 
@@ -526,6 +846,15 @@ class ChatBubble extends StatelessWidget {
     required this.isUser,
     required this.timestamp,
     this.isError = false,
+    required this.primaryColor,
+    required this.accentColor,
+    required this.errorColor,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textLight,
+    required this.fontSizeMedium,
+    required this.fontSizeSmall,
+    required this.fontSizeXSmall,
   }) : super(key: key);
 
   String _formatTimestamp(DateTime dateTime) {
@@ -549,41 +878,62 @@ class ChatBubble extends StatelessWidget {
         children: [
           if (!isUser) 
             Container(
-              width: 32,
-              height: 32,
-              margin: EdgeInsets.only(right: 8),
+              width: 40,
+              height: 40,
+              margin: EdgeInsets.only(right: 12),
               decoration: BoxDecoration(
-                color: isError ? Colors.red : Color(0xFF2D5D7C),
+                gradient: LinearGradient(
+                  colors: isError 
+                    ? [errorColor, Color(0xFFDC2626)] 
+                    : [primaryColor, accentColor],
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: (isError ? errorColor : primaryColor).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
               ),
               child: Icon(
-                isError ? Icons.error : Icons.inventory_2, 
+                isError ? Icons.error_outline_rounded : Icons.inventory_2_rounded, 
                 color: Colors.white, 
-                size: 18
+                size: 20
               ),
             ),
           Flexible(
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
               decoration: BoxDecoration(
-                color: isUser 
-                  ? Color(0xFF2D5D7C) 
-                  : (isError ? Colors.red[50] : Colors.white),
+                gradient: isUser 
+                  ? LinearGradient(
+                      colors: [primaryColor, accentColor],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : (isError 
+                      ? LinearGradient(
+                          colors: [Color(0xFFFEF2F2), Color(0xFFFEE2E2)],
+                        )
+                      : LinearGradient(
+                          colors: [Colors.white, Color(0xFFF9FAFB)],
+                        )),
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  bottomLeft: isUser ? Radius.circular(20) : Radius.circular(4),
-                  bottomRight: isUser ? Radius.circular(4) : Radius.circular(20),
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                  bottomLeft: isUser ? Radius.circular(24) : Radius.circular(8),
+                  bottomRight: isUser ? Radius.circular(8) : Radius.circular(24),
                 ),
                 border: isError 
-                  ? Border.all(color: Colors.red.withOpacity(0.3))
-                  : null,
+                  ? Border.all(color: errorColor.withOpacity(0.2), width: 1.5)
+                  : Border.all(color: Colors.black.withOpacity(0.05), width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
                   ),
                 ],
               ),
@@ -595,18 +945,23 @@ class ChatBubble extends StatelessWidget {
                     style: TextStyle(
                       color: isUser 
                         ? Colors.white 
-                        : (isError ? Colors.red[800] : Colors.black87),
-                      fontSize: 16,
+                        : (isError ? errorColor : textPrimary),
+                      fontSize: fontSizeMedium,
+                      fontWeight: isUser ? FontWeight.w500 : FontWeight.w400,
+                      height: 1.5,
+                      letterSpacing: -0.2,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  SizedBox(height: 8),
                   Text(
                     _formatTimestamp(timestamp),
                     style: TextStyle(
                       color: isUser 
-                        ? Colors.white70 
-                        : (isError ? Colors.red[600] : Colors.grey[600]),
-                      fontSize: 10,
+                        ? Colors.white.withOpacity(0.9) 
+                        : (isError ? errorColor.withOpacity(0.7) : textLight),
+                      fontSize: fontSizeXSmall,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.1,
                     ),
                   ),
                 ],
@@ -615,14 +970,23 @@ class ChatBubble extends StatelessWidget {
           ),
           if (isUser) 
             Container(
-              width: 32,
-              height: 32,
-              margin: EdgeInsets.only(left: 8),
+              width: 40,
+              height: 40,
+              margin: EdgeInsets.only(left: 12),
               decoration: BoxDecoration(
-                color: Color(0xFF2D5D7C).withOpacity(0.8),
+                gradient: LinearGradient(
+                  colors: [accentColor, primaryColor],
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: primaryColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
               ),
-              child: Icon(Icons.person, color: Colors.white, size: 18),
+              child: Icon(Icons.person_rounded, color: Colors.white, size: 20),
             ),
         ],
       ),

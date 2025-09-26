@@ -25,21 +25,24 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Enhanced color scheme
-  final Color primaryColor = Color(0xFF2D5D7C);
-  final Color primaryLightColor = Color(0xFF5A8BA8);
-  final Color secondaryColor = Color(0xFF4CAF50);
-  final Color accentColor = Color(0xFFFF9800);
-  final Color warningColor = Color(0xFFFF5722);
-  final Color backgroundColor = Color(0xFFF8FAFC);
-  final Color cardColor = Colors.white;
-  final Color textColor = Color(0xFF1E293B);
-  final Color lightTextColor = Color(0xFF64748B);
+  // Modern color scheme matching DashboardPage
+  final Color _primaryColor = Color(0xFF2D5D7C);
+  final Color _secondaryColor = Color.fromARGB(255, 98, 112, 177);
+  final Color _accentColor = Color(0xFF4CC9F0);
+  final Color _successColor = Color(0xFF4ADE80);
+  final Color _warningColor = Color(0xFFF59E0B);
+  final Color _errorColor = Color(0xFFEF4444);
+  final Color _backgroundColor = Color(0xFFF8FAFF);
+  final Color _surfaceColor = Color(0xFFFFFFFF);
+  final Color _textPrimary = Color(0xFF1E293B);
+  final Color _textSecondary = Color(0xFF64748B);
+  final Color _textLight = Color(0xFF94A3B8);
 
   String _currentHousehold = '';
   String _currentHouseholdId = '';
   int _totalItems = 0;
   int _lowStockItems = 0;
+  int _expiringSoonItems = 0;
   int _totalCategories = 0;
   double _totalValue = 0.0;
   List<Map<String, dynamic>> _recentActivities = [];
@@ -47,26 +50,35 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   bool _hasError = false;
   String _errorMessage = '';
   
-  // Navigation index
   int _currentIndex = 0;
-  
-  // Stream subscriptions for real-time updates
   StreamSubscription<QuerySnapshot>? _inventorySubscription;
   StreamSubscription<QuerySnapshot>? _activitiesSubscription;
 
-  // Animation controllers
+  // Enhanced animations matching DashboardPage
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+  late Animation<double> _slideAnimation;
+  late Animation<double> _staggerAnimation;
 
   @override
   void initState() {
     super.initState();
     
-    // Initialize animations
+    _initializeAnimations();
+    _currentHousehold = widget.selectedHousehold ?? '';
+    _currentHouseholdId = widget.householdId ?? '';
+    
+    if (_currentHouseholdId.isNotEmpty) {
+      _setupRealTimeListeners();
+    } else {
+      _isLoading = false;
+    }
+  }
+
+  void _initializeAnimations() {
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: Duration(milliseconds: 1200),
     );
     
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -76,29 +88,23 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
       ),
     );
     
-    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeOut,
+        curve: Curves.easeOutCubic,
       ),
     );
     
-    _currentHousehold = widget.selectedHousehold ?? '';
-    _currentHouseholdId = widget.householdId ?? '';
-    
-    if (_currentHouseholdId.isNotEmpty) {
-      _setupRealTimeListeners();
-    } else {
-      _isLoading = false;
-    }
-    
-    // Start animations
-    _animationController.forward();
+    _staggerAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Interval(0.3, 1.0, curve: Curves.easeInOut),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    // Cancel all subscriptions when the widget is disposed
     _inventorySubscription?.cancel();
     _activitiesSubscription?.cancel();
     _animationController.dispose();
@@ -118,7 +124,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
 
     try {
       // Set up real-time listener for inventory (read-only for members)
-      // FIXED: Access the main household collection, not the user's subcollection
       _inventorySubscription = _firestore
           .collection('households')
           .doc(_currentHouseholdId)
@@ -137,7 +142,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
       });
 
       // Set up real-time listener for activities (read-only for members)
-      // FIXED: Access the main household collection, not the user's subcollection
       _activitiesSubscription = _firestore
           .collection('households')
           .doc(_currentHouseholdId)
@@ -151,6 +155,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
           recentActivities.add({
             'message': doc['message'] ?? 'No message',
             'timestamp': doc['timestamp'] ?? Timestamp.now(),
+            'type': doc['type'] ?? 'info',
           });
         }
         setState(() {
@@ -161,6 +166,10 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         print('Activities stream error: $error');
         // Activities are optional, so we don't treat this as a fatal error
       });
+
+      // Start animations after data loads
+      _animationController.forward();
+      
     } catch (e) {
       print('Error setting up real-time listeners: $e');
       setState(() {
@@ -174,6 +183,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   void _calculateStats(List<QueryDocumentSnapshot> inventoryDocs) {
     int totalItems = inventoryDocs.length;
     int lowStockItems = 0;
+    int expiringSoonItems = 0;
     int totalCategories = 0;
     double totalValue = 0.0;
     Set<String> categories = Set();
@@ -186,6 +196,19 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
       if (quantity < 5) lowStockItems++;
       if (data['category'] != null) categories.add(data['category'] as String);
       totalValue += quantity * price;
+
+      // Check for expiring items (within 7 days)
+      if (data['expiryDate'] != null) {
+        try {
+          final expiry = DateTime.parse(data['expiryDate']);
+          final daysUntilExpiry = expiry.difference(DateTime.now()).inDays;
+          if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
+            expiringSoonItems++;
+          }
+        } catch (e) {
+          // Invalid date format, skip
+        }
+      }
     }
 
     totalCategories = categories.length;
@@ -193,6 +216,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     setState(() {
       _totalItems = totalItems;
       _lowStockItems = lowStockItems;
+      _expiringSoonItems = expiringSoonItems;
       _totalCategories = totalCategories;
       _totalValue = totalValue;
       _isLoading = false;
@@ -214,25 +238,20 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     _setupRealTimeListeners();
   }
 
-  // Navigation pages based on index
   Widget _getPage(int index) {
     switch (index) {
-      case 0: // Dashboard
-        return _buildDashboardContent();
-      case 1: // Inventory (read-only for members)
-        return InventoryListPage(
-          householdId: _currentHouseholdId,
-          householdName: _currentHousehold,
-          isReadOnly: true, 
-        );
-      case 2: // Expense Tracker (read-only for members)
-        return ExpenseTrackerPage(
-          householdId: _currentHouseholdId,
-        );
-      case 3: // Profile
-        return ProfilePage();
-      default:
-        return _buildDashboardContent();
+      case 0: return _buildDashboardContent();
+      case 1: return InventoryListPage(
+        householdId: _currentHouseholdId,
+        householdName: _currentHousehold,
+        isReadOnly: true, // Important: Members have read-only access
+      );
+      case 2: return ExpenseTrackerPage(
+        householdId: _currentHouseholdId,
+        isReadOnly: true, // Members have read-only access to expenses
+      );
+      case 3: return ProfilePage();
+      default: return _buildDashboardContent();
     }
   }
 
@@ -240,11 +259,12 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: primaryColor,
-        systemNavigationBarColor: backgroundColor,
+        statusBarColor: _primaryColor,
+        systemNavigationBarColor: _backgroundColor,
+        statusBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: backgroundColor,
+        backgroundColor: _backgroundColor,
         appBar: _currentIndex == 0 ? _buildAppBar() : null,
         body: _hasError
             ? _buildErrorState()
@@ -263,78 +283,86 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   AppBar _buildAppBar() {
     return AppBar(
       automaticallyImplyLeading: false,
-      title: Text(
-        _currentHousehold.isNotEmpty ? '$_currentHousehold Dashboard' : 'Dashboard',
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
+      title: AnimatedSwitcher(
+        duration: Duration(milliseconds: 300),
+        child: Text(
+          _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
+          key: ValueKey(_currentHousehold),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            letterSpacing: -0.5,
+          ),
         ),
       ),
-      backgroundColor: primaryColor,
+      backgroundColor: _primaryColor,
       elevation: 0,
       iconTheme: IconThemeData(color: Colors.white),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      shape: ContinuousRectangleBorder(
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
       ),
       actions: [
-        // Refresh button for manual sync
         if (_hasError)
-          IconButton(
-            icon: Icon(Icons.refresh, size: 24),
-            onPressed: _retryLoadData,
-            tooltip: 'Retry Loading Data',
+          _buildAppBarAction(
+            Icons.refresh_rounded,
+            'Retry Loading Data',
+            _retryLoadData,
           ),
-        // Chat button
-        IconButton(
-          icon: Icon(Icons.chat, size: 24),
-          onPressed: _currentHouseholdId.isNotEmpty
-              ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatPage(householdId: _currentHouseholdId),
-                    ),
-                  );
-                }
-              : null,
-          tooltip: 'Chat with Household Members',
-          color: _currentHouseholdId.isNotEmpty ? Colors.white : Colors.white.withOpacity(0.5),
+        _buildAppBarAction(
+          Icons.chat_rounded,
+          'AI Assistant',
+          _currentHouseholdId.isNotEmpty ? () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatPage(householdId: _currentHouseholdId),
+              ),
+            );
+          } : null,
         ),
         if (_currentHousehold.isNotEmpty)
-          IconButton(
-            icon: Icon(Icons.swap_horiz, size: 24),
-            onPressed: () {
+          _buildAppBarAction(
+            Icons.swap_horiz_rounded,
+            'Switch Household',
+            () {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (context) => HouseholdService()),
               );
             },
-            tooltip: 'Switch Household',
           ),
       ],
+    );
+  }
+
+  Widget _buildAppBarAction(IconData icon, String tooltip, VoidCallback? onPressed) {
+    return IconButton(
+      icon: Icon(icon, size: 24),
+      onPressed: onPressed,
+      tooltip: tooltip,
+      color: onPressed != null ? Colors.white : Colors.white.withOpacity(0.3),
     );
   }
 
   Widget _buildBottomNavigationBar() {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(20),
-          topLeft: Radius.circular(20),
-        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            spreadRadius: 1,
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
           ),
         ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
@@ -344,108 +372,65 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             });
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: cardColor,
-          selectedItemColor: primaryColor,
-          unselectedItemColor: lightTextColor,
+          backgroundColor: _surfaceColor,
+          selectedItemColor: _primaryColor,
+          unselectedItemColor: _textLight,
           selectedFontSize: 12,
           unselectedFontSize: 12,
           elevation: 8,
           items: [
-            BottomNavigationBarItem(
-              icon: Container(
-                padding: EdgeInsets.all(6),
-                decoration: _currentIndex == 0
-                    ? BoxDecoration(
-                        color: primaryColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      )
-                    : null,
-                child: Icon(Icons.dashboard, size: 24),
-              ),
-              label: 'Dashboard',
-            ),
-            BottomNavigationBarItem(
-              icon: Container(
-                padding: EdgeInsets.all(6),
-                decoration: _currentIndex == 1
-                    ? BoxDecoration(
-                        color: primaryColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      )
-                    : null,
-                child: Icon(Icons.inventory, size: 24),
-              ),
-              label: 'Inventory',
-            ),
-            BottomNavigationBarItem(
-              icon: Container(
-                padding: EdgeInsets.all(6),
-                decoration: _currentIndex == 2
-                    ? BoxDecoration(
-                        color: primaryColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      )
-                    : null,
-                child: Icon(Icons.attach_money, size: 24),
-              ),
-              label: 'Expenses',
-            ),
-            BottomNavigationBarItem(
-              icon: Container(
-                padding: EdgeInsets.all(6),
-                decoration: _currentIndex == 3
-                    ? BoxDecoration(
-                        color: primaryColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      )
-                    : null,
-                child: Icon(Icons.person, size: 24),
-              ),
-              label: 'Profile',
-            ),
+            _buildNavItem(Icons.dashboard_rounded, 'Dashboard', 0),
+            _buildNavItem(Icons.inventory_2_rounded, 'Inventory', 1),
+            _buildNavItem(Icons.analytics_rounded, 'Expenses', 2),
+            _buildNavItem(Icons.person_rounded, 'Profile', 3),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDashboardContent() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Welcome header with improved design
-              _buildWelcomeHeader(),
-              SizedBox(height: 24),
-              
-              // Connection status indicator
-              _buildConnectionStatus(),
-              SizedBox(height: 16),
-              
-              // Statistics
-              Text(
-                'Inventory Overview',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
-              ),
-              SizedBox(height: 16),
-              _buildStatsGrid(),
-              SizedBox(height: 24),
-              
-              // Recent Activity
-              _buildRecentActivitySection(),
-            ],
-          ),
+  BottomNavigationBarItem _buildNavItem(IconData icon, String label, int index) {
+    return BottomNavigationBarItem(
+      icon: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: _currentIndex == index ? _primaryColor.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
         ),
+        child: Icon(icon, size: 24),
       ),
+      label: label,
+    );
+  }
+
+  Widget _buildDashboardContent() {
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _slideAnimation.value * (1 - _staggerAnimation.value)),
+          child: Opacity(
+            opacity: _fadeAnimation.value,
+            child: SingleChildScrollView(
+              physics: BouncingScrollPhysics(),
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildWelcomeHeader(),
+                  SizedBox(height: 24),
+                  _buildQuickStats(),
+                  SizedBox(height: 24),
+                  _buildQuickActions(),
+                  SizedBox(height: 24),
+                  _buildRecentActivitySection(),
+                  SizedBox(height: 80), // Extra space for bottom navigation
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -456,50 +441,88 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-        colors: [primaryColor, primaryLightColor],
+          colors: [_primaryColor, _secondaryColor],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.3),
-            blurRadius: 15,
-            offset: Offset(0, 5),
+            color: _primaryColor.withOpacity(0.3),
+            blurRadius: 25,
+            offset: Offset(0, 10),
           ),
         ],
       ),
       child: Row(
         children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.home, color: Colors.white, size: 28),
-          ),
-          SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Welcome to $_currentHousehold',
+                  'Welcome!',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
                     color: Colors.white,
+                    letterSpacing: -0.5,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: 8),
                 Text(
-                  'Member Dashboard - View household information',
+                  _currentHousehold.isNotEmpty 
+                      ? 'Viewing $_currentHousehold inventory as a member'
+                      : 'View household inventory information',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withOpacity(0.9),
+                    height: 1.4,
                   ),
                 ),
+                SizedBox(height: 16),
+                _buildMemberBadge(),
               ],
+            ),
+          ),
+          SizedBox(width: 16),
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.visibility_rounded, color: Colors.white, size: 35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMemberBadge() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: _hasError ? _errorColor : _successColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            _hasError ? 'Connection Issue' : 'Member Access - View Only',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -507,22 +530,223 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildStatsGrid() {
-    return GridView(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.2,
-      ),
+  Widget _buildQuickStats() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildStatCard('Total Items', _totalItems.toString(), Icons.inventory, primaryColor),
-        _buildStatCard('Low Stock', _lowStockItems.toString(), Icons.warning_amber, warningColor),
-        _buildStatCard('Categories', _totalCategories.toString(), Icons.category, secondaryColor),
-        _buildStatCard('Total Value', 'RM ${_totalValue.toStringAsFixed(2)}', Icons.attach_money, Colors.green),
+        Text(
+          'Inventory Overview',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: _textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        SizedBox(height: 16),
+        GridView(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.1,
+          ),
+          children: [
+            _buildStatCard(
+              'Total Items',
+              _totalItems.toString(),
+              Icons.inventory_2_rounded,
+              _primaryColor,
+            ),
+            _buildStatCard(
+              'Low Stock',
+              _lowStockItems.toString(),
+              Icons.warning_amber_rounded,
+              _warningColor,
+            ),
+            _buildStatCard(
+              'Expiring Soon',
+              _expiringSoonItems.toString(),
+              Icons.calendar_today_rounded,
+              _errorColor,
+            ),
+            _buildStatCard(
+              'Total Value',
+              'RM${_totalValue.toStringAsFixed(0)}',
+              Icons.attach_money_rounded,
+              _successColor,
+            ),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            SizedBox(height: 12),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: _textPrimary,
+                letterSpacing: -0.5,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                color: _textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: _textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        SizedBox(height: 16),
+        GridView(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.15,
+          ),
+          children: [
+            _buildActionCard(
+              'View Inventory',
+              'Browse household items',
+              Icons.inventory_2_rounded,
+              _primaryColor,
+              () => setState(() => _currentIndex = 1),
+            ),
+            _buildActionCard(
+              'View Expenses',
+              'Monitor household spending',
+              Icons.analytics_rounded,
+              _warningColor,
+              () => setState(() => _currentIndex = 2),
+            ),
+            _buildActionCard(
+              'AI Assistant',
+              'Get help with your inventory',
+              Icons.chat_rounded,
+              _accentColor,
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatPage(householdId: _currentHouseholdId),
+                  ),
+                );
+              },
+            ),
+            _buildActionCard(
+              'Your Profile',
+              'Manage your account',
+              Icons.person_rounded,
+              _successColor,
+              () => setState(() => _currentIndex = 3),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+    return Material(
+      color: _surfaceColor,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              SizedBox(height: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _textPrimary,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _textSecondary,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -536,58 +760,37 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             Text(
               'Recent Activity',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: textColor,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+                letterSpacing: -0.5,
               ),
             ),
             if (_recentActivities.isNotEmpty)
               TextButton(
-                onPressed: () {
-                  // View all activities
-                },
-                child: Text('View All', style: TextStyle(color: primaryColor)),
+                onPressed: () {},
+                child: Text(
+                  'View All',
+                  style: TextStyle(
+                    color: _primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
           ],
         ),
-        SizedBox(height: 12),
+        SizedBox(height: 16),
         _recentActivities.isEmpty
-            ? Container(
-                padding: EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.history, size: 48, color: lightTextColor.withOpacity(0.5)),
-                    SizedBox(height: 12),
-                    Text(
-                      'No recent activity',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: lightTextColor,
-                      ),
-                    ),
-                  ],
-                ),
-              )
+            ? _buildEmptyState()
             : Container(
                 decoration: BoxDecoration(
-                  color: cardColor,
+                  color: _surfaceColor,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
+                      blurRadius: 10,
+                      offset: Offset(0, 3),
                     ),
                   ],
                 ),
@@ -598,14 +801,106 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                   separatorBuilder: (context, index) => Divider(height: 1, indent: 16, endIndent: 16),
                   itemBuilder: (context, index) {
                     final activity = _recentActivities[index];
-                    return _buildActivityItem(
-                      activity['message'] ?? 'No message',
-                      _formatTimestamp(activity['timestamp']),
-                    );
+                    return _buildActivityItem(activity);
                   },
                 ),
               ),
       ],
+    );
+  }
+
+  Widget _buildActivityItem(Map<String, dynamic> activity) {
+    final icon = _getActivityIcon(activity['type']);
+    final color = _getActivityColor(activity['type']);
+    
+    return ListTile(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(
+        activity['message'] ?? 'No message',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: _textPrimary,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        _formatTimestamp(activity['timestamp']),
+        style: TextStyle(
+          fontSize: 11,
+          color: _textLight,
+        ),
+      ),
+    );
+  }
+
+  IconData _getActivityIcon(String type) {
+    switch (type) {
+      case 'add': return Icons.add_circle_rounded;
+      case 'update': return Icons.edit_rounded;
+      case 'delete': return Icons.delete_rounded;
+      case 'warning': return Icons.warning_rounded;
+      default: return Icons.info_rounded;
+    }
+  }
+
+  Color _getActivityColor(String type) {
+    switch (type) {
+      case 'add': return _successColor;
+      case 'update': return _accentColor;
+      case 'delete': return _errorColor;
+      case 'warning': return _warningColor;
+      default: return _primaryColor;
+    }
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.history_rounded, size: 48, color: _textLight.withOpacity(0.3)),
+          SizedBox(height: 12),
+          Text(
+            'No recent activity',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: _textSecondary,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Household activities will appear here',
+            style: TextStyle(
+              fontSize: 12,
+              color: _textLight,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -626,16 +921,17 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         }
 
         return Padding(
-          padding: EdgeInsets.all(16),
+          padding: EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Select a Household',
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: _textPrimary,
+                  letterSpacing: -0.5,
                 ),
               ),
               SizedBox(height: 8),
@@ -643,7 +939,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                 'Choose a household to view its information',
                 style: TextStyle(
                   fontSize: 14,
-                  color: lightTextColor,
+                  color: _textSecondary,
                 ),
               ),
               SizedBox(height: 24),
@@ -651,9 +947,9 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                 child: GridView.builder(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 1.2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.1,
                   ),
                   itemCount: snapshot.data!.length,
                   itemBuilder: (context, index) {
@@ -662,6 +958,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                       household['name'] ?? 'Unnamed Household',
                       household['createdAt'] ?? Timestamp.now(),
                       household['id'] ?? '',
+                      household['userRole'] ?? 'member',
                     );
                   },
                 ),
@@ -678,16 +975,21 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-            strokeWidth: 3,
+          SizedBox(
+            width: 50,
+            height: 50,
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+              strokeWidth: 3,
+            ),
           ),
           SizedBox(height: 16),
           Text(
-            'Loading your data...',
+            'Loading your dashboard...',
             style: TextStyle(
-              fontSize: 16,
-              color: lightTextColor,
+              fontSize: 14,
+              color: _textSecondary,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -698,59 +1000,55 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   Widget _buildErrorState({String? message}) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.all(20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: warningColor),
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color: _errorColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.error_outline_rounded, size: 35, color: _errorColor),
+            ),
             SizedBox(height: 16),
             Text(
               'Something went wrong',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w500,
-                color: textColor,
+                fontWeight: FontWeight.w600,
+                color: _textPrimary,
               ),
             ),
             SizedBox(height: 8),
-            Text(
-              message ?? _errorMessage,
-              style: TextStyle(
-                fontSize: 14,
-                color: lightTextColor,
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                message ?? _errorMessage,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: _textSecondary,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
-            SizedBox(height: 24),
+            SizedBox(height: 20),
             ElevatedButton(
               onPressed: _retryLoadData,
               style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: _primaryColor,
+                foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
               ),
               child: Text(
                 'Try Again',
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            SizedBox(height: 12),
-            TextButton(
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => HouseholdService()),
-                );
-              },
-              child: Text(
-                'Switch Household',
-                style: TextStyle(
                   fontSize: 14,
-                  color: primaryColor,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -763,28 +1061,39 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   Widget _buildNoHouseholdsState() {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.all(20),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.home_work_outlined, size: 80, color: lightTextColor.withOpacity(0.5)),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: _primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.home_work_outlined, size: 40, color: _primaryColor),
+            ),
             SizedBox(height: 16),
             Text(
-              'No households yet',
+              'No households available',
               style: TextStyle(
                 fontSize: 20,
-                fontWeight: FontWeight.w500,
-                color: textColor,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
               ),
             ),
             SizedBox(height: 8),
-            Text(
-              'You need to be invited to a household to access this feature',
-              style: TextStyle(
-                fontSize: 16,
-                color: lightTextColor,
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'You need to be invited to a household to access this feature',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _textSecondary,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -792,50 +1101,12 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildConnectionStatus() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: _hasError ? warningColor : secondaryColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          SizedBox(width: 8),
-          Text(
-            _hasError ? 'Offline' : 'Syncing in real-time',
-            style: TextStyle(
-              fontSize: 12,
-              color: _hasError ? warningColor : secondaryColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId) {
+  Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId, String userRole) {
     DateTime createdDate = createdAt.toDate();
     
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Material(
+      color: _surfaceColor,
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () {
           setState(() {
@@ -849,13 +1120,12 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         child: Container(
           padding: EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: cardColor,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: Offset(0, 4),
+                blurRadius: 10,
+                offset: Offset(0, 3),
               ),
             ],
           ),
@@ -863,125 +1133,58 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 60,
-                height: 60,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
+                  color: _primaryColor.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.home_outlined,
-                  color: primaryColor,
-                  size: 30,
+                  Icons.home_rounded,
+                  color: _primaryColor,
+                  size: 25,
                 ),
               ),
-              SizedBox(height: 16),
+              SizedBox(height: 12),
               Text(
                 householdName,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: textColor,
+                  color: _textPrimary,
                 ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              SizedBox(height: 8),
+              SizedBox(height: 6),
               Text(
-                'Created: ${_formatDate(createdDate)}',
+                'Created ${_formatDate(createdDate)}',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: lightTextColor,
+                  fontSize: 11,
+                  color: _textLight,
+                ),
+              ),
+              SizedBox(height: 6),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: userRole == 'creator' 
+                      ? _successColor.withOpacity(0.1)
+                      : _primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  userRole == 'creator' ? 'Owner' : 'Member',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: userRole == 'creator' ? _successColor : _primaryColor,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                Spacer(),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: lightTextColor,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActivityItem(String title, String time) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: primaryColor.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(Icons.notifications_none, color: primaryColor, size: 20),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: textColor,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        time,
-        style: TextStyle(
-          fontSize: 12,
-          color: lightTextColor,
         ),
       ),
     );
@@ -992,18 +1195,18 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   }
 
   String _formatTimestamp(Timestamp timestamp) {
-    final date = timestamp.toDate().toUtc().add(Duration(hours: 8));
-    final now = DateTime.now().toUtc().add(Duration(hours: 8));
+    final date = timestamp.toDate();
+    final now = DateTime.now();
     final difference = now.difference(date);
 
     if (difference.inDays > 0) {
-      return '${difference.inDays} days ago';
+      return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {
-      return '${difference.inHours} hours ago';
+      return '${difference.inHours}h ago';
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minutes ago';
+      return '${difference.inMinutes}m ago';
     } else {
       return 'Just now';
     }
-  } 
+  }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -92,12 +93,18 @@ class HouseholdServiceController {
     }
   }
 
-  // Create new household with proper role assignment
-  Future<void> createNewHousehold(BuildContext context) async {
-    if (currentUser == null) return;
+  // FIXED: Return Future<Map<String, dynamic>> instead of void
+  Future<Map<String, dynamic>> createNewHousehold(BuildContext context) async {
+    if (currentUser == null) {
+      return {'success': false, 'error': 'User not logged in'};
+    }
 
     String householdName = '';
-    await showDialog(
+    
+    // Use a Completer to get the result from the dialog
+    final completer = Completer<Map<String, dynamic>>();
+    
+    showDialog(
       context: context,
       builder: (BuildContext ctx) {
         return Dialog(
@@ -132,7 +139,10 @@ class HouseholdServiceController {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: () => Navigator.pop(ctx),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        completer.complete({'success': false, 'error': 'Cancelled'});
+                      },
                       child: const Text('Cancel',
                           style: TextStyle(color: Colors.grey)),
                     ),
@@ -182,6 +192,14 @@ class HouseholdServiceController {
 
                           Navigator.pop(ctx);
 
+                          // Complete the completer with success data
+                          completer.complete({
+                            'success': true,
+                            'householdId': docRef.id,
+                            'householdName': householdName,
+                            'invitationCode': invitationCode,
+                          });
+
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
@@ -192,18 +210,9 @@ class HouseholdServiceController {
 
                           _showInvitationDialog(context, invitationCode, householdName);
                           
-                          // Navigate to creator dashboard
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => DashboardPage(
-                                selectedHousehold: householdName,
-                                householdId: docRef.id,
-                              ),
-                            ),
-                          );
                         } catch (e) {
                           Navigator.pop(ctx);
+                          completer.complete({'success': false, 'error': e.toString()});
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error creating household: $e'),
@@ -227,6 +236,8 @@ class HouseholdServiceController {
         );
       },
     );
+
+    return completer.future;
   }
 
   // Join household with invitation code

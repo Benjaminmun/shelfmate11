@@ -1,45 +1,38 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'inventory_item_model.dart';
+import '../pages/inventory_item_model.dart';
 
 class InventoryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
-  // Track if service is in read-only mode
   bool _isReadOnly = false;
   
-  // Set read-only mode
   void setReadOnly(bool readOnly) {
     _isReadOnly = readOnly;
   }
   
-  // Check if service is in read-only mode and throw exception if trying to perform write operations
   void _checkReadOnly() {
     if (_isReadOnly) {
       throw Exception('Inventory service is in read-only mode. Modification operations are not allowed.');
     }
   }
 
-  // Get the current user ID
   String? _getUserId() {
     return _auth.currentUser?.uid;
   }
 
-  // Get the current user's display name
   Future<String?> _getUserDisplayName() async {
     final user = _auth.currentUser;
     if (user != null) {
-      // Try to get display name from auth first
       if (user.displayName != null && user.displayName!.isNotEmpty) {
         return user.displayName;
       }
       
-      // If not available in auth, try to get from Firestore user document
       try {
         final userDoc = await _firestore.collection('users').doc(user.uid).get();
         if (userDoc.exists) {
-          final data = userDoc.data() as Map<String, dynamic>?;
+          final data = userDoc.data();
           return data?['displayName'] as String?;
         }
       } catch (e) {
@@ -49,6 +42,48 @@ class InventoryService {
     return null;
   }
 
+  // ========== PRODUCTS COLLECTION (GLOBAL) ==========
+  
+  Future<bool> doesProductExist(String barcode) async {
+    try {
+      final doc = await _firestore.collection('products').doc(barcode).get();
+      return doc.exists;
+    } catch (e) {
+      print('Error checking product existence: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getProduct(String barcode) async {
+    try {
+      final doc = await _firestore.collection('products').doc(barcode).get();
+      if (doc.exists) {
+        return doc.data() as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Error getting product: $e');
+      return null;
+    }
+  }
+
+  Future<void> addProductToGlobal(String barcode, Map<String, dynamic> productData) async {
+    _checkReadOnly();
+    
+    try {
+      await _firestore.collection('products').doc(barcode).set({
+        ...productData,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': _getUserId(),
+      });
+    } catch (e) {
+      print('Error adding product to global collection: $e');
+      throw Exception('Failed to add product to database');
+    }
+  }
+
+  // ========== HOUSEHOLD INVENTORY COLLECTION ==========
+  
   CollectionReference _getInventoryCollection(String householdId) {
     if (householdId.isEmpty) {
       throw Exception('Household ID cannot be empty');
@@ -59,41 +94,49 @@ class InventoryService {
         .collection('inventory');
   }
 
-  // Create a new inventory item with user's full name
   Future<String> addItem(String householdId, InventoryItem item) async {
-    _checkReadOnly(); // Check if in read-only mode
+    _checkReadOnly();
     
     if (householdId.isEmpty) {
       throw Exception('Household ID cannot be empty');
     }
     
-    // Get user's display name
     final String? addedByUserName = await _getUserDisplayName();
     
-    // Prepare item data with user's name
     final Map<String, dynamic> itemData = item.toMap();
     if (addedByUserName != null) {
       itemData['addedByUserName'] = addedByUserName;
     }
     itemData['addedByUserId'] = _getUserId();
     
+    // If item has a barcode, ensure it exists in global products
+    if (item.barcode != null && item.barcode!.isNotEmpty) {
+      final productExists = await doesProductExist(item.barcode!);
+      if (!productExists) {
+        await addProductToGlobal(item.barcode!, {
+          'name': item.name,
+          'category': item.category,
+          'brand': item.supplier ?? '',
+          'description': item.description,
+          'imageUrl': item.imageUrl,
+        });
+      }
+    }
+    
     var collection = _getInventoryCollection(householdId);
     var docRef = await collection.add(itemData);
     return docRef.id;
   }
 
-  // Update an existing inventory item
   Future<void> updateItem(String householdId, InventoryItem item) async {
-    _checkReadOnly(); // Check if in read-only mode
+    _checkReadOnly();
     
     if (householdId.isEmpty || item.id == null || item.id!.isEmpty) {
       throw Exception('Invalid parameters for update');
     }
     
-    // Get user's display name for the update
     final String? updatedByUserName = await _getUserDisplayName();
     
-    // Prepare update data
     final Map<String, dynamic> updateData = item.toMap();
     if (updatedByUserName != null) {
       updateData['updatedByUserName'] = updatedByUserName;
@@ -105,9 +148,8 @@ class InventoryService {
     return collection.doc(item.id).update(updateData);
   }
 
-  // Delete an inventory item
   Future<void> deleteItem(String householdId, String itemId) async {
-    _checkReadOnly(); // Check if in read-only mode
+    _checkReadOnly();
     
     if (householdId.isEmpty || itemId.isEmpty) {
       throw Exception('Household ID or Item ID cannot be empty');
@@ -116,7 +158,6 @@ class InventoryService {
     return collection.doc(itemId).delete();
   }
 
-  // Get a stream of inventory items for a household with sorting options
   Stream<QuerySnapshot> getItemsStream(String householdId, {
     String sortField = 'name', 
     bool sortAscending = true
@@ -132,7 +173,6 @@ class InventoryService {
     }
   }
 
-  // Get a single inventory item
   Future<InventoryItem> getItem(String householdId, String itemId) async {
     if (householdId.isEmpty || itemId.isEmpty) {
       throw Exception('Household ID or Item ID cannot be empty');
@@ -145,7 +185,6 @@ class InventoryService {
     return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
   }
 
-  // Get all unique categories from inventory
   Future<List<String>> getCategories(String householdId) async {
     if (householdId.isEmpty) {
       return [];
@@ -154,18 +193,15 @@ class InventoryService {
     try {
       final snapshot = await _getInventoryCollection(householdId).get();
       
-      // Extract unique categories
       final categories = snapshot.docs
           .map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             return data['category'] as String? ?? 'Uncategorized';
           })
-          .toSet() // Remove duplicates
+          .toSet()
           .toList();
       
-      // Sort alphabetically
       categories.sort();
-      
       return categories;
     } catch (e) {
       print('Error getting categories: $e');
@@ -173,7 +209,6 @@ class InventoryService {
     }
   }
 
-  // Get low stock items (quantity less than threshold)
   Stream<QuerySnapshot> getLowStockItemsStream(String householdId, {int threshold = 5}) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
@@ -189,7 +224,6 @@ class InventoryService {
     }
   }
 
-  // Get items by category
   Stream<QuerySnapshot> getItemsByCategoryStream(String householdId, String category) {
     if (householdId.isEmpty || category.isEmpty) {
       return Stream.error(Exception('Household ID or Category cannot be empty'));
@@ -205,15 +239,12 @@ class InventoryService {
     }
   }
 
-  // Search items by name
   Stream<QuerySnapshot> searchItems(String householdId, String query) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
     }
     try {
       var collection = _getInventoryCollection(householdId);
-      // Note: Firestore doesn't support full-text search natively
-      // This is a basic implementation that works for exact matches
       return collection
           .where('name', isGreaterThanOrEqualTo: query)
           .where('name', isLessThan: query + 'z')
@@ -224,7 +255,6 @@ class InventoryService {
     }
   }
 
-  // Get total inventory value
   Future<double> getTotalInventoryValue(String householdId) async {
     if (householdId.isEmpty) {
       return 0.0;
@@ -248,7 +278,6 @@ class InventoryService {
     }
   }
 
-  // Get items expiring soon
   Stream<QuerySnapshot> getExpiringSoonItemsStream(String householdId, {int days = 7}) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
@@ -268,33 +297,30 @@ class InventoryService {
       return Stream.error(e);
     }
   }
-// Update item quantity (for restocking or usage)
-Future<void> updateItemQuantity(String householdId, String itemId, int newQuantity) async {
-  _checkReadOnly(); // Check if in read-only mode
-  
-  if (householdId.isEmpty || itemId.isEmpty) {
-    throw Exception('Household ID or Item ID cannot be empty');
-  }
-  
-  // Get user's display name for the update
-  final String? updatedByUserName = await _getUserDisplayName();
-  
-  var collection = _getInventoryCollection(householdId);
-  final updateData = {
-    'quantity': newQuantity,
-    'updatedAt': FieldValue.serverTimestamp(),
-  };
-  
-  if (updatedByUserName != null) {
-    updateData['updatedByUserName'] = updatedByUserName;
-  }
-; // Corrected here
-  
-  return collection.doc(itemId).update(updateData);
-}
 
+  Future<void> updateItemQuantity(String householdId, String itemId, int newQuantity) async {
+    _checkReadOnly();
+    
+    if (householdId.isEmpty || itemId.isEmpty) {
+      throw Exception('Household ID or Item ID cannot be empty');
+    }
+    
+    final String? updatedByUserName = await _getUserDisplayName();
+    
+    var collection = _getInventoryCollection(householdId);
+    final updateData = {
+      'quantity': newQuantity,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    
+    if (updatedByUserName != null) {
+      updateData['updatedByUserName'] = updatedByUserName;
+    }
+    updateData['updatedByUserId'] = _getUserId() as Object;
+    
+    return collection.doc(itemId).update(updateData);
+  }
 
-  // Get items that need restocking (below minimum stock level)
   Stream<QuerySnapshot> getItemsNeedingRestockStream(String householdId, {int threshold = 5}) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
@@ -310,7 +336,6 @@ Future<void> updateItemQuantity(String householdId, String itemId, int newQuanti
     }
   }
 
-  // Get items with pagination
   Future<Map<String, dynamic>> getItemsPaginated(
     String householdId, {
     DocumentSnapshot? lastDocument,
@@ -344,13 +369,5 @@ Future<void> updateItemQuantity(String householdId, String itemId, int newQuanti
       print('Error getting paginated items: $e');
       throw Exception('Failed to load items');
     }
-  }
-
-  // Get last document for pagination
-  DocumentSnapshot getLastDocument(QuerySnapshot snapshot) {
-    if (snapshot.docs.isEmpty) {
-      throw Exception('No documents available');
-    }
-    return snapshot.docs.last;
   }
 }

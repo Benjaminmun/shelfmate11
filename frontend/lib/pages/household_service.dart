@@ -8,13 +8,15 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dashboard_page.dart';
+import 'member_dashboard_page.dart';
 
 class HouseholdService extends StatefulWidget {
   @override
   _HouseholdServiceState createState() => _HouseholdServiceState();
 }
 
-class _HouseholdServiceState extends State<HouseholdService> {
+class _HouseholdServiceState extends State<HouseholdService> with TickerProviderStateMixin {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -22,18 +24,63 @@ class _HouseholdServiceState extends State<HouseholdService> {
   // Color scheme
   static const Color primaryColor = Color(0xFF2D5D7C);
   static const Color secondaryColor = Color(0xFF4CAF50);
+  static const Color accentColor = Color(0xFFFF6B35);
   static const Color backgroundColor = Color(0xFFF8FAF5);
   static const Color cardColor = Colors.white;
   static const Color textColor = Color(0xFF2C3E50);
   static const Color lightTextColor = Color(0xFF7F8C8D);
+  
+  // Animation controllers
+  late AnimationController _scaleController;
+  late AnimationController _fadeController;
+  late AnimationController _searchControllerAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+  
   // Search functionality
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isRefreshing = false;
+  bool _showSearchBar = false;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize animation controllers
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _searchControllerAnimation = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _scaleAnimation = Tween<double>(
+      begin: 0.95,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _scaleController,
+      curve: Curves.easeOutBack,
+    ));
+    
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _fadeController.forward();
+    
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.toLowerCase();
@@ -43,118 +90,308 @@ class _HouseholdServiceState extends State<HouseholdService> {
 
   @override
   void dispose() {
+    _scaleController.dispose();
+    _fadeController.dispose();
+    _searchControllerAnimation.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  // Refresh households
+  // Enhanced method to create household and navigate to dashboard
+  Future<void> _createHouseholdAndNavigate(BuildContext context) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(primaryColor)),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Creating Household...',
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      // Create household and get the result
+      final result = await _controller.createNewHousehold(context);
+      
+      // Close loading dialog
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      // If household was created successfully, navigate to dashboard
+      if (result['success'] == true) {
+        final householdId = result['householdId'];
+        final householdName = result['householdName'];
+        
+        // Navigate to household dashboard (creator)
+        _navigateToHouseholdDashboard(householdId, householdName, 'creator');
+      }
+    } catch (e) {
+      // Close loading dialog if there's an error
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      
+      // Show error message
+      _showErrorSnackbar(context, 'Failed to create household: $e');
+    }
+  }
+
+  // Method to navigate to appropriate dashboard based on user role
+  void _navigateToHouseholdDashboard(String householdId, String householdName, String userRole) {
+    if (userRole == 'creator') {
+      // Navigate to creator dashboard
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => DashboardPage(
+            householdId: householdId,
+            selectedHousehold: householdName,
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOut,
+              )),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    } else {
+      // Navigate to member dashboard
+      Navigator.push(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => MemberDashboardPage(
+            householdId: householdId,
+            selectedHousehold: householdName,
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOut,
+              )),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    }
+  }
+
+  // Updated method to select household (navigate to appropriate dashboard)
+  void _selectHousehold(String householdId, String householdName, String userRole) {
+    _navigateToHouseholdDashboard(householdId, householdName, userRole);
+  }
+
+  // Refresh households with animation
   Future<void> _refreshHouseholds() async {
     setState(() => _isRefreshing = true);
     await Future.delayed(const Duration(milliseconds: 1500));
     setState(() => _isRefreshing = false);
   }
 
-  // Enhanced settings dialog
+  // Toggle search bar with animation
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (_showSearchBar) {
+        _searchControllerAnimation.forward();
+      } else {
+        _searchControllerAnimation.reverse();
+        _searchController.clear();
+      }
+    });
+  }
+
+  // Enhanced settings dialog with animations
   void _showSettingsDialog(BuildContext context) {
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Settings',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: textColor,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: lightTextColor),
-                      onPressed: () => Navigator.pop(context),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return ScaleTransition(
+          scale: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          ),
+          child: FadeTransition(
+            opacity: animation,
+            child: Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.white, backgroundColor],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                _buildSettingsOption(
-                  icon: Icons.person_outline,
-                  title: 'Profile Settings',
-                  subtitle: 'Update your personal information',
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to profile settings
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => UserInfoPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildSettingsOption(
-                  icon: Icons.people_outline,
-                  title: 'Family Members',
-                  subtitle: 'Manage household members',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showFamilyMembersDialog(context);
-                  },
-                ),
-                _buildSettingsOption(
-                  icon: Icons.notifications_none,
-                  title: 'Notifications',
-                  subtitle: 'Configure alert preferences',
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to notification settings
-                  },
-                ),
-                _buildSettingsOption(
-                  icon: Icons.help_outline,
-                  title: 'Help & Support',
-                  subtitle: 'Get assistance with the app',
-                  onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to help section
-                  },
-                ),
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 16),
-                Center(
-                  child: TextButton(
-                    onPressed: () => _controller.logout(context),
-                    child: const Text(
-                      'Logout',
-                      style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Settings',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: textColor,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: primaryColor.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.close, size: 18, color: primaryColor),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    ..._buildSettingsOptions(),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    _buildLogoutButton(),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  List<Widget> _buildSettingsOptions() {
+    final options = [
+      {
+        'icon': Icons.person_outline,
+        'title': 'Profile Settings',
+        'subtitle': 'Update your personal information',
+        'action': () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => UserInfoPage(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                );
+              },
+            ),
+          );
+        },
+      },
+      {
+        'icon': Icons.people_outline,
+        'title': 'Family Members',
+        'subtitle': 'Manage household members',
+        'action': () {
+          Navigator.pop(context);
+          _showFamilyMembersDialog(context);
+        },
+      },
+      {
+        'icon': Icons.notifications_none,
+        'title': 'Notifications',
+        'subtitle': 'Configure alert preferences',
+        'action': () {
+          Navigator.pop(context);
+          // Navigate to notification settings
+        },
+      },
+      {
+        'icon': Icons.help_outline,
+        'title': 'Help & Support',
+        'subtitle': 'Get assistance with the app',
+        'action': () {
+          Navigator.pop(context);
+          // Navigate to help section
+        },
+      },
+    ];
+
+    return options.asMap().entries.map((entry) {
+      final index = entry.key;
+      final option = entry.value;
+      
+      return AnimatedContainer(
+        duration: Duration(milliseconds: 200 + (index * 100)),
+        curve: Curves.easeOut,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: _buildSettingsOption(
+          icon: option['icon'] as IconData,
+          title: option['title'] as String,
+          subtitle: option['subtitle'] as String,
+          onTap: option['action'] as VoidCallback,
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildSettingsOption({
@@ -163,33 +400,98 @@ class _HouseholdServiceState extends State<HouseholdService> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: primaryColor.withOpacity(0.1),
-          shape: BoxShape.circle,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [primaryColor.withOpacity(0.2), primaryColor.withOpacity(0.1)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: primaryColor, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: lightTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.chevron_right, size: 16, color: primaryColor),
+              ),
+            ],
+          ),
         ),
-        child: Icon(icon, color: primaryColor),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          color: textColor,
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _controller.logout(context),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.red.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.logout, size: 18, color: Colors.red),
+              const SizedBox(width: 8),
+              Text(
+                'Logout',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(
-          fontSize: 12,
-          color: lightTextColor,
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right, color: lightTextColor),
-      onTap: onTap,
     );
   }
 
@@ -198,9 +500,26 @@ class _HouseholdServiceState extends State<HouseholdService> {
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
             padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.white, backgroundColor],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,12 +527,12 @@ class _HouseholdServiceState extends State<HouseholdService> {
                 Text(
                   'Select Household',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: textColor,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 Text(
                   'Choose a household to manage its family members',
                   style: TextStyle(
@@ -225,7 +544,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   future: _controller.getUserHouseholdsWithDetails(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(primaryColor)));
                     }
                     
                     if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
@@ -234,6 +553,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                         child: Text(
                           'No households available',
                           style: TextStyle(color: lightTextColor),
+                          textAlign: TextAlign.center,
                         ),
                       );
                     }
@@ -242,7 +562,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: backgroundColor,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.grey.shade200),
                       ),
                       child: DropdownButtonHideUnderline(
@@ -265,8 +585,17 @@ class _HouseholdServiceState extends State<HouseholdService> {
                             if (householdId != null) {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(
-                                  builder: (context) => FamilyMembersPage(householdId: householdId),
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) => FamilyMembersPage(householdId: householdId),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    return SlideTransition(
+                                      position: Tween<Offset>(
+                                        begin: const Offset(1, 0),
+                                        end: Offset.zero,
+                                      ).animate(animation),
+                                      child: child,
+                                    );
+                                  },
                                 ),
                               );
                             }
@@ -275,6 +604,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                             'Select a household',
                             style: TextStyle(color: lightTextColor),
                           ),
+                          icon: Icon(Icons.arrow_drop_down, color: primaryColor),
                         ),
                       ),
                     );
@@ -286,7 +616,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: Text('Cancel', style: TextStyle(color: lightTextColor)),
                     ),
                   ],
                 ),
@@ -298,56 +628,167 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
-  // Show options dialog for a household with permission check
+  // Enhanced household options dialog
   void _showHouseholdOptions(BuildContext context, String householdId, String householdName, String userRole) async {
     if (userRole != 'creator') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Only household creators can manage settings')),
-      );
+      _showPermissionDeniedSnackbar(context);
       return;
     }
 
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.share, color: primaryColor),
-                title: const Text('Share Invitation Code'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareHouseholdInvitation(context, householdId);
-                },
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
               ),
-              ListTile(
-                leading: const Icon(Icons.copy, color: primaryColor),
-                title: const Text('Copy Invitation Code'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _copyInvitationCode(context, householdId);
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete Household', style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteConfirmation(context, householdId, householdName);
-                },
-              ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Text(
+                        householdName,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ..._buildHouseholdOptions(householdId, householdName),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  // Share household invitation
+  void _showPermissionDeniedSnackbar(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(child: Text('Only household creators can manage settings')),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  List<Widget> _buildHouseholdOptions(String householdId, String householdName) {
+    return [
+      _buildOptionTile(
+        icon: Icons.share,
+        title: 'Share Invitation Code',
+        color: primaryColor,
+        onTap: () {
+          Navigator.pop(context);
+          _shareHouseholdInvitation(context, householdId);
+        },
+      ),
+      _buildOptionTile(
+        icon: Icons.copy,
+        title: 'Copy Invitation Code',
+        color: accentColor,
+        onTap: () {
+          Navigator.pop(context);
+          _copyInvitationCode(context, householdId);
+        },
+      ),
+      const Divider(),
+      _buildOptionTile(
+        icon: Icons.delete,
+        title: 'Delete Household',
+        color: Colors.red,
+        onTap: () {
+          Navigator.pop(context);
+          _showDeleteConfirmation(context, householdId, householdName);
+        },
+      ),
+    ];
+  }
+
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _shareHouseholdInvitation(BuildContext context, String householdId) async {
     try {
       final householdDoc = await _firestore
@@ -362,16 +803,10 @@ class _HouseholdServiceState extends State<HouseholdService> {
         Share.share(shareText);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error sharing invitation: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackbar(context, 'Error sharing invitation: $e');
     }
   }
 
-  // Copy invitation code to clipboard
   void _copyInvitationCode(BuildContext context, String householdId) async {
     try {
       final householdDoc = await _firestore
@@ -383,117 +818,99 @@ class _HouseholdServiceState extends State<HouseholdService> {
         final invitationCode = householdDoc.data()!['invitationCode'] ?? '';
         await Clipboard.setData(ClipboardData(text: invitationCode));
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invitation code copied to clipboard'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSuccessSnackbar(context, 'Invitation code copied to clipboard');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error copying invitation code: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackbar(context, 'Error copying invitation code: $e');
     }
   }
 
-  // Show delete confirmation dialog
   void _showDeleteConfirmation(BuildContext context, String householdId, String householdName) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Delete Household'),
-          content: Text('Are you sure you want to delete "$householdName"? This action cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                await _deleteHousehold(context, householdId);
-              },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Delete household
-  Future<void> _deleteHousehold(BuildContext context, String householdId) async {
-    try {
-      await _controller.deleteHousehold(householdId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Household deleted successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      setState(() {}); // Refresh the list
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error deleting household: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  // Method to show create or join dialog
-  void _showCreateOrJoinDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.warning, color: Colors.red, size: 30),
+                ),
+                const SizedBox(height: 16),
                 Text(
-                  'Household Options',
+                  'Delete Household?',
                   style: TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
                   ),
                 ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _controller.createNewHousehold(context);
-                  },
-                  icon: const Icon(FeatherIcons.plus),
-                  label: const Text('Create New Household'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: secondaryColor,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(250, 50),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to delete "$householdName"? This action cannot be undone.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: lightTextColor,
                   ),
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _controller.showJoinHouseholdDialog(context);
-                  },
-                  icon: const Icon(FeatherIcons.users),
-                  label: const Text('Join Existing Household'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: primaryColor,
-                    side: BorderSide(color: primaryColor),
-                    minimumSize: const Size(250, 50),
-                  ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          side: BorderSide(color: primaryColor),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _deleteHousehold(context, householdId);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text('Delete'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -503,22 +920,213 @@ class _HouseholdServiceState extends State<HouseholdService> {
     );
   }
 
+  Future<void> _deleteHousehold(BuildContext context, String householdId) async {
+    try {
+      await _controller.deleteHousehold(householdId);
+      _showSuccessSnackbar(context, 'Household deleted successfully');
+      setState(() {});
+    } catch (e) {
+      _showErrorSnackbar(context, 'Error deleting household: $e');
+    }
+  }
+
+  void _showSuccessSnackbar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  void _showErrorSnackbar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  // Enhanced create or join dialog
+  void _showCreateOrJoinDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.white, backgroundColor],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primaryColor, primaryColor.withOpacity(0.8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(FeatherIcons.home, color: Colors.white, size: 40),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Household Options',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose how you want to proceed',
+                  style: TextStyle(
+                    color: lightTextColor,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildAnimatedButton(
+                  icon: FeatherIcons.plus,
+                  text: 'Create New Household',
+                  color: secondaryColor,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _createHouseholdAndNavigate(context);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildAnimatedButton(
+                  icon: FeatherIcons.users,
+                  text: 'Join Existing Household',
+                  color: primaryColor,
+                  isOutlined: true,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _controller.showJoinHouseholdDialog(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAnimatedButton({
+    required IconData icon,
+    required String text,
+    required Color color,
+    bool isOutlined = false,
+    required VoidCallback onTap,
+  }) {
+    return MouseRegion(
+      onEnter: (_) => _scaleController.forward(),
+      onExit: (_) => _scaleController.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: isOutlined
+            ? OutlinedButton.icon(
+                onPressed: onTap,
+                icon: Icon(icon, size: 18),
+                label: Text(text),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: color,
+                  side: BorderSide(color: color, width: 2),
+                  minimumSize: const Size(250, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              )
+            : ElevatedButton.icon(
+                onPressed: onTap,
+                icon: Icon(icon, size: 18),
+                label: Text(text),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: color,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(250, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text(
-          "My Households",
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: _showSearchBar
+              ? TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                  decoration: InputDecoration(
+                    hintText: 'Search households...',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                    border: InputBorder.none,
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.close, color: Colors.white),
+                      onPressed: _toggleSearchBar,
+                    ),
+                  ),
+                )
+              : const Text(
+                  "My Households",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
         ),
         backgroundColor: primaryColor,
-        elevation: 0,
+        elevation: 4,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             bottom: Radius.circular(20),
@@ -526,128 +1134,120 @@ class _HouseholdServiceState extends State<HouseholdService> {
         ),
         centerTitle: false,
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(FeatherIcons.bell, size: 22),
-            onPressed: () {},
-            tooltip: 'Notifications',
-          ),
-          IconButton(
-            icon: const Icon(FeatherIcons.plusCircle, size: 22),
-            onPressed: () {
-              _showCreateOrJoinDialog(context);
-            },
-            tooltip: 'Create or Join Household',
-          ),
-          IconButton(
-            icon: const Icon(FeatherIcons.settings, size: 22),
-            onPressed: () => _showSettingsDialog(context),
-            tooltip: 'Settings',
-          ),
-        ],
+        actions: _showSearchBar 
+            ? []
+            : [
+                IconButton(
+                  icon: const Icon(FeatherIcons.search, size: 20),
+                  onPressed: _toggleSearchBar,
+                  tooltip: 'Search',
+                ),
+                IconButton(
+                  icon: const Icon(FeatherIcons.bell, size: 20),
+                  onPressed: () {},
+                  tooltip: 'Notifications',
+                ),
+                IconButton(
+                  icon: const Icon(FeatherIcons.plusCircle, size: 20),
+                  onPressed: () => _showCreateOrJoinDialog(context),
+                  tooltip: 'Create or Join Household',
+                ),
+                IconButton(
+                  icon: const Icon(FeatherIcons.settings, size: 20),
+                  onPressed: () => _showSettingsDialog(context),
+                  tooltip: 'Settings',
+                ),
+              ],
       ),
       body: RefreshIndicator(
         onRefresh: _refreshHouseholds,
         color: primaryColor,
         backgroundColor: Colors.white,
-        child: Column(
-          children: [
-            // Search bar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search households...',
-                    prefixIcon: Icon(FeatherIcons.search, color: lightTextColor),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(FeatherIcons.x, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                            },
-                          )
-                        : null,
-                  ),
+        displacement: 40,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            children: [
+              // Animated search bar
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                height: _showSearchBar ? 0 : 20,
+                curve: Curves.easeInOut,
+              ),
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _controller.getUserHouseholdsWithDetails(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
+                      return _buildLoadingState();
+                    }
+
+                    if (snapshot.hasError) {
+                      return _buildErrorState(snapshot.error.toString());
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return _buildNoHouseholdsState();
+                    }
+
+                    final filteredHouseholds = snapshot.data!.where((household) {
+                      return household['name'].toLowerCase().contains(_searchQuery);
+                    }).toList();
+
+                    if (filteredHouseholds.isEmpty) {
+                      return _buildNoResultsState();
+                    }
+
+                    return _buildHouseholdsList(filteredHouseholds);
+                  },
                 ),
               ),
-            ),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _controller.getUserHouseholdsWithDetails(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
-                    return _buildLoadingState();
-                  }
-
-                  if (snapshot.hasError) {
-                    return _buildErrorState(snapshot.error.toString());
-                  }
-
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return _buildNoHouseholdsState();
-                  }
-
-                  // Filter households based on search query
-                  final filteredHouseholds = snapshot.data!.where((household) {
-                    return household['name'].toLowerCase().contains(_searchQuery);
-                  }).toList();
-
-                  if (filteredHouseholds.isEmpty) {
-                    return _buildNoResultsState();
-                  }
-
-                  return _buildHouseholdsList(filteredHouseholds);
-                },
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _controller.createNewHousehold(context),
-        backgroundColor: secondaryColor,
-        elevation: 4,
-        child: const Icon(FeatherIcons.plus, color: Colors.white, size: 28),
-        tooltip: 'Create New Household',
+      floatingActionButton: ScaleTransition(
+        scale: _scaleAnimation,
+        child: FloatingActionButton(
+          onPressed: () => _createHouseholdAndNavigate(context),
+          backgroundColor: secondaryColor,
+          elevation: 6,
+          child: const Icon(FeatherIcons.plus, color: Colors.white, size: 28),
+          tooltip: 'Create New Household',
+        ),
       ),
     );
   }
 
+  // Enhanced loading state with shimmer animation
   Widget _buildLoadingState() {
     return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
       itemCount: 3,
       itemBuilder: (context, index) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.only(bottom: 16),
           child: Container(
             height: 120,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 8,
+                  offset: Offset(0, 4),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                const SizedBox(width: 16),
+                const SizedBox(width: 20),
                 Container(
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
+                    color: Colors.grey.shade300,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -660,13 +1260,28 @@ class _HouseholdServiceState extends State<HouseholdService> {
                       Container(
                         width: 120,
                         height: 16,
-                        color: Colors.grey.shade200,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       Container(
                         width: 80,
                         height: 12,
-                        color: Colors.grey.shade200,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 60,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ],
                   ),
@@ -675,11 +1290,11 @@ class _HouseholdServiceState extends State<HouseholdService> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
+                    color: Colors.grey.shade300,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 20),
               ],
             ),
           ),
@@ -691,37 +1306,35 @@ class _HouseholdServiceState extends State<HouseholdService> {
   Widget _buildErrorState(String error) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(FeatherIcons.alertCircle, size: 64, color: Colors.orange),
-            const SizedBox(height: 16),
-            const Text(
+            Icon(FeatherIcons.alertCircle, size: 64, color: Colors.orange),
+            const SizedBox(height: 20),
+            Text(
               'Something went wrong',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: textColor,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Text(
-                'Error: $error',
+                error,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   color: lightTextColor,
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             ElevatedButton.icon(
-              onPressed: () {
-                setState(() {});
-              },
+              onPressed: () => setState(() {}),
               icon: const Icon(FeatherIcons.refreshCw, size: 18),
               label: const Text('Try Again'),
               style: ElevatedButton.styleFrom(
@@ -742,21 +1355,21 @@ class _HouseholdServiceState extends State<HouseholdService> {
   Widget _buildNoHouseholdsState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(FeatherIcons.home, size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            const Text(
+            Icon(FeatherIcons.home, size: 80, color: Colors.grey.shade300),
+            const SizedBox(height: 20),
+            Text(
               'No households yet',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w500,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
                 color: textColor,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 40),
               child: Text(
@@ -770,7 +1383,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
-              onPressed: () => _controller.createNewHousehold(context),
+              onPressed: () => _createHouseholdAndNavigate(context),
               icon: const Icon(FeatherIcons.plus, size: 18),
               label: const Text('Create New Household'),
               style: ElevatedButton.styleFrom(
@@ -795,7 +1408,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
         children: [
           Icon(FeatherIcons.search, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No matching households',
             style: TextStyle(
               fontSize: 18,
@@ -804,7 +1417,7 @@ class _HouseholdServiceState extends State<HouseholdService> {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Try a different search term',
             style: TextStyle(
               fontSize: 14,
@@ -818,152 +1431,213 @@ class _HouseholdServiceState extends State<HouseholdService> {
 
   Widget _buildHouseholdsList(List<Map<String, dynamic>> households) {
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
       itemCount: households.length,
       itemBuilder: (context, index) {
         var household = households[index];
-        return _buildHouseholdCard(
-          household['name'],
-          household['createdAt'],
-          household['id'],
-          household['userRole'] ?? 'member',
-          context,
+        return AnimatedContainer(
+          duration: Duration(milliseconds: 300 + (index * 100)),
+          curve: Curves.easeOut,
+          margin: EdgeInsets.only(bottom: 16, top: index == 0 ? 0 : 0),
+          child: _buildHouseholdCard(
+            household['name'],
+            household['createdAt'],
+            household['id'],
+            household['userRole'] ?? 'member',
+            context,
+          ),
         );
       },
     );
   }
 
   Widget _buildHouseholdCard(String name, dynamic createdAt, String householdId, String userRole, BuildContext context) {
-    DateTime createdDate;
+    DateTime createdDate = _parseCreatedAt(createdAt);
     
-    if (createdAt is Timestamp) {
-      createdDate = createdAt.toDate();
-    } else if (createdAt is DateTime) {
-      createdDate = createdAt;
-    } else {
-      createdDate = DateTime.now();
-    }
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, 4),
+    return MouseRegion(
+      onEnter: (_) => _scaleController.forward(),
+      onExit: (_) => _scaleController.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _controller.selectHousehold(name, context, householdId),
-          onLongPress: userRole == 'creator' 
-              ? () => _showHouseholdOptions(context, householdId, name, userRole)
-              : null,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(FeatherIcons.home, color: primaryColor, size: 28),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _selectHousehold(householdId, name, userRole),
+              onLongPress: userRole == 'creator' 
+                  ? () => _showHouseholdOptions(context, householdId, name, userRole)
+                  : null,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [primaryColor, primaryColor.withOpacity(0.8)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(FeatherIcons.home, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Created ${_formatDate(createdDate)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: lightTextColor,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: userRole == 'creator' 
+                                  ? secondaryColor.withOpacity(0.1)
+                                  : primaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              userRole == 'creator' ? 'Owner' : 'Member',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: userRole == 'creator' ? secondaryColor : primaryColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _buildHouseholdActions(householdId, userRole, context),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Created ${_formatDate(createdDate)}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: lightTextColor,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        userRole == 'creator' ? 'Owner' : 'Member',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: userRole == 'creator' ? secondaryColor : lightTextColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(FeatherIcons.users, color: primaryColor, size: 20),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FamilyMembersPage(householdId: householdId),
-                      ),
-                    );
-                  },
-                  tooltip: 'Manage Family Members',
-                ),
-                if (userRole == 'creator')
-                  PopupMenuButton(
-                    icon: Icon(FeatherIcons.moreVertical, color: lightTextColor, size: 20),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'share',
-                        child: Row(
-                          children: const [
-                            Icon(FeatherIcons.share2, size: 18, color: primaryColor),
-                            SizedBox(width: 8),
-                            Text('Share Invitation'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: const [
-                            Icon(FeatherIcons.trash2, size: 18, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Delete', style: TextStyle(color: Colors.red)),
-                          ],
-                        ),
-                      ),
-                    ],
-                    onSelected: (value) {
-                      if (value == 'share') {
-                        _shareHouseholdInvitation(context, householdId);
-                      } else if (value == 'delete') {
-                        _showDeleteConfirmation(context, householdId, name);
-                      }
-                    },
-                  ),
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildHouseholdActions(String householdId, String userRole, BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          icon: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(FeatherIcons.users, color: primaryColor, size: 16),
+          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => FamilyMembersPage(householdId: householdId),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(1, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  );
+                },
+              ),
+            );
+          },
+          tooltip: 'Manage Family Members',
+        ),
+        if (userRole == 'creator') ...[
+          const SizedBox(width: 4),
+          PopupMenuButton(
+            icon: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(FeatherIcons.moreVertical, color: primaryColor, size: 16),
+            ),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'share',
+                child: Row(
+                  children: [
+                    Icon(FeatherIcons.share2, size: 16, color: primaryColor),
+                    const SizedBox(width: 8),
+                    Text('Share Invitation'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(FeatherIcons.trash2, size: 16, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              if (value == 'share') {
+                _shareHouseholdInvitation(context, householdId);
+              } else if (value == 'delete') {
+                _showDeleteConfirmation(context, householdId, 'Household');
+              }
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  DateTime _parseCreatedAt(dynamic createdAt) {
+    if (createdAt is Timestamp) {
+      return createdAt.toDate();
+    } else if (createdAt is DateTime) {
+      return createdAt;
+    } else {
+      return DateTime.now();
+    }
   }
 
   String _formatDate(DateTime date) {

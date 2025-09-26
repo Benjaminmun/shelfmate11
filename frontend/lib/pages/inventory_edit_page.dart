@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'inventory_item_model.dart';
-import 'inventory_service.dart';
+import '../services/inventory_service.dart';
 
 class InventoryEditPage extends StatefulWidget {
   final String householdId;
   final String householdName;
   final InventoryItem? item;
   final String userRole;
+  final String? barcode;
 
   const InventoryEditPage({
     Key? key,
@@ -16,6 +17,7 @@ class InventoryEditPage extends StatefulWidget {
     required this.householdName,
     this.item,
     required this.userRole,
+    this.barcode,
   }) : super(key: key);
 
   @override
@@ -44,12 +46,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   late TextEditingController _supplierController;
   late TextEditingController _barcodeController;
   late TextEditingController _minStockLevelController;
+  late TextEditingController _imageUrlController;
 
   DateTime? _purchaseDate;
   DateTime? _expiryDate;
   bool _isLoading = false;
   bool _isEditMode = false;
-  bool _isReadOnly = false; // New flag for read-only mode
+  bool _isReadOnly = false;
 
   // Color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
@@ -59,14 +62,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   final Color cardColor = Colors.white;
   final Color textColor = Color(0xFF333333);
   final Color lightTextColor = Color(0xFF666666);
-  final Color disabledColor = Color(0xFFCCCCCC); // New color for disabled state
+  final Color disabledColor = Color(0xFFCCCCCC);
 
   @override
   void initState() {
     super.initState();
     
     _isEditMode = widget.item?.id != null;
-    // Set read-only mode based on user role
     _isReadOnly = widget.userRole == 'member';
     
     // Initialize controllers with existing item data or empty values
@@ -77,8 +79,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
     _descriptionController = TextEditingController(text: widget.item?.description ?? '');
     _locationController = TextEditingController(text: widget.item?.location ?? '');
     _supplierController = TextEditingController(text: widget.item?.supplier ?? '');
-    _barcodeController = TextEditingController(text: widget.item?.barcode ?? '');
+    _barcodeController = TextEditingController(text: widget.item?.barcode ?? widget.barcode ?? '');
     _minStockLevelController = TextEditingController(text: widget.item?.minStockLevel?.toString() ?? '1');
+    _imageUrlController = TextEditingController(text: widget.item?.imageUrl ?? '');
     
     _purchaseDate = widget.item?.purchaseDate;
     _expiryDate = widget.item?.expiryDate;
@@ -86,7 +89,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
 
   @override
   void dispose() {
-    // Dispose all controllers
     _nameController.dispose();
     _categoryController.dispose();
     _quantityController.dispose();
@@ -96,12 +98,12 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
     _supplierController.dispose();
     _barcodeController.dispose();
     _minStockLevelController.dispose();
+    _imageUrlController.dispose();
     super.dispose();
   }
 
   Future<void> _saveItem() async {
     if (!_formKey.currentState!.validate()) {
-      // Scroll to the first error
       Scrollable.ensureVisible(
         _formKey.currentContext!,
         duration: Duration(milliseconds: 300),
@@ -127,12 +129,12 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
         location: _locationController.text.isNotEmpty ? _locationController.text : null,
         supplier: _supplierController.text.isNotEmpty ? _supplierController.text : null,
         barcode: _barcodeController.text.isNotEmpty ? _barcodeController.text : null,
-        minStockLevel: _minStockLevelController.text.isNotEmpty ? double.parse(_minStockLevelController.text) : null,
+        minStockLevel: _minStockLevelController.text.isNotEmpty ? int.parse(_minStockLevelController.text) : null, // Changed to int.parse
+        imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
         createdAt: widget.item?.createdAt ?? DateTime.now(),
       );
 
       if (!_isEditMode) {
-        // Add new item
         await _inventoryService.addItem(widget.householdId, item);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -151,7 +153,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
           ),
         );
       } else {
-        // Update existing item
         await _inventoryService.updateItem(widget.householdId, item);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -197,7 +198,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   Future<void> _selectDate(BuildContext context, bool isExpiryDate) async {
-    if (_isReadOnly) return; // Don't allow date selection in read-only mode
+    if (_isReadOnly) return;
     
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -230,7 +231,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _clearDate(bool isExpiryDate) {
-    if (_isReadOnly) return; // Don't allow clearing in read-only mode
+    if (_isReadOnly) return;
     
     setState(() {
       if (isExpiryDate) {
@@ -242,7 +243,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _incrementQuantity() {
-    if (_isReadOnly) return; // Don't allow increment in read-only mode
+    if (_isReadOnly) return;
     
     int current = int.tryParse(_quantityController.text) ?? 1;
     setState(() {
@@ -251,7 +252,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _decrementQuantity() {
-    if (_isReadOnly) return; // Don't allow decrement in read-only mode
+    if (_isReadOnly) return;
     
     int current = int.tryParse(_quantityController.text) ?? 1;
     if (current > 1) {
@@ -259,6 +260,76 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
         _quantityController.text = (current - 1).toString();
       });
     }
+  }
+
+  void _previewImage() {
+    final imageUrl = _imageUrlController.text.trim();
+    if (imageUrl.isEmpty) return;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Image Preview',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 16),
+                Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        );
+                      },
+                      errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red, size: 48),
+                            SizedBox(height: 8),
+                            Text('Failed to load image', style: TextStyle(color: Colors.red)),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -273,7 +344,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.white),
         actions: [
-          if (_isEditMode && !_isReadOnly) // Only show delete button if not read-only
+          if (_isEditMode && !_isReadOnly)
             IconButton(
               icon: Icon(Icons.delete_outline, size: 26),
               onPressed: () {
@@ -295,7 +366,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
             )
           : GestureDetector(
               onTap: () {
-                // Dismiss keyboard when tapping outside of text fields
                 FocusScope.of(context).unfocus();
               },
               child: SingleChildScrollView(
@@ -305,7 +375,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Item Details Card
                       _buildSectionCard(
                         title: 'Item Details',
                         icon: Icons.inventory_2_outlined,
@@ -320,48 +389,142 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
                           SizedBox(height: 16),
                           _buildCategoryField(),
                           SizedBox(height: 16),
+                          
+                          // Quantity and Price Row
                           Row(
                             children: [
                               Expanded(
                                 flex: 2,
-                                child: _buildQuantityField(),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Quantity *',
+                                      style: TextStyle(fontSize: 14, color: _isReadOnly ? disabledColor : lightTextColor, fontWeight: FontWeight.w500),
+                                    ),
+                                    SizedBox(height: 8),
+                                    _buildQuantityField(),
+                                  ],
+                                ),
                               ),
                               SizedBox(width: 16),
                               Expanded(
                                 flex: 2,
-                                child: _buildTextField(_priceController, 'Price', Icons.attach_money, true,
-                                    keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                    prefixText: '\$ ',
-                                    validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Please enter a price';
-                                  }
-                                  if (double.tryParse(value) == null || double.parse(value) < 0) {
-                                    return 'Please enter a valid price';
-                                  }
-                                  return null;
-                                }),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Price *',
+                                      style: TextStyle(fontSize: 14, color: _isReadOnly ? disabledColor : lightTextColor, fontWeight: FontWeight.w500),
+                                    ),
+                                    SizedBox(height: 8),
+                                    _buildTextField(_priceController, '', Icons.attach_money, true,
+                                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                        prefixText: '\$ ',
+                                        validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Please enter a price';
+                                      }
+                                      if (double.tryParse(value) == null || double.parse(value) < 0) {
+                                        return 'Please enter a valid price';
+                                      }
+                                      return null;
+                                    }),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
+                          
                           SizedBox(height: 16),
                           _buildTextField(_minStockLevelController, 'Minimum Stock Level', Icons.inventory_2, true,
-                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              keyboardType: TextInputType.number, // Changed to number without decimal
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly], // Only allow digits
                               validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Please enter a minimum stock level';
                             }
                             if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                              return 'Please enter a valid number';
+                              return 'Please enter a valid positive number';
                             }
                             return null;
                           }),
+                          SizedBox(height: 16),
+                          _buildTextField(_barcodeController, 'Barcode', Icons.qr_code, false,
+                              keyboardType: TextInputType.number),
+                          SizedBox(height: 16),
+                          
+                          // Image URL field with preview button
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildTextField(_imageUrlController, 'Image URL', Icons.image_outlined, false,
+                                    keyboardType: TextInputType.url),
+                              ),
+                              if (!_isReadOnly && _imageUrlController.text.isNotEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(left: 8),
+                                  child: IconButton(
+                                    icon: Icon(Icons.remove_red_eye_outlined, color: primaryColor),
+                                    onPressed: _previewImage,
+                                    tooltip: 'Preview Image',
+                                  ),
+                                ),
+                            ],
+                          ),
+                          
+                          // Show image preview if URL exists and we're in view mode
+                          if (_isReadOnly && _imageUrlController.text.isNotEmpty)
+                            Padding(
+                              padding: EdgeInsets.only(top: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Image Preview:', style: TextStyle(fontSize: 14, color: lightTextColor)),
+                                  SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    height: 150,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.grey[300]!),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.network(
+                                        _imageUrlController.text,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return Center(
+                                            child: CircularProgressIndicator(
+                                              value: loadingProgress.expectedTotalBytes != null
+                                                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                                  : null,
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                                          return Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.broken_image_outlined, color: Colors.grey, size: 48),
+                                              SizedBox(height: 8),
+                                              Text('Image not available', style: TextStyle(color: Colors.grey)),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                       
                       SizedBox(height: 20),
                       
-                      // Additional Information Card
                       _buildSectionCard(
                         title: 'Additional Information',
                         icon: Icons.info_outline,
@@ -384,15 +547,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
                           _buildTextField(_locationController, 'Storage Location', Icons.location_on_outlined, false),
                           SizedBox(height: 16),
                           _buildTextField(_supplierController, 'Supplier', Icons.business_center_outlined, false),
-                          SizedBox(height: 16),
-                          _buildTextField(_barcodeController, 'Barcode/SKU', Icons.qr_code_scanner_outlined, false,
-                              keyboardType: TextInputType.number),
                         ],
                       ),
                       
                       SizedBox(height: 32),
                       
-                      // Save Button - Only show if not read-only
                       if (!_isReadOnly)
                         SizedBox(
                           width: double.infinity,
@@ -460,10 +619,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
       {TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator, int maxLines = 1, String? prefixText}) {
     return TextFormField(
       controller: controller,
-      enabled: !_isReadOnly, // Disable field in read-only mode
+      enabled: !_isReadOnly,
       decoration: InputDecoration(
-        labelText: isRequired ? '$label *' : label,
-        prefixIcon: Icon(icon, color: _isReadOnly ? disabledColor : lightTextColor),
+        labelText: label.isNotEmpty ? (isRequired ? '$label *' : label) : null,
+        prefixIcon: icon != Icons.attach_money ? Icon(icon, color: _isReadOnly ? disabledColor : lightTextColor) : null,
         prefixText: prefixText,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -486,13 +645,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
           borderSide: BorderSide(color: Colors.red, width: 2),
         ),
         filled: true,
-        fillColor: _isReadOnly ? Colors.grey[100] : Colors.grey[50], // Different background for read-only
+        fillColor: _isReadOnly ? Colors.grey[100] : Colors.grey[50],
         labelStyle: TextStyle(color: _isReadOnly ? disabledColor : lightTextColor),
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      validator: _isReadOnly ? null : validator, // Skip validation in read-only mode
+      validator: _isReadOnly ? null : validator,
       maxLines: maxLines,
       style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
     );
@@ -535,12 +694,12 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
           child: Text(category, style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor)),
         );
       }).toList(),
-      onChanged: _isReadOnly ? null : (String? newValue) { // Disable changes in read-only mode
+      onChanged: _isReadOnly ? null : (String? newValue) {
         setState(() {
           _categoryController.text = newValue!;
         });
       },
-      validator: _isReadOnly ? null : (value) { // Skip validation in read-only mode
+      validator: _isReadOnly ? null : (value) {
         if (value == null || value.isEmpty) {
           return 'Please select a category';
         }
@@ -553,68 +712,78 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   Widget _buildQuantityField() {
-    return TextFormField(
-      controller: _quantityController,
-      enabled: !_isReadOnly, // Disable field in read-only mode
-      decoration: InputDecoration(
-        labelText: 'Quantity *',
-        prefixIcon: Icon(Icons.format_list_numbered, color: _isReadOnly ? disabledColor : lightTextColor),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: primaryColor, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red, width: 1.5),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red, width: 2),
-        ),
-        filled: true,
-        fillColor: _isReadOnly ? Colors.grey[100] : Colors.grey[50],
-        labelStyle: TextStyle(color: _isReadOnly ? disabledColor : lightTextColor),
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        suffixIcon: _isReadOnly ? null : Row( // Hide quantity controls in read-only mode
-          mainAxisAlignment: MainAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(Icons.remove, size: 18),
-              onPressed: _decrementQuantity,
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints(),
-            ),
-            Container(width: 1, height: 24, color: Colors.grey[300]),
-            IconButton(
-              icon: Icon(Icons.add, size: 18),
-              onPressed: _incrementQuantity,
-              padding: EdgeInsets.zero,
-              constraints: BoxConstraints(),
-            ),
-          ],
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+        color: _isReadOnly ? Colors.grey[100] : Colors.grey[50],
       ),
-      keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      validator: _isReadOnly ? null : (value) { // Skip validation in read-only mode
-        if (value == null || value.isEmpty) {
-          return 'Please enter a quantity';
-        }
-        if (int.tryParse(value) == null || int.parse(value) <= 0) {
-          return 'Please enter a valid quantity';
-        }
-        return null;
-      },
-      style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
+      child: Row(
+        children: [
+          if (!_isReadOnly)
+            IconButton(
+              icon: Icon(Icons.remove, size: 20),
+              onPressed: _decrementQuantity,
+              style: IconButton.styleFrom(
+                backgroundColor: primaryColor.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          
+          Expanded(
+            child: TextFormField(
+              controller: _quantityController,
+              enabled: !_isReadOnly,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                filled: false,
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              validator: _isReadOnly ? null : (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter a quantity';
+                }
+                if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                  return 'Please enter a valid quantity';
+                }
+                return null;
+              },
+              style: TextStyle(
+                fontSize: 15, 
+                color: _isReadOnly ? disabledColor : textColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          
+          if (!_isReadOnly)
+            IconButton(
+              icon: Icon(Icons.add, size: 20),
+              onPressed: _incrementQuantity,
+              style: IconButton.styleFrom(
+                backgroundColor: primaryColor.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(12),
+                    bottomRight: Radius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -637,7 +806,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
               children: [
-                if (!_isReadOnly) // Only show calendar icon if not read-only
+                if (!_isReadOnly)
                   IconButton(
                     icon: Icon(Icons.calendar_today_outlined, color: lightTextColor, size: 20),
                     onPressed: () => _selectDate(context, isExpiryDate),
@@ -648,7 +817,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
                     style: TextStyle(fontSize: 15, color: date != null ? (_isReadOnly ? disabledColor : textColor) : (_isReadOnly ? disabledColor : lightTextColor)),
                   ),
                 ),
-                if (date != null && !_isReadOnly) // Only show clear button if not read-only
+                if (date != null && !_isReadOnly)
                   IconButton(
                     icon: Icon(Icons.clear, color: lightTextColor, size: 18),
                     onPressed: () => _clearDate(isExpiryDate),
@@ -662,7 +831,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> {
   }
 
   void _showDeleteDialog() {
-    if (_isReadOnly) return; // Don't show delete dialog in read-only mode
+    if (_isReadOnly) return;
     
     showDialog(
       context: context,

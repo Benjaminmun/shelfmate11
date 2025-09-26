@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'inventory_item_model.dart';
-import 'inventory_service.dart';
+import '../services/inventory_service.dart';
 import 'inventory_edit_page.dart';
 import 'dart:async';
 

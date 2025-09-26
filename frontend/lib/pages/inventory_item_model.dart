@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
 class InventoryItem {
   final String? id;
@@ -12,10 +12,14 @@ class InventoryItem {
   final String? location;
   final String? supplier;
   final String? barcode;
-  final double? minStockLevel;
-  final DateTime? createdAt;
+  final int? minStockLevel; 
+  final String? imageUrl;
+  final DateTime createdAt;
   final DateTime? updatedAt;
-  final String? imageUrl; // Added imageUrl property
+  final String? addedByUserId;
+  final String? addedByUserName;
+  final String? updatedByUserId;
+  final String? updatedByUserName;
 
   InventoryItem({
     this.id,
@@ -30,9 +34,13 @@ class InventoryItem {
     this.supplier,
     this.barcode,
     this.minStockLevel,
-    this.createdAt,
+    this.imageUrl,
+    required this.createdAt,
     this.updatedAt,
-    this.imageUrl, // Added imageUrl parameter
+    this.addedByUserId,
+    this.addedByUserName,
+    this.updatedByUserId,
+    this.updatedByUserName,
   });
 
   Map<String, dynamic> toMap() {
@@ -42,15 +50,19 @@ class InventoryItem {
       'quantity': quantity,
       'price': price,
       'description': description,
-      'purchaseDate': purchaseDate != null ? Timestamp.fromDate(purchaseDate!) : null,
-      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
+      'purchaseDate': purchaseDate,
+      'expiryDate': expiryDate,
       'location': location,
       'supplier': supplier,
       'barcode': barcode,
       'minStockLevel': minStockLevel,
-      'imageUrl': imageUrl, // Added imageUrl to map
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : Timestamp.now(),
-      'updatedAt': Timestamp.now(),
+      'imageUrl': imageUrl,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'addedByUserId': addedByUserId,
+      'addedByUserName': addedByUserName,
+      'updatedByUserId': updatedByUserId,
+      'updatedByUserName': updatedByUserName,
     };
   }
 
@@ -58,19 +70,23 @@ class InventoryItem {
     return InventoryItem(
       id: id,
       name: map['name'] ?? '',
-      category: map['category'] ?? 'Uncategorized',
+      category: map['category'] ?? 'Other',
       quantity: (map['quantity'] ?? 0).toInt(),
-      price: (map['price'] ?? 0).toDouble(),
+      price: (map['price'] ?? 0.0).toDouble(),
       description: map['description'],
-      purchaseDate: map['purchaseDate'] != null ? (map['purchaseDate'] as Timestamp).toDate() : null,
-      expiryDate: map['expiryDate'] != null ? (map['expiryDate'] as Timestamp).toDate() : null,
+      purchaseDate: map['purchaseDate']?.toDate(),
+      expiryDate: map['expiryDate']?.toDate(),
       location: map['location'],
       supplier: map['supplier'],
       barcode: map['barcode'],
-      minStockLevel: map['minStockLevel']?.toDouble(),
-      imageUrl: map['imageUrl'], // Added imageUrl from map
-      createdAt: map['createdAt'] != null ? (map['createdAt'] as Timestamp).toDate() : null,
-      updatedAt: map['updatedAt'] != null ? (map['updatedAt'] as Timestamp).toDate() : null,
+      minStockLevel: map['minStockLevel']?.toDouble()?.toInt(), // Cast num? to int?
+      imageUrl: map['imageUrl'],
+      createdAt: (map['createdAt'] ?? Timestamp.now()).toDate(),
+      updatedAt: map['updatedAt']?.toDate(),
+      addedByUserId: map['addedByUserId'],
+      addedByUserName: map['addedByUserName'],
+      updatedByUserId: map['updatedByUserId'],
+      updatedByUserName: map['updatedByUserName'],
     );
   }
 
@@ -86,10 +102,14 @@ class InventoryItem {
     String? location,
     String? supplier,
     String? barcode,
-    double? minStockLevel,
+    int? minStockLevel, // Now it expects int? directly
+    String? imageUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
-    String? imageUrl, // Added imageUrl parameter
+    String? addedByUserId,
+    String? addedByUserName,
+    String? updatedByUserId,
+    String? updatedByUserName,
   }) {
     return InventoryItem(
       id: id ?? this.id,
@@ -103,10 +123,14 @@ class InventoryItem {
       location: location ?? this.location,
       supplier: supplier ?? this.supplier,
       barcode: barcode ?? this.barcode,
-      minStockLevel: minStockLevel ?? this.minStockLevel,
-      imageUrl: imageUrl ?? this.imageUrl, // Added imageUrl to copyWith
+      minStockLevel: minStockLevel ?? this.minStockLevel, // minStockLevel is already int?
+      imageUrl: imageUrl ?? this.imageUrl,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      addedByUserId: addedByUserId ?? this.addedByUserId,
+      addedByUserName: addedByUserName ?? this.addedByUserName,
+      updatedByUserId: updatedByUserId ?? this.updatedByUserId,
+      updatedByUserName: updatedByUserName ?? this.updatedByUserName,
     );
   }
 }
