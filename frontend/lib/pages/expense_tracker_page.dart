@@ -312,7 +312,6 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> {
                     ),
                 ],
               ),
-
             ],
           ),
         ),
