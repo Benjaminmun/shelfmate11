@@ -937,9 +937,10 @@ class _AddItemPageState extends State<AddItemPage> {
         title: Text(
           widget.isReadOnly ? 'View Item Options' : 'Add Item',
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
             color: Colors.white,
+            letterSpacing: -0.5
           ),
         ),
         backgroundColor: widget.isReadOnly ? disabledColor : primaryColor,

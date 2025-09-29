@@ -1,35 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'household_service.dart'; // Import household service
-
-// Function to update user profile in Firestore from household service
-Future<void> updateUserProfileInHouseholdService({
-  required String userId,
-  required String fullName,
-  required String phone,
-  required String address,
-  required String email,
-}) async {
-  try {
-    final userData = {
-      'fullName': fullName,
-      'phone': phone,
-      'address': address,
-      'email': email,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .set(userData, SetOptions(merge: true));
-  } catch (e) {
-    print('Error updating user profile: $e');
-    throw e;
-  }
-}
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'dart:io';
 
 class UserInfoPage extends StatefulWidget {
   const UserInfoPage({super.key});
@@ -43,111 +18,152 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
+  
   bool _isLoading = false;
   bool _isEditing = false;
   bool _isDataLoaded = false;
+  bool _isUploadingImage = false;
+  File? _selectedImage;
+  String? _profilePicUrl;
+  
   final _formKey = GlobalKey<FormState>();
-
-  // Initialize animation controllers as nullable
-  AnimationController? _animationController;
-  Animation<double>? _fadeAnimation;
-  Animation<double>? _slideAnimation;
-
+  final ImagePicker _picker = ImagePicker();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Color Scheme
+  final Color _primaryColor = Color(0xFF2D5D7C);
+  final Color _secondaryColor = Color(0xFF4CAF50);
+  final Color _backgroundColor = Color(0xFFF8FAFC);
+  final Color _cardColor = Colors.white;
+  final Color _textColor = Color(0xFF1E293B);
+  final Color _lightTextColor = Color(0xFF64748B);
+  final Color _successColor = Color(0xFF10B981);
+  final Color _errorColor = Color(0xFFEF4444);
+
+  // Animations
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-
-    // Initialize animation controller
+    
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: Duration(milliseconds: 800),
     );
 
-    // Set up animations
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _animationController!,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+        parent: _animationController,
+        curve: Curves.easeOut,
       ),
     );
 
-    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+    _slideAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
       CurvedAnimation(
-        parent: _animationController!,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
+        parent: _animationController,
+        curve: Curves.easeOut,
       ),
     );
 
-    // Start animations after build
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      _animationController?.forward();
-    });
-
-    // Load user data from database
+    _animationController.forward();
     _loadUserData();
   }
 
   Future<void> _loadUserData() async {
-    setState(() {
-      _isLoading = true;
+    setState(() { 
+      _isLoading = true; 
     });
-
+    
     try {
-      // Get the current user's UID
       final userId = _auth.currentUser!.uid;
-
-      // Fetch user data from Firestore
       final doc = await _firestore.collection('users').doc(userId).get();
 
       if (doc.exists) {
-        // Get the data from the document
         final data = doc.data();
-
         setState(() {
           fullNameController.text = data?['fullName'] ?? '';
           phoneController.text = data?['phone'] ?? '';
           addressController.text = data?['address'] ?? '';
-          emailController.text = data?['email'] ?? '';
+          emailController.text = data?['email'] ?? _auth.currentUser!.email ?? '';
+          _profilePicUrl = data?['profilePicUrl'];
           _isDataLoaded = true;
         });
-      } else {
-        // Handle the case where no user data is found
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No user data found!'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
     } catch (e) {
-      print('Error loading user data: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to load user data: $e', style: TextStyle(color: Colors.white)),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      _showSnackBar('Failed to load user data', true);
     } finally {
-      setState(() {
-        _isLoading = false;
+      setState(() { 
+        _isLoading = false; 
       });
+    }
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source, 
+        maxWidth: 800, 
+        maxHeight: 800, 
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() { 
+          _selectedImage = File(pickedFile.path); 
+        });
+        await _uploadImageToFirebase();
+      }
+    } catch (e) {
+      _showSnackBar('Error selecting image', true);
+    }
+  }
+
+  Future<void> _uploadImageToFirebase() async {
+    if (_selectedImage == null) return;
+    
+    setState(() { 
+      _isUploadingImage = true; 
+    });
+
+    try {
+      final userId = _auth.currentUser!.uid;
+      final Reference storageRef = FirebaseStorage.instance
+          .ref().child('profile_pictures/$userId.jpg');
+
+      await storageRef.putFile(_selectedImage!);
+      final String downloadURL = await storageRef.getDownloadURL();
+
+      await _firestore.collection('users').doc(userId).update({
+        'profilePicUrl': downloadURL,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _profilePicUrl = downloadURL;
+        _isUploadingImage = false;
+      });
+      
+      _showSnackBar('Profile picture updated successfully!', false);
+    } catch (e) {
+      setState(() { 
+        _isUploadingImage = false; 
+      });
+      _showSnackBar('Error uploading image', true);
     }
   }
 
   Future<void> _saveUserInfo() async {
     if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isLoading = true;
+    
+    setState(() { 
+      _isLoading = true; 
     });
 
     try {
-      // Collect the updated user data
       final userData = {
         'fullName': fullNameController.text,
         'phone': phoneController.text,
@@ -156,420 +172,327 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      // Save data to Firestore
-      await _firestore.collection('users').doc(_auth.currentUser!.uid).set(userData, SetOptions(merge: true));
+      await _firestore.collection('users')
+          .doc(_auth.currentUser!.uid)
+          .set(userData, SetOptions(merge: true));
 
-      // Call the method to store the data in household service
-      await updateUserProfileInHouseholdService(
-        userId: _auth.currentUser!.uid,
-        fullName: fullNameController.text,
-        phone: phoneController.text,
-        address: addressController.text,
-        email: emailController.text,
-      );
-
-      setState(() {
-        _isEditing = false;
+      setState(() { 
+        _isEditing = false; 
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Profile updated successfully!', style: TextStyle(color: Colors.white)),
-          backgroundColor: const Color(0xFF4CAF50),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
       
-      // Navigate to HouseholdService after saving
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HouseholdService(),
-        ),
-      );
+      _showSnackBar('Profile updated successfully!', false);
+      
+      // Add a slight delay before navigating back to show success message
+      await Future.delayed(Duration(milliseconds: 1500));
+      Navigator.pop(context);
+      
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving information: $e', style: TextStyle(color: Colors.white)),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      _showSnackBar('Error saving information', true);
     } finally {
-      setState(() {
-        _isLoading = false;
+      setState(() { 
+        _isLoading = false; 
       });
     }
   }
 
-  @override
-  void dispose() {
-    _animationController?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Check if animations are initialized
-    if (_animationController == null || _fadeAnimation == null || _slideAnimation == null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(const Color(0xFF4CAF50)),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: SafeArea(
-        child: Stack(
+  void _showSnackBar(String message, bool isError) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
           children: [
-            // Background decoration
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.7,
-                height: MediaQuery.of(context).size.height * 0.25,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF2D5D7C).withOpacity(0.1),
-                      const Color(0xFF4CAF50).withOpacity(0.05),
-                    ],
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(100),
-                  ),
-                ),
-              ),
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
             ),
-
-            // Main content
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: SingleChildScrollView(
-                child: AnimatedBuilder(
-                  animation: _animationController!,
-                  builder: (context, child) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(height: 20 + _slideAnimation!.value),
-                        FadeTransition(
-                          opacity: _fadeAnimation!,
-                          child: Transform.translate(
-                            offset: Offset(0, _slideAnimation!.value),
-                            child: Row(
-                              children: [
-                                const Expanded(
-                                  child: Text(
-                                    'User Profile',
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF2D5D7C),
-                                    ),
-                                  ),
-                                ),
-                                if (!_isEditing)
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Color(0xFF2D5D7C)),
-                                    onPressed: () {
-                                      setState(() {
-                                        _isEditing = true;
-                                      });
-                                    },
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 8 + _slideAnimation!.value / 2),
-                        FadeTransition(
-                          opacity: _fadeAnimation!,
-                          child: Transform.translate(
-                            offset: Offset(0, _slideAnimation!.value),
-                            child: Text(
-                              _isEditing ? 'Edit your profile information' : 'View and manage your profile',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[700],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 40 + _slideAnimation!.value),
-                        // Profile avatar
-                        Center(
-                          child: FadeTransition(
-                            opacity: _fadeAnimation!,
-                            child: Transform.translate(
-                              offset: Offset(0, _slideAnimation!.value),
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    width: 120,
-                                    height: 120,
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF2D5D7C),
-                                          Color(0xFF4CAF50),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      borderRadius: BorderRadius.circular(60),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(3.0),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(60),
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(50),
-                                              image: const DecorationImage(
-                                                image: NetworkImage(
-                                                    'https://miro.medium.com/v2/resize:fit:640/format:webp/1*LSroVU0uk_5WBgkovw45Bg.avif'),
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  if (_isEditing)
-                                    Positioned(
-                                      bottom: 0,
-                                      right: 0,
-                                      child: Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF4CAF50),
-                                          borderRadius: BorderRadius.circular(18),
-                                          border: Border.all(color: Colors.white, width: 3),
-                                        ),
-                                        child: const Icon(
-                                          Icons.edit,
-                                          color: Colors.white,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 40 + _slideAnimation!.value),
-
-                        if (_isLoading && !_isDataLoaded)
-                          Center(
-                            child: Container(
-                              width: 60,
-                              height: 60,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF4CAF50),
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              child: const CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                strokeWidth: 3,
-                              ),
-                            ),
-                          )
-                        else
-                          Form(
-                            key: _formKey,
-                            child: Column(
-                              children: [
-                                FadeTransition(
-                                  opacity: _fadeAnimation!,
-                                  child: Transform.translate(
-                                    offset: Offset(0, _slideAnimation!.value),
-                                    child: _buildTextField(
-                                      controller: fullNameController,
-                                      label: 'Full Name',
-                                      icon: Icons.person_outline,
-                                      enabled: _isEditing,
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 20 + _slideAnimation!.value / 2),
-                                FadeTransition(
-                                  opacity: _fadeAnimation!,
-                                  child: Transform.translate(
-                                    offset: Offset(0, _slideAnimation!.value),
-                                    child: _buildTextField(
-                                      controller: emailController,
-                                      label: 'Email Address',
-                                      icon: Icons.email,
-                                      keyboardType: TextInputType.emailAddress,
-                                      enabled: false, // Email is typically not editable
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 20 + _slideAnimation!.value / 2),
-                                FadeTransition(
-                                  opacity: _fadeAnimation!,
-                                  child: Transform.translate(
-                                    offset: Offset(0, _slideAnimation!.value),
-                                    child: _buildTextField(
-                                      controller: phoneController,
-                                      label: 'Phone Number',
-                                      icon: Icons.phone,
-                                      keyboardType: TextInputType.phone,
-                                      enabled: _isEditing,
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: 20 + _slideAnimation!.value / 2),
-                                FadeTransition(
-                                  opacity: _fadeAnimation!,
-                                  child: Transform.translate(
-                                    offset: Offset(0, _slideAnimation!.value),
-                                    child: _buildTextField(
-                                      controller: addressController,
-                                      label: 'Address',
-                                      icon: Icons.home,
-                                      maxLines: 2,
-                                      enabled: _isEditing,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        SizedBox(height: 40 + _slideAnimation!.value),
-
-                        if (_isEditing)
-                          FadeTransition(
-                            opacity: _fadeAnimation!,
-                            child: Transform.translate(
-                              offset: Offset(0, _slideAnimation!.value),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: SizedBox(
-                                      height: 58,
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            _isEditing = false;
-                                          });
-                                          _loadUserData(); // Reload original data
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.grey[300],
-                                          elevation: 2,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          'Cancel',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.grey[800],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: SizedBox(
-                                      height: 58,
-                                      child: ElevatedButton(
-                                        onPressed: _isLoading ? null : _saveUserInfo,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF4CAF50),
-                                          elevation: 6,
-                                          shadowColor: const Color(0xFF4CAF50).withOpacity(0.5),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                        ),
-                                        child: _isLoading
-                                            ? const CircularProgressIndicator(
-                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                                strokeWidth: 2,
-                                              )
-                                            : const Text(
-                                                'Save',
-                                                style: TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        else
-                          FadeTransition(
-                            opacity: _fadeAnimation!,
-                            child: Transform.translate(
-                              offset: Offset(0, _slideAnimation!.value),
-                              child: SizedBox(
-                                width: double.infinity,
-                                height: 58,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _isEditing = true;
-                                    });
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF2D5D7C),
-                                    elevation: 6,
-                                    shadowColor: const Color(0xFF2D5D7C).withOpacity(0.5),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'Edit Profile',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        SizedBox(height: 30 + _slideAnimation!.value),
-                      ],
-                    );
-                  },
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
           ],
+        ),
+        backgroundColor: isError ? _errorColor : _successColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: _cardColor,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 16),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _lightTextColor.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Choose Profile Picture',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: _textColor,
+                ),
+              ),
+              SizedBox(height: 24),
+              _buildImageSourceOption(
+                icon: Icons.photo_library_rounded,
+                title: 'Choose from Gallery',
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              _buildImageSourceOption(
+                icon: Icons.camera_alt_rounded,
+                title: 'Take Photo',
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                margin: EdgeInsets.symmetric(horizontal: 20),
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: GoogleFonts.poppins(
+                      color: _lightTextColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageSourceOption({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: _primaryColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: _primaryColor,
+          size: 22,
+        ),
+      ),
+      title: Text(
+        title,
+        style: GoogleFonts.poppins(
+          fontWeight: FontWeight.w500,
+          color: _textColor,
+        ),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: _lightTextColor,
+      ),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildProfileAvatar() {
+    return GestureDetector(
+      onTap: _isEditing && !_isUploadingImage ? _showImageSourceDialog : null,
+      child: Stack(
+        children: [
+          // Background glow effect
+          Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _primaryColor.withOpacity(0.2),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+          ),
+          
+          // Main avatar container
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: _primaryColor.withOpacity(0.2),
+                width: 3,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Stack(
+                children: [
+                  // Profile image or default avatar
+                  _profilePicUrl != null
+                      ? Image.network(
+                          _profilePicUrl!,
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(_primaryColor),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildDefaultAvatar();
+                          },
+                        )
+                      : _buildDefaultAvatar(),
+                  
+                  // Uploading overlay
+                  if (_isUploadingImage)
+                    Container(
+                      color: Colors.black.withOpacity(0.7),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 25,
+                              height: 25,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(Colors.white),
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Uploading...',
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Edit icon overlay
+          if (_isEditing && !_isUploadingImage)
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [_primaryColor, _secondaryColor],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _primaryColor.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.camera_alt_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDefaultAvatar() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _primaryColor.withOpacity(0.8),
+            _secondaryColor.withOpacity(0.6),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.person_rounded,
+          size: 40,
+          color: Colors.white,
         ),
       ),
     );
@@ -584,14 +507,15 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
     bool enabled = true,
   }) {
     return Container(
+      margin: EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 15,
+            offset: Offset(0, 5),
           ),
         ],
       ),
@@ -600,10 +524,10 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         keyboardType: keyboardType,
         maxLines: maxLines,
         enabled: enabled,
-        style: TextStyle(
+        style: GoogleFonts.poppins(
           fontSize: 16,
           fontWeight: FontWeight.w500,
-          color: enabled ? Colors.black : Colors.grey[600],
+          color: enabled ? _textColor : _lightTextColor,
         ),
         validator: (value) {
           if (value == null || value.isEmpty) {
@@ -613,21 +537,438 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         },
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
-          prefixIcon: Icon(icon, color: const Color(0xFF2D5D7C)),
+          labelStyle: GoogleFonts.poppins(
+            color: _lightTextColor,
+            fontWeight: FontWeight.w500,
+          ),
+          prefixIcon: Container(
+            width: 20,
+            height: 20,
+            margin: EdgeInsets.all(16),
+            child: Icon(
+              icon,
+              color: _primaryColor,
+              size: 20,
+            ),
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 1.5),
+            borderSide: BorderSide(
+              color: _secondaryColor,
+              width: 2,
+            ),
           ),
           filled: true,
           fillColor: Colors.transparent,
-          contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          contentPadding: EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          suffixIcon: enabled ? null : Icon(
+            Icons.lock_outline_rounded,
+            color: _lightTextColor.withOpacity(0.5),
+            size: 18,
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildActionButton() {
+    if (_isEditing) {
+      return Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isEditing = false;
+                  });
+                  _loadUserData();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _cardColor,
+                  foregroundColor: _lightTextColor,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_primaryColor, _secondaryColor],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryColor.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _saveUserInfo,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: _isLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        'Save Changes',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [_primaryColor, _secondaryColor],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: _primaryColor.withOpacity(0.3),
+              blurRadius: 15,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: () {
+            setState(() {
+              _isEditing = true;
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            padding: EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.edit_rounded, size: 20, color: Colors.white),
+              SizedBox(width: 8),
+              Text(
+                'Edit Profile',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _backgroundColor,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Background Elements
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.6,
+                height: MediaQuery.of(context).size.height * 0.3,
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      _primaryColor.withOpacity(0.1),
+                      _backgroundColor.withOpacity(0.1),
+                    ],
+                    radius: 0.8,
+                  ),
+                ),
+              ),
+            ),
+            
+            Positioned(
+              bottom: 0,
+              left: 0,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.4,
+                height: MediaQuery.of(context).size.height * 0.2,
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      _secondaryColor.withOpacity(0.05),
+                      _backgroundColor.withOpacity(0.05),
+                    ],
+                    radius: 0.6,
+                  ),
+                ),
+              ),
+            ),
+
+            // Main Content
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: SingleChildScrollView(
+                child: AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        SizedBox(height: 20 + _slideAnimation.value),
+                        FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: Transform.translate(
+                            offset: Offset(0, _slideAnimation.value),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: _cardColor,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 10,
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Icon(
+                                      Icons.arrow_back_ios_new_rounded,
+                                      size: 18,
+                                      color: _primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Profile Settings',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w700,
+                                          color: _textColor,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        _isEditing 
+                                            ? 'Update your personal information'
+                                            : 'Manage your profile details',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 14,
+                                          color: _lightTextColor,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (!_isEditing)
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: _primaryColor.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: IconButton(
+                                      icon: Icon(
+                                        Icons.edit_rounded,
+                                        size: 20,
+                                        color: _primaryColor,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isEditing = true;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        // Profile Avatar
+                        SizedBox(height: 40 + _slideAnimation.value),
+                        FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: Transform.translate(
+                            offset: Offset(0, _slideAnimation.value),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  _buildProfileAvatar(),
+                                  SizedBox(height: 12),
+                                  if (_isEditing)
+                                    Text(
+                                      'Tap to change profile picture',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: _lightTextColor,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // Form Content
+                        SizedBox(height: 40 + _slideAnimation.value),
+                        
+                        if (_isLoading && !_isDataLoaded)
+                          Center(
+                            child: Column(
+                              children: [
+                                CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation(_primaryColor),
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Loading your profile...',
+                                  style: GoogleFonts.poppins(
+                                    color: _lightTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: Transform.translate(
+                              offset: Offset(0, _slideAnimation.value),
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  children: [
+                                    _buildTextField(
+                                      controller: fullNameController,
+                                      label: 'Full Name',
+                                      icon: Icons.person_outline_rounded,
+                                      enabled: _isEditing,
+                                    ),
+                                    _buildTextField(
+                                      controller: emailController,
+                                      label: 'Email Address',
+                                      icon: Icons.email_rounded,
+                                      keyboardType: TextInputType.emailAddress,
+                                      enabled: false,
+                                    ),
+                                    _buildTextField(
+                                      controller: phoneController,
+                                      label: 'Phone Number',
+                                      icon: Icons.phone_rounded,
+                                      keyboardType: TextInputType.phone,
+                                      enabled: _isEditing,
+                                    ),
+                                    _buildTextField(
+                                      controller: addressController,
+                                      label: 'Address',
+                                      icon: Icons.home_rounded,
+                                      maxLines: 2,
+                                      enabled: _isEditing,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        // Action Buttons
+                        SizedBox(height: 40 + _slideAnimation.value),
+                        FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: Transform.translate(
+                            offset: Offset(0, _slideAnimation.value),
+                            child: _buildActionButton(),
+                          ),
+                        ),
+                        SizedBox(height: 40),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 }
