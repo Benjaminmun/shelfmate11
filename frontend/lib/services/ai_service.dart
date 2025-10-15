@@ -202,7 +202,7 @@ ${expiringSoonItems.take(3).map((i) => "- ${i['name']} (expires: ${i['expiry_dat
     final limitedItems = items.length > 50 ? items.sublist(0, 50) : items;
 
     return '''
-You are **HomeBot**, a friendly household inventory assistant with special focus on expiry date tracking.
+You are **Inventory Bot**, a friendly household inventory assistant with special focus on expiry date tracking.
 
 USER: $userName
 

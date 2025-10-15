@@ -71,11 +71,6 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
     
     _checkConnection();
     
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) {
-      setState(() {
-        _isConnected = result != ConnectivityResult.none;
-      });
-    });
   }
   
   @override

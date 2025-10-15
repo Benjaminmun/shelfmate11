@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:password_strength_checker/password_strength_checker.dart';
 import 'login_page.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -26,6 +27,9 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Password strength notifier
+  final ValueNotifier<PasswordStrength?> _passwordStrengthNotifier = ValueNotifier<PasswordStrength?>(null);
 
   @override
   void initState() {
@@ -54,16 +58,37 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
     );
     
     _animationController.forward();
+    
+    // Listen to password changes for strength checking
+    passwordController.addListener(_updatePasswordStrength);
+  }
+
+  void _updatePasswordStrength() {
+    final password = passwordController.text;
+    if (password.isEmpty) {
+      _passwordStrengthNotifier.value = null;
+    } else {
+      _passwordStrengthNotifier.value = PasswordStrength.calculate(text: password);
+    }
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _passwordStrengthNotifier.dispose();
+    passwordController.removeListener(_updatePasswordStrength);
     super.dispose();
   }
 
   Future<void> _signUpWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Additional password strength validation
+    final strength = _passwordStrengthNotifier.value;
+    if (strength == PasswordStrength.weak || strength == null) {
+      _showDialog('Weak Password', 'Please choose a stronger password. Your password should include uppercase letters, numbers, and special characters.');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -326,20 +351,32 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         opacity: _fadeAnimation,
                         child: SlideTransition(
                           position: _slideAnimation,
-                          child: _buildPasswordField(
-                            controller: passwordController, 
-                            label: 'Password', 
-                            obscureText: _obscurePassword, 
-                            onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter a password';
-                              }
-                              if (value.length < 6) {
-                                return 'Password must be at least 6 characters';
-                              }
-                              return null;
-                            },
+                          child: Column(
+                            children: [
+                              _buildPasswordField(
+                                controller: passwordController, 
+                                label: 'Password', 
+                                obscureText: _obscurePassword, 
+                                onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter a password';
+                                  }
+                                  if (value.length < 6) {
+                                    return 'Password must be at least 6 characters';
+                                  }
+                                  
+                                  // Additional strength validation
+                                  final strength = _passwordStrengthNotifier.value;
+                                  if (strength == PasswordStrength.weak) {
+                                    return 'Please choose a stronger password';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              SizedBox(height: 8),
+                              // Password strength indicator
+                            ],
                           ),
                         ),
                       ),

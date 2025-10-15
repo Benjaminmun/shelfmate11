@@ -203,7 +203,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   int _totalItems = 0;
   int _lowStockItems = 0;
   int _expiringSoonItems = 0;
-  int _totalCategories = 0;
   double _totalValue = 0.0;
   List<Map<String, dynamic>> _recentActivities = [];
   bool _isLoading = true;
@@ -284,7 +283,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           _totalItems = stats['totalItems'] ?? 0;
           _lowStockItems = stats['lowStockItems'] ?? 0;
           _expiringSoonItems = stats['expiringSoonItems'] ?? 0;
-          _totalCategories = stats['totalCategories'] ?? 0;
           _totalValue = stats['totalValue'] ?? 0.0;
           _isLoading = false;
           _hasError = false;

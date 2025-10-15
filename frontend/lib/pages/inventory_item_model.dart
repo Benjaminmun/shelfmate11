@@ -134,3 +134,124 @@ class InventoryItem {
     );
   }
 }
+
+class ConsumptionPattern {
+  final String itemId;
+  final String householdId;
+  final double averageDailyUsage;
+  final int usageFrequency; // times used per week
+  final DateTime lastUsed;
+  final DateTime lastRestocked;
+  final int typicalRestockQuantity;
+  final List<UsageRecord> usageHistory;
+
+  ConsumptionPattern({
+    required this.itemId,
+    required this.householdId,
+    required this.averageDailyUsage,
+    required this.usageFrequency,
+    required this.lastUsed,
+    required this.lastRestocked,
+    required this.typicalRestockQuantity,
+    required this.usageHistory,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'itemId': itemId,
+      'householdId': householdId,
+      'averageDailyUsage': averageDailyUsage,
+      'usageFrequency': usageFrequency,
+      'lastUsed': lastUsed.millisecondsSinceEpoch,
+      'lastRestocked': lastRestocked.millisecondsSinceEpoch,
+      'typicalRestockQuantity': typicalRestockQuantity,
+      'usageHistory': usageHistory.map((record) => record.toMap()).toList(),
+    };
+  }
+
+  static ConsumptionPattern fromMap(Map<String, dynamic> map) {
+    return ConsumptionPattern(
+      itemId: map['itemId'],
+      householdId: map['householdId'],
+      averageDailyUsage: map['averageDailyUsage'],
+      usageFrequency: map['usageFrequency'],
+      lastUsed: DateTime.fromMillisecondsSinceEpoch(map['lastUsed']),
+      lastRestocked: DateTime.fromMillisecondsSinceEpoch(map['lastRestocked']),
+      typicalRestockQuantity: map['typicalRestockQuantity'],
+      usageHistory: List<UsageRecord>.from(
+          map['usageHistory'].map((x) => UsageRecord.fromMap(x))),
+    );
+  }
+}
+
+class UsageRecord {
+  final DateTime timestamp;
+  final int quantityChange;
+  final String type; // 'used', 'restocked', 'discarded'
+  final String? notes;
+
+  UsageRecord({
+    required this.timestamp,
+    required this.quantityChange,
+    required this.type,
+    this.notes,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'timestamp': timestamp.millisecondsSinceEpoch,
+      'quantityChange': quantityChange,
+      'type': type,
+      'notes': notes,
+    };
+  }
+
+  static UsageRecord fromMap(Map<String, dynamic> map) {
+    return UsageRecord(
+      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp']),
+      quantityChange: map['quantityChange'],
+      type: map['type'],
+      notes: map['notes'],
+    );
+  }
+}
+
+class PredictionResult {
+  final String itemId;
+  final DateTime predictedDepletionDate;
+  final double confidenceScore;
+  final int daysUntilEmpty;
+  final String recommendation;
+  final DateTime calculatedAt;
+
+  PredictionResult({
+    required this.itemId,
+    required this.predictedDepletionDate,
+    required this.confidenceScore,
+    required this.daysUntilEmpty,
+    required this.recommendation,
+    required this.calculatedAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'itemId': itemId,
+      'predictedDepletionDate': predictedDepletionDate.millisecondsSinceEpoch,
+      'confidenceScore': confidenceScore,
+      'daysUntilEmpty': daysUntilEmpty,
+      'recommendation': recommendation,
+      'calculatedAt': calculatedAt.millisecondsSinceEpoch,
+    };
+  }
+
+  static PredictionResult fromMap(Map<String, dynamic> map) {
+    return PredictionResult(
+      itemId: map['itemId'],
+      predictedDepletionDate: DateTime.fromMillisecondsSinceEpoch(map['predictedDepletionDate']),
+      confidenceScore: map['confidenceScore'],
+      daysUntilEmpty: map['daysUntilEmpty'],
+      recommendation: map['recommendation'],
+      calculatedAt: DateTime.fromMillisecondsSinceEpoch(map['calculatedAt']),
+    );
+  }
+}

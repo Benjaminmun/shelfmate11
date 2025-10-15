@@ -5,6 +5,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'household_service.dart'; // Import your household service page
 
 class UserInfoPage extends StatefulWidget {
   const UserInfoPage({super.key});
@@ -13,33 +15,34 @@ class UserInfoPage extends StatefulWidget {
   _UserInfoPageState createState() => _UserInfoPageState();
 }
 
-class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderStateMixin {
+class _UserInfoPageState extends State<UserInfoPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController fullNameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
-  
+
   bool _isLoading = false;
   bool _isEditing = false;
   bool _isDataLoaded = false;
   bool _isUploadingImage = false;
   File? _selectedImage;
   String? _profilePicUrl;
-  
+
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Color Scheme
-  final Color _primaryColor = Color(0xFF2D5D7C);
-  final Color _secondaryColor = Color(0xFF4CAF50);
-  final Color _backgroundColor = Color(0xFFF8FAFC);
+  final Color _primaryColor = const Color(0xFF2D5D7C);
+  final Color _secondaryColor = const Color(0xFF4CAF50);
+  final Color _backgroundColor = const Color(0xFFF8FAFC);
   final Color _cardColor = Colors.white;
-  final Color _textColor = Color(0xFF1E293B);
-  final Color _lightTextColor = Color(0xFF64748B);
-  final Color _successColor = Color(0xFF10B981);
-  final Color _errorColor = Color(0xFFEF4444);
+  final Color _textColor = const Color(0xFF1E293B);
+  final Color _lightTextColor = const Color(0xFF64748B);
+  final Color _successColor = const Color(0xFF10B981);
+  final Color _errorColor = const Color(0xFFEF4444);
 
   // Animations
   late AnimationController _animationController;
@@ -49,10 +52,10 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 800),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -74,10 +77,10 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
   }
 
   Future<void> _loadUserData() async {
-    setState(() { 
-      _isLoading = true; 
+    setState(() {
+      _isLoading = true;
     });
-    
+
     try {
       final userId = _auth.currentUser!.uid;
       final doc = await _firestore.collection('users').doc(userId).get();
@@ -88,7 +91,8 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
           fullNameController.text = data?['fullName'] ?? '';
           phoneController.text = data?['phone'] ?? '';
           addressController.text = data?['address'] ?? '';
-          emailController.text = data?['email'] ?? _auth.currentUser!.email ?? '';
+          emailController.text =
+              data?['email'] ?? _auth.currentUser!.email ?? '';
           _profilePicUrl = data?['profilePicUrl'];
           _isDataLoaded = true;
         });
@@ -96,47 +100,83 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
     } catch (e) {
       _showSnackBar('Failed to load user data', true);
     } finally {
-      setState(() { 
-        _isLoading = false; 
+      setState(() {
+        _isLoading = false;
       });
     }
+  }
+
+  // Phone number validation logic
+  String? _validatePhoneNumber(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your phone number';
+    }
+    // Remove any spaces or non-digit characters
+    String cleanedNumber = value.replaceAll(RegExp(r'\D'), '');
+    // Check if the number starts with "01"
+    if (!cleanedNumber.startsWith('01')) {
+      return 'Phone number must start with 01';
+    }
+    // Check if the number is 10 or 11 digits long
+    if (cleanedNumber.length < 10 || cleanedNumber.length > 11) {
+      return 'Phone number must be 10 or 11 digits long';
+    }
+    return null; // Return null if the value is valid
   }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? pickedFile = await _picker.pickImage(
-        source: source, 
-        maxWidth: 800, 
-        maxHeight: 800, 
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
         imageQuality: 85,
       );
 
       if (pickedFile != null) {
-        setState(() { 
-          _selectedImage = File(pickedFile.path); 
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+          _isUploadingImage = true; // Start loading
         });
         await _uploadImageToFirebase();
       }
     } catch (e) {
       _showSnackBar('Error selecting image', true);
+      setState(() {
+        _isUploadingImage = false;
+      });
     }
   }
 
   Future<void> _uploadImageToFirebase() async {
     if (_selectedImage == null) return;
-    
-    setState(() { 
-      _isUploadingImage = true; 
-    });
 
     try {
       final userId = _auth.currentUser!.uid;
+
+      // Read the image file as bytes
+      final Uint8List imageBytes = await _selectedImage!.readAsBytes();
+
+      // Get the file extension and determine MIME type
+      final fileExtension = _selectedImage!.path.split('.').last.toLowerCase();
+      final mimeType = _getMimeType(fileExtension);
+
+      // Create a reference to the storage location
       final Reference storageRef = FirebaseStorage.instance
-          .ref().child('profile_pictures/$userId.jpg');
+          .ref()
+          .child('profile_pictures/$userId.$fileExtension');
 
-      await storageRef.putFile(_selectedImage!);
-      final String downloadURL = await storageRef.getDownloadURL();
+      // Upload the bytes with proper metadata
+      final UploadTask uploadTask = storageRef.putData(
+        imageBytes,
+        SettableMetadata(contentType: mimeType),
+      );
 
+      // Wait for upload to complete
+      final TaskSnapshot snapshot = await uploadTask;
+      final String downloadURL = await snapshot.ref.getDownloadURL();
+
+      // Update Firestore
       await _firestore.collection('users').doc(userId).update({
         'profilePicUrl': downloadURL,
         'lastUpdated': FieldValue.serverTimestamp(),
@@ -146,21 +186,60 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         _profilePicUrl = downloadURL;
         _isUploadingImage = false;
       });
-      
+
       _showSnackBar('Profile picture updated successfully!', false);
-    } catch (e) {
-      setState(() { 
-        _isUploadingImage = false; 
+    } on FirebaseException catch (e) {
+      setState(() {
+        _isUploadingImage = false;
       });
-      _showSnackBar('Error uploading image', true);
+      // Handle specific Firebase errors
+      final errorMessage = _handleFirebaseError(e);
+      _showSnackBar('Upload failed: $errorMessage', true);
+      print('Firebase storage error: ${e.code} - ${e.message}');
+    } catch (e) {
+      setState(() {
+        _isUploadingImage = false;
+      });
+      _showSnackBar('Unexpected error during upload', true);
+      print('Unexpected error: $e');
+    }
+  }
+
+  // Helper function to determine MIME type
+  String _getMimeType(String fileExtension) {
+    switch (fileExtension) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'jpg':
+      case 'jpeg':
+      default:
+        return 'image/jpeg';
+    }
+  }
+
+  // Helper function to handle specific Firebase error codes
+  String _handleFirebaseError(FirebaseException e) {
+    switch (e.code) {
+      case 'storage/unauthorized':
+        return 'You don\'t have permission to upload files.';
+      case 'storage/canceled':
+        return 'Upload was canceled. Please check your connection and try again.';
+      case 'storage/unknown':
+        return 'An unknown error occurred. Please try again.';
+      case 'storage/quota-exceeded':
+        return 'Storage quota exceeded. Please contact support.';
+      default:
+        return 'Upload failed: ${e.message}';
     }
   }
 
   Future<void> _saveUserInfo() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    setState(() { 
-      _isLoading = true; 
+
+    setState(() {
+      _isLoading = true;
     });
 
     try {
@@ -172,25 +251,29 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await _firestore.collection('users')
+      await _firestore
+          .collection('users')
           .doc(_auth.currentUser!.uid)
           .set(userData, SetOptions(merge: true));
 
-      setState(() { 
-        _isEditing = false; 
+      setState(() {
+        _isEditing = false;
       });
-      
+
       _showSnackBar('Profile updated successfully!', false);
-      
-      // Add a slight delay before navigating back to show success message
-      await Future.delayed(Duration(milliseconds: 1500));
-      Navigator.pop(context);
+
+      // Navigate to household_service.dart after successful save
+      await Future.delayed(const Duration(milliseconds: 1500));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HouseholdService()),
+      );
       
     } catch (e) {
       _showSnackBar('Error saving information', true);
     } finally {
-      setState(() { 
-        _isLoading = false; 
+      setState(() {
+        _isLoading = false;
       });
     }
   }
@@ -205,7 +288,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
               color: Colors.white,
               size: 20,
             ),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 message,
@@ -220,7 +303,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         backgroundColor: isError ? _errorColor : _successColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -232,7 +315,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: _cardColor,
-          borderRadius: BorderRadius.only(
+          borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
             topRight: Radius.circular(24),
           ),
@@ -241,7 +324,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Container(
                 width: 40,
                 height: 4,
@@ -250,7 +333,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Text(
                 'Choose Profile Picture',
                 style: GoogleFonts.poppins(
@@ -259,7 +342,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   color: _textColor,
                 ),
               ),
-              SizedBox(height: 24),
+              const SizedBox(height: 24),
               _buildImageSourceOption(
                 icon: Icons.photo_library_rounded,
                 title: 'Choose from Gallery',
@@ -276,14 +359,14 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   _pickImage(ImageSource.camera);
                 },
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Container(
                 width: double.infinity,
-                margin: EdgeInsets.symmetric(horizontal: 20),
+                margin: const EdgeInsets.symmetric(horizontal: 20),
                 child: TextButton(
                   onPressed: () => Navigator.pop(context),
                   style: TextButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -297,7 +380,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   ),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -359,7 +442,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
               ],
             ),
           ),
-          
+
           // Main avatar container
           Container(
             width: 120,
@@ -374,7 +457,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                 BoxShadow(
                   color: Colors.black.withOpacity(0.1),
                   blurRadius: 12,
-                  offset: Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
@@ -382,65 +465,63 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
               child: Stack(
                 children: [
                   // Profile image or default avatar
-                  _profilePicUrl != null
-                      ? Image.network(
-                          _profilePicUrl!,
-                          width: 120,
-                          height: 120,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(_primaryColor),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return _buildDefaultAvatar();
-                          },
-                        )
-                      : _buildDefaultAvatar(),
-                  
-                  // Uploading overlay
-                  if (_isUploadingImage)
-                    Container(
-                      color: Colors.black.withOpacity(0.7),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 25,
-                              height: 25,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(Colors.white),
-                              ),
+                  if (_profilePicUrl != null && !_isUploadingImage)
+                    Image.network(
+                      _profilePicUrl!,
+                      width: 120,
+                      height: 120,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation(_primaryColor),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildDefaultAvatar();
+                      },
+                    )
+                  else if (_isUploadingImage)
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 25,
+                            height: 25,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation(_primaryColor),
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Uploading...',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Uploading...',
+                            style: GoogleFonts.poppins(
+                              color: _textColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ),
+                    )
+                  else
+                    _buildDefaultAvatar(),
                 ],
               ),
             ),
           ),
-          
+
           // Edit icon overlay
           if (_isEditing && !_isUploadingImage)
             Positioned(
@@ -460,7 +541,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                     BoxShadow(
                       color: _primaryColor.withOpacity(0.3),
                       blurRadius: 8,
-                      offset: Offset(0, 2),
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
@@ -505,9 +586,10 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
     TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
     bool enabled = true,
+    String? Function(String?)? validator,
   }) {
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -515,7 +597,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 15,
-            offset: Offset(0, 5),
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -524,17 +606,12 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
         keyboardType: keyboardType,
         maxLines: maxLines,
         enabled: enabled,
+        validator: validator,
         style: GoogleFonts.poppins(
           fontSize: 16,
           fontWeight: FontWeight.w500,
           color: enabled ? _textColor : _lightTextColor,
         ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return 'Please enter your $label';
-          }
-          return null;
-        },
         decoration: InputDecoration(
           labelText: label,
           labelStyle: GoogleFonts.poppins(
@@ -544,7 +621,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
           prefixIcon: Container(
             width: 20,
             height: 20,
-            margin: EdgeInsets.all(16),
+            margin: const EdgeInsets.all(16),
             child: Icon(
               icon,
               color: _primaryColor,
@@ -564,12 +641,15 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
           ),
           filled: true,
           fillColor: Colors.transparent,
-          contentPadding: EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-          suffixIcon: enabled ? null : Icon(
-            Icons.lock_outline_rounded,
-            color: _lightTextColor.withOpacity(0.5),
-            size: 18,
-          ),
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          suffixIcon: enabled
+              ? null
+              : Icon(
+                  Icons.lock_outline_rounded,
+                  color: _lightTextColor.withOpacity(0.5),
+                  size: 18,
+                ),
         ),
       ),
     );
@@ -587,7 +667,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
                     blurRadius: 10,
-                    offset: Offset(0, 4),
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -602,7 +682,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   backgroundColor: _cardColor,
                   foregroundColor: _lightTextColor,
                   elevation: 0,
-                  padding: EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -617,7 +697,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
               ),
             ),
           ),
-          SizedBox(width: 16),
+          const SizedBox(width: 16),
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -631,7 +711,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                   BoxShadow(
                     color: _primaryColor.withOpacity(0.3),
                     blurRadius: 15,
-                    offset: Offset(0, 6),
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -640,7 +720,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
-                  padding: EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -680,7 +760,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
             BoxShadow(
               color: _primaryColor.withOpacity(0.3),
               blurRadius: 15,
-              offset: Offset(0, 6),
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -693,7 +773,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
-            padding: EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -702,7 +782,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.edit_rounded, size: 20, color: Colors.white),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
                 'Edit Profile',
                 style: GoogleFonts.poppins(
@@ -743,7 +823,6 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                 ),
               ),
             ),
-            
             Positioned(
               bottom: 0,
               left: 0,
@@ -792,7 +871,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                                         BoxShadow(
                                           color: Colors.black.withOpacity(0.1),
                                           blurRadius: 10,
-                                          offset: Offset(0, 2),
+                                          offset: const Offset(0, 2),
                                         ),
                                       ],
                                     ),
@@ -803,7 +882,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                                     ),
                                   ),
                                 ),
-                                SizedBox(width: 16),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,9 +895,9 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                                           color: _textColor,
                                         ),
                                       ),
-                                      SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
-                                        _isEditing 
+                                        _isEditing
                                             ? 'Update your personal information'
                                             : 'Manage your profile details',
                                         style: GoogleFonts.poppins(
@@ -866,7 +945,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                               child: Column(
                                 children: [
                                   _buildProfileAvatar(),
-                                  SizedBox(height: 12),
+                                  const SizedBox(height: 12),
                                   if (_isEditing)
                                     Text(
                                       'Tap to change profile picture',
@@ -884,15 +963,15 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
 
                         // Form Content
                         SizedBox(height: 40 + _slideAnimation.value),
-                        
                         if (_isLoading && !_isDataLoaded)
                           Center(
                             child: Column(
                               children: [
                                 CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation(_primaryColor),
+                                  valueColor:
+                                      AlwaysStoppedAnimation(_primaryColor),
                                 ),
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Text(
                                   'Loading your profile...',
                                   style: GoogleFonts.poppins(
@@ -916,6 +995,12 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                                       label: 'Full Name',
                                       icon: Icons.person_outline_rounded,
                                       enabled: _isEditing,
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please enter your full name';
+                                        }
+                                        return null;
+                                      },
                                     ),
                                     _buildTextField(
                                       controller: emailController,
@@ -930,6 +1015,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                                       icon: Icons.phone_rounded,
                                       keyboardType: TextInputType.phone,
                                       enabled: _isEditing,
+                                      validator: _validatePhoneNumber, // Added validator
                                     ),
                                     _buildTextField(
                                       controller: addressController,
@@ -937,6 +1023,12 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                                       icon: Icons.home_rounded,
                                       maxLines: 2,
                                       enabled: _isEditing,
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please enter your address';
+                                        }
+                                        return null;
+                                      },
                                     ),
                                   ],
                                 ),
@@ -953,7 +1045,7 @@ class _UserInfoPageState extends State<UserInfoPage> with SingleTickerProviderSt
                             child: _buildActionButton(),
                           ),
                         ),
-                        SizedBox(height: 40),
+                        const SizedBox(height: 40),
                       ],
                     );
                   },

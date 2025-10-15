@@ -1,12 +1,11 @@
 import 'dart:async';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:io';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'inventory_edit_page.dart';
 
@@ -133,7 +132,8 @@ class _AddItemPageState extends State<AddItemPage> {
         return;
       }
 
-      final inputImage = InputImage.fromFile(File(pickedImage.path));
+      // ✅ FIXED: Use file path instead of File object
+      final inputImage = InputImage.fromFilePath(pickedImage.path);
       final barcodes = await _barcodeScanner.processImage(inputImage);
 
       if (barcodes.isNotEmpty) {
@@ -152,6 +152,14 @@ class _AddItemPageState extends State<AddItemPage> {
           ),
         );
       }
+    } on PlatformException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Camera error: ${e.message}'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -168,7 +176,7 @@ class _AddItemPageState extends State<AddItemPage> {
     }
   }
 
-  // ✅ ENHANCED: Better caching with timestamp checking
+  // ✅ ENHANCED: Better caching with safe timestamp handling
   Future<void> _checkBarcodeInFirestore(String barcode) async {
     if (widget.isReadOnly) return;
     
@@ -180,13 +188,20 @@ class _AddItemPageState extends State<AddItemPage> {
 
       if (productDoc.exists) {
         final productData = productDoc.data()!;
-        final Timestamp? lastUpdated = productData['lastUpdated'] as Timestamp?;
+        final dynamic lastUpdatedData = productData['lastUpdated'];
+        
+        // ✅ SAFE TIMESTAMP HANDLING
+        DateTime? lastUpdated;
+        if (lastUpdatedData is Timestamp) {
+          lastUpdated = lastUpdatedData.toDate();
+        } else if (lastUpdatedData is DateTime) {
+          lastUpdated = lastUpdatedData;
+        }
+        
         final DateTime now = DateTime.now();
         
-        // ✅ Check if cache is fresh (less than 30 days old)
         if (lastUpdated != null) {
-          final DateTime updateTime = lastUpdated.toDate();
-          final Duration difference = now.difference(updateTime);
+          final Duration difference = now.difference(lastUpdated);
           
           if (difference.inDays < 30) {
             // ✅ Use cached data (fresh)
@@ -243,7 +258,15 @@ class _AddItemPageState extends State<AddItemPage> {
           // ✅ Product found in OpenFoodFacts
           final productData = _parseOpenFoodFactsData(data['product'], barcode);
           await _saveProductToFirestore(barcode, productData);
-          _showProductDetails(productData, barcode);
+          
+          // ✅ FIXED: Read the saved document to get real timestamps
+          final savedDoc = await _firestore.collection('products').doc(barcode).get();
+          if (savedDoc.exists) {
+            final savedData = savedDoc.data()!;
+            _showProductDetails(savedData, barcode);
+          } else {
+            _showProductDetails(productData, barcode);
+          }
           
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -397,14 +420,14 @@ class _AddItemPageState extends State<AddItemPage> {
                         topLeft: Radius.circular(20),
                         topRight: Radius.circular(20),
                       ),
-                      image: product['imageUrl'] != null && product['imageUrl'].isNotEmpty
+                      image: product['imageUrl'] != null && product['imageUrl'].toString().isNotEmpty
                           ? DecorationImage(
                               image: NetworkImage(product['imageUrl'].toString()),
                               fit: BoxFit.cover,
                             )
                           : null,
                     ),
-                    child: product['imageUrl'] == null || product['imageUrl'].isEmpty
+                    child: product['imageUrl'] == null || product['imageUrl'].toString().isEmpty
                         ? Center(
                             child: Icon(
                               Icons.inventory_2,
@@ -451,15 +474,16 @@ class _AddItemPageState extends State<AddItemPage> {
                         SizedBox(height: 4),
                         Row(
                           children: [
-                            if (product['nutritionGrade'] != null && product['nutritionGrade'].isNotEmpty)
+                            // ✅ FIXED: Type-safe nutrition grade check
+                            if (product['nutritionGrade'] is String && (product['nutritionGrade'] as String).isNotEmpty)
                               Container(
                                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: _getNutritionGradeColor(product['nutritionGrade']),
+                                  color: _getNutritionGradeColor(product['nutritionGrade'] as String),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  'Nutri-Score: ${product['nutritionGrade'].toUpperCase()}',
+                                  'Nutri-Score: ${(product['nutritionGrade'] as String).toUpperCase()}',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
@@ -528,30 +552,30 @@ class _AddItemPageState extends State<AddItemPage> {
                   children: [
                     _buildDetailRow(
                       'Brand',
-                      product['brand']?.toString() ?? 'Not specified',
+                      product['brand'] ?? 'Not specified',
                       Icons.business,
                     ),
                     SizedBox(height: 12),
                     _buildDetailRow(
                       'Category',
-                      product['category']?.toString() ?? 'Uncategorized',
+                      product['category'] ?? 'Uncategorized',
                       Icons.category,
                     ),
                     SizedBox(height: 12),
                     _buildDetailRow(
                       'Quantity',
-                      product['quantity']?.toString() ?? 'N/A',
+                      product['quantity'] ?? 'N/A',
                       Icons.scale,
                     ),
                     SizedBox(height: 12),
-                    if (product['description'] != null && product['description'].isNotEmpty)
+                    if (product['description'] != null && product['description'].toString().isNotEmpty)
                       _buildDetailRow(
                         'Description',
                         product['description'].toString(),
                         Icons.description,
                       ),
                     SizedBox(height: 12),
-                    if (product['ingredients'] != null && product['ingredients'].isNotEmpty)
+                    if (product['ingredients'] != null && product['ingredients'].toString().isNotEmpty)
                       _buildDetailRow(
                         'Ingredients',
                         product['ingredients'].toString().length > 100 
@@ -742,7 +766,6 @@ class _AddItemPageState extends State<AddItemPage> {
         throw Exception('Household does not exist');
       }
 
-      // ✅ VALIDATE CATEGORY: Ensure it's one of the fixed categories
       String finalCategory = product['category'] ?? 'Other';
       if (!_fixedCategories.contains(finalCategory)) {
         finalCategory = 'Other';
@@ -753,7 +776,7 @@ class _AddItemPageState extends State<AddItemPage> {
         'barcode': barcode,
         'productRef': _firestore.collection('products').doc(barcode),
         'name': product['name'] ?? 'Unknown Product',
-        'category': finalCategory, // ✅ guaranteed safe category
+        'category': finalCategory, 
         'brand': product['brand'] ?? 'Unknown Brand',
         'quantity': 1, // Default quantity
         'minStockLevel': 1,
@@ -784,8 +807,10 @@ class _AddItemPageState extends State<AddItemPage> {
         throw Exception('Failed to create inventory item');
       }
 
-      // Close the product details dialog
-      Navigator.pop(context);
+      // ✅ FIXED: Safe dialog closing
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -850,7 +875,10 @@ class _AddItemPageState extends State<AddItemPage> {
     }
   }
 
-  Widget _buildDetailRow(String label, String value, IconData icon) {
+  // ✅ FIXED: Type-safe detail row builder
+  Widget _buildDetailRow(String label, dynamic value, IconData icon) {
+    final displayValue = value?.toString() ?? 'N/A';
+    
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -874,7 +902,7 @@ class _AddItemPageState extends State<AddItemPage> {
               ),
               SizedBox(height: 4),
               Text(
-                value,
+                displayValue,
                 style: TextStyle(
                   fontSize: 16,
                   color: textColor,

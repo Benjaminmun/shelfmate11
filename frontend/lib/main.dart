@@ -1,12 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Add import for shared_preferences
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/household_service.dart';
 import 'pages/signup_page.dart';
-import 'pages/user_info_page.dart'; // Assuming you have a UserInfoPage
+import 'pages/user_info_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -157,11 +157,21 @@ class AuthWrapper extends StatelessWidget {
 
   Future<bool> _isUserInfoCompleted(String userId) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool('userInfoCompleted_$userId') ?? false;
+      final doc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      // Check if the document exists and has the required fields
+      if (doc.exists) {
+        final data = doc.data();
+        // Check if the user has completed their profile (has phone and address)
+        return data != null && 
+               data['phone'] != null && 
+               data['phone'].toString().isNotEmpty &&
+               data['address'] != null &&
+               data['address'].toString().isNotEmpty;
+      }
+      return false;
     } catch (e) {
       print("Error checking user info completion: $e");
-      return false; // default to false if there's an error
+      return false;
     }
   }
 }
