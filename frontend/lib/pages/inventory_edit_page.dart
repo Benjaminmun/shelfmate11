@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import 'inventory_item_model.dart';
 import '../services/inventory_service.dart';
@@ -26,6 +29,7 @@ class InventoryEditPage extends StatefulWidget {
 
 class _InventoryEditPageState extends State<InventoryEditPage> with SingleTickerProviderStateMixin {
   final InventoryService _inventoryService = InventoryService();
+  final ImagePicker _imagePicker = ImagePicker();
   final _formKey = GlobalKey<FormState>();
   final List<String> _categories = [
     'Food',
@@ -46,7 +50,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
   late TextEditingController _supplierController;
   late TextEditingController _barcodeController;
   late TextEditingController _minStockLevelController;
-  late TextEditingController _imageUrlController;
 
   DateTime? _purchaseDate;
   DateTime? _expiryDate;
@@ -56,6 +59,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
+  // Image handling
+  XFile? _pickedImage;
+  String? _localImagePath;
 
   // Enhanced Color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
@@ -118,10 +125,12 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     _supplierController = TextEditingController(text: widget.item?.supplier ?? '');
     _barcodeController = TextEditingController(text: widget.item?.barcode ?? widget.barcode ?? '');
     _minStockLevelController = TextEditingController(text: widget.item?.minStockLevel?.toString() ?? '1');
-    _imageUrlController = TextEditingController(text: widget.item?.imageUrl ?? '');
     
     _purchaseDate = widget.item?.purchaseDate;
     _expiryDate = widget.item?.expiryDate;
+
+    // Initialize image from existing item
+    _localImagePath = widget.item?.localImagePath;
 
     _animationController.forward();
   }
@@ -142,13 +151,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     _supplierController.dispose();
     _barcodeController.dispose();
     _minStockLevelController.dispose();
-    _imageUrlController.dispose();
     super.dispose();
   }
 
   Future<void> _saveItem() async {
     if (!_formKey.currentState!.validate()) {
-      // Animate to first error
       _showValidationError();
       return;
     }
@@ -171,7 +178,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
         supplier: _supplierController.text.isNotEmpty ? _supplierController.text : null,
         barcode: _barcodeController.text.isNotEmpty ? _barcodeController.text : null,
         minStockLevel: _minStockLevelController.text.isNotEmpty ? int.parse(_minStockLevelController.text) : null,
-        imageUrl: _imageUrlController.text.isNotEmpty ? _imageUrlController.text : null,
+        imageUrl: widget.item?.imageUrl, // Keep existing image URL if any
+        localImagePath: _localImagePath, // Save local image path
         createdAt: widget.item?.createdAt ?? DateTime.now(),
       );
 
@@ -372,9 +380,304 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     }
   }
 
+  Future<void> _pickImageFromGallery() async {
+    if (_isReadOnly) return;
+
+    try {
+      // Request permission
+      final status = await Permission.photos.request();
+      if (!status.isGranted) {
+        _showErrorSnackBar('Gallery permission is required to pick images');
+        return;
+      }
+
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        setState(() {
+          _pickedImage = image;
+          _localImagePath = image.path;
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error picking image: $e');
+    }
+  }
+
+  Future<void> _takePhotoWithCamera() async {
+    if (_isReadOnly) return;
+
+    try {
+      // Request permission
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        _showErrorSnackBar('Camera permission is required to take photos');
+        return;
+      }
+
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        setState(() {
+          _pickedImage = image;
+          _localImagePath = image.path;
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error taking photo: $e');
+    }
+  }
+
+  void _removeImage() {
+    if (_isReadOnly) return;
+
+    setState(() {
+      _pickedImage = null;
+      _localImagePath = null;
+    });
+  }
+
+  void _showImageSourceDialog() {
+    if (_isReadOnly) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: Text(
+                  'Choose Image Source',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_library, color: primaryColor),
+                title: Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromGallery();
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_camera, color: primaryColor),
+                title: Text('Take a Photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _takePhotoWithCamera();
+                },
+              ),
+              SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Item Image',
+          style: TextStyle(
+            fontSize: 14,
+            color: _isReadOnly ? disabledColor : lightTextColor,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        SizedBox(height: 12),
+        
+        if (_localImagePath != null || widget.item?.imageUrl != null)
+          _buildImagePreview()
+        else
+          _buildImagePlaceholder(),
+          
+        if (_localImagePath != null || widget.item?.imageUrl != null)
+          SizedBox(height: 12),
+          
+        if (!_isReadOnly && (_localImagePath != null || widget.item?.imageUrl != null))
+          _buildImageActions(),
+      ],
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return GestureDetector(
+      onTap: _isReadOnly ? null : _showImageSourceDialog,
+      child: Container(
+        width: double.infinity,
+        height: 200,
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isReadOnly ? disabledColor : primaryColor.withOpacity(0.3),
+            width: 2,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.add_photo_alternate_outlined,
+              color: _isReadOnly ? disabledColor : primaryColor,
+              size: 48,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Add Item Image',
+              style: TextStyle(
+                color: _isReadOnly ? disabledColor : primaryColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Tap to choose from gallery or camera',
+              style: TextStyle(
+                color: _isReadOnly ? disabledColor : lightTextColor,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePreview() {
+    return GestureDetector(
+      onTap: _previewImage,
+      child: Container(
+        width: double.infinity,
+        height: 200,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[300]!),
+          color: Colors.grey[50],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: _localImagePath != null
+              ? Image.file(
+                  File(_localImagePath!),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildImageError();
+                  },
+                )
+              : widget.item?.imageUrl != null
+                  ? Image.network(
+                      widget.item!.imageUrl!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                : null,
+                            color: primaryColor,
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildImageError();
+                      },
+                    )
+                  : _buildImageError(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageError() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.broken_image_outlined, color: Colors.grey, size: 48),
+        SizedBox(height: 8),
+        Text('Image not available', style: TextStyle(color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildImageActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _showImageSourceDialog,
+            icon: Icon(Icons.edit, size: 18),
+            label: Text('Change Image'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primaryColor,
+              side: BorderSide(color: primaryColor),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _removeImage,
+            icon: Icon(Icons.delete_outline, size: 18),
+            label: Text('Remove'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: errorColor,
+              side: BorderSide(color: errorColor),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _previewImage() {
-    final imageUrl = _imageUrlController.text.trim();
-    if (imageUrl.isEmpty) return;
+    if (_localImagePath == null && widget.item?.imageUrl == null) return;
 
     showDialog(
       context: context,
@@ -425,74 +728,47 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: Image.network(
-                          imageUrl,
-                          fit: BoxFit.contain,
-                          loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                    : null,
-                                color: primaryColor,
-                              ),
-                            );
-                          },
-                          errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
-                            return Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.error_outline, color: errorColor, size: 64),
-                                SizedBox(height: 16),
-                                Text('Failed to load image', style: TextStyle(color: errorColor, fontSize: 16)),
-                                SizedBox(height: 8),
-                                Text('Please check the URL', style: TextStyle(color: lightTextColor)),
-                              ],
-                            );
-                          },
-                        ),
+                        child: _localImagePath != null
+                            ? Image.file(
+                                File(_localImagePath!),
+                                fit: BoxFit.contain,
+                              )
+                            : widget.item?.imageUrl != null
+                                ? Image.network(
+                                    widget.item!.imageUrl!,
+                                    fit: BoxFit.contain,
+                                    loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Center(
+                                        child: CircularProgressIndicator(
+                                          value: loadingProgress.expectedTotalBytes != null
+                                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                              : null,
+                                          color: primaryColor,
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                                      return _buildImageError();
+                                    },
+                                  )
+                                : _buildImageError(),
                       ),
                     ),
                   ),
                 ),
                 Padding(
                   padding: EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      if (!_isReadOnly)
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              setState(() {
-                                _imageUrlController.text = '';
-                              });
-                              Navigator.of(context).pop();
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: errorColor,
-                              side: BorderSide(color: errorColor),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              padding: EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: Text('Remove Image'),
-                          ),
-                        ),
-                      if (!_isReadOnly) SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            elevation: 2,
-                          ),
-                          child: Text('Close'),
-                        ),
-                      ),
-                    ],
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                      elevation: 2,
+                    ),
+                    child: Text('Close'),
                   ),
                 ),
               ],
@@ -590,188 +866,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _isLoading
-                ? _buildLoadingState()
-                : GestureDetector(
-                    onTap: () => FocusScope.of(context).unfocus(),
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.all(20),
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: SlideTransition(
-                          position: _slideAnimation,
-                          child: Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionCard(
-                                  title: 'Basic Information',
-                                  icon: Icons.inventory_2_outlined,
-                                  children: [
-                                    _buildTextFieldWithLabel(
-                                      label: 'Item Name *',
-                                      controller: _nameController,
-                                      icon: Icons.label_outline,
-                                      focusNode: _nameFocus,
-                                      validator: (value) {
-                                        if (value == null || value.isEmpty) {
-                                          return 'Please enter an item name';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    SizedBox(height: 20),
-                                    _buildCategoryField(),
-                                    SizedBox(height: 20),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildTextFieldWithLabel(
-                                            label: 'Quantity *',
-                                            controller: _quantityController,
-                                            icon: Icons.format_list_numbered,
-                                            focusNode: _quantityFocus,
-                                            isQuantity: true,
-                                            validator: (value) {
-                                              if (value == null || value.isEmpty) {
-                                                return 'Please enter quantity';
-                                              }
-                                              if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                                                return 'Please enter valid quantity';
-                                              }
-                                              return null;
-                                            },
-                                          ),
-                                        ),
-                                        SizedBox(width: 16),
-                                        Expanded(
-                                          child: _buildTextFieldWithLabel(
-                                            label: 'Price *',
-                                            controller: _priceController,
-                                            icon: Icons.attach_money,
-                                            focusNode: _priceFocus,
-                                            isPrice: true,
-                                            validator: (value) {
-                                              if (value == null || value.isEmpty) {
-                                                return 'Please enter price';
-                                              }
-                                              if (double.tryParse(value) == null || double.parse(value) < 0) {
-                                                return 'Please enter valid price';
-                                              }
-                                              return null;
-                                            },
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                
-                                SizedBox(height: 20),
-                                
-                                _buildSectionCard(
-                                  title: 'Stock Management',
-                                  icon: Icons.analytics_outlined,
-                                  children: [
-                                    _buildTextFieldWithLabel(
-                                      label: 'Minimum Stock Level *',
-                                      controller: _minStockLevelController,
-                                      icon: Icons.warning_amber,
-                                      validator: (value) {
-                                        if (value == null || value.isEmpty) {
-                                          return 'Please enter minimum stock level';
-                                        }
-                                        if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                                          return 'Please enter valid number';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    SizedBox(height: 20),
-                                    _buildTextFieldWithLabel(
-                                      label: 'Barcode',
-                                      controller: _barcodeController,
-                                      icon: Icons.qr_code,
-                                    ),
-                                  ],
-                                ),
-                                
-                                SizedBox(height: 20),
-                                
-                                _buildSectionCard(
-                                  title: 'Media',
-                                  icon: Icons.photo_library_outlined,
-                                  children: [
-                                    _buildImageUrlField(),
-                                    if (_imageUrlController.text.isNotEmpty) 
-                                      _buildImagePreview(),
-                                  ],
-                                ),
-                                
-                                SizedBox(height: 20),
-                                
-                                _buildSectionCard(
-                                  title: 'Additional Details',
-                                  icon: Icons.description_outlined,
-                                  children: [
-                                    _buildTextFieldWithLabel(
-                                      label: 'Description',
-                                      controller: _descriptionController,
-                                      icon: Icons.notes,
-                                      maxLines: 3,
-                                    ),
-                                    SizedBox(height: 20),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildDateField('Purchase Date', _purchaseDate, false),
-                                        ),
-                                        SizedBox(width: 16),
-                                        Expanded(
-                                          child: _buildDateField('Expiry Date', _expiryDate, true),
-                                        ),
-                                      ],
-                                    ),
-                                    SizedBox(height: 20),
-                                    _buildTextFieldWithLabel(
-                                      label: 'Storage Location',
-                                      controller: _locationController,
-                                      icon: Icons.location_on_outlined,
-                                    ),
-                                    SizedBox(height: 20),
-                                    _buildTextFieldWithLabel(
-                                      label: 'Supplier',
-                                      controller: _supplierController,
-                                      icon: Icons.business_center_outlined,
-                                    ),
-                                  ],
-                                ),
-                                
-                                SizedBox(height: 32),
-                                
-                                if (!_isReadOnly) _buildActionButtons(),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-        ],
       ),
     );
   }
@@ -1186,126 +1280,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     );
   }
 
-  Widget _buildImageUrlField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Image URL',
-          style: TextStyle(
-            fontSize: 14,
-            color: _isReadOnly ? disabledColor : lightTextColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _buildTextField(_imageUrlController, '', Icons.image_outlined, false,
-                  keyboardType: TextInputType.url),
-            ),
-            if (!_isReadOnly && _imageUrlController.text.isNotEmpty)
-              Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Container(
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _previewImage,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    child: Icon(Icons.remove_red_eye_outlined, size: 20),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildImagePreview() {
-    return Padding(
-      padding: EdgeInsets.only(top: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Image Preview:', style: TextStyle(fontSize: 14, color: lightTextColor)),
-          SizedBox(height: 8),
-          GestureDetector(
-            onTap: _previewImage,
-            child: Container(
-              width: double.infinity,
-              height: 200,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey[300]!),
-                color: Colors.grey[50],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(
-                  children: [
-                    Image.network(
-                      _imageUrlController.text,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                : null,
-                            color: primaryColor,
-                          ),
-                        );
-                      },
-                      errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
-                        return Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.broken_image_outlined, color: Colors.grey, size: 48),
-                            SizedBox(height: 8),
-                            Text('Image not available', style: TextStyle(color: Colors.grey)),
-                          ],
-                        );
-                      },
-                    ),
-                    if (!_isReadOnly)
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _imageUrlController.text = '';
-                            });
-                          },
-                          child: Container(
-                            padding: EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.close, color: Colors.white, size: 18),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildActionButtons() {
     return Column(
       children: [
@@ -1484,6 +1458,186 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
           ),
         );
       },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: _isLoading
+                ? _buildLoadingState()
+                : GestureDetector(
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.all(20),
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: SlideTransition(
+                          position: _slideAnimation,
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionCard(
+                                  title: 'Basic Information',
+                                  icon: Icons.inventory_2_outlined,
+                                  children: [
+                                    _buildTextFieldWithLabel(
+                                      label: 'Item Name *',
+                                      controller: _nameController,
+                                      icon: Icons.label_outline,
+                                      focusNode: _nameFocus,
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please enter an item name';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    SizedBox(height: 20),
+                                    _buildCategoryField(),
+                                    SizedBox(height: 20),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildTextFieldWithLabel(
+                                            label: 'Quantity *',
+                                            controller: _quantityController,
+                                            icon: Icons.format_list_numbered,
+                                            focusNode: _quantityFocus,
+                                            isQuantity: true,
+                                            validator: (value) {
+                                              if (value == null || value.isEmpty) {
+                                                return 'Please enter quantity';
+                                              }
+                                              if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                                                return 'Please enter valid quantity';
+                                              }
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                        SizedBox(width: 16),
+                                        Expanded(
+                                          child: _buildTextFieldWithLabel(
+                                            label: 'Price *',
+                                            controller: _priceController,
+                                            icon: Icons.attach_money,
+                                            focusNode: _priceFocus,
+                                            isPrice: true,
+                                            validator: (value) {
+                                              if (value == null || value.isEmpty) {
+                                                return 'Please enter price';
+                                              }
+                                              if (double.tryParse(value) == null || double.parse(value) < 0) {
+                                                return 'Please enter valid price';
+                                              }
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                
+                                SizedBox(height: 20),
+                                
+                                _buildSectionCard(
+                                  title: 'Media',
+                                  icon: Icons.photo_library_outlined,
+                                  children: [
+                                    _buildImageSection(),
+                                  ],
+                                ),
+                                
+                                SizedBox(height: 20),
+                                
+                                _buildSectionCard(
+                                  title: 'Stock Management',
+                                  icon: Icons.analytics_outlined,
+                                  children: [
+                                    _buildTextFieldWithLabel(
+                                      label: 'Minimum Stock Level *',
+                                      controller: _minStockLevelController,
+                                      icon: Icons.warning_amber,
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Please enter minimum stock level';
+                                        }
+                                        if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                                          return 'Please enter valid number';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    SizedBox(height: 20),
+                                    _buildTextFieldWithLabel(
+                                      label: 'Barcode',
+                                      controller: _barcodeController,
+                                      icon: Icons.qr_code,
+                                    ),
+                                  ],
+                                ),
+                                
+                                SizedBox(height: 20),
+                                
+                                _buildSectionCard(
+                                  title: 'Additional Details',
+                                  icon: Icons.description_outlined,
+                                  children: [
+                                    _buildTextFieldWithLabel(
+                                      label: 'Description',
+                                      controller: _descriptionController,
+                                      icon: Icons.notes,
+                                      maxLines: 3,
+                                    ),
+                                    SizedBox(height: 20),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildDateField('Purchase Date', _purchaseDate, false),
+                                        ),
+                                        SizedBox(width: 16),
+                                        Expanded(
+                                          child: _buildDateField('Expiry Date', _expiryDate, true),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 20),
+                                    _buildTextFieldWithLabel(
+                                      label: 'Storage Location',
+                                      controller: _locationController,
+                                      icon: Icons.location_on_outlined,
+                                    ),
+                                    SizedBox(height: 20),
+                                    _buildTextFieldWithLabel(
+                                      label: 'Supplier',
+                                      controller: _supplierController,
+                                      icon: Icons.business_center_outlined,
+                                    ),
+                                  ],
+                                ),
+                                
+                                SizedBox(height: 32),
+                                
+                                if (!_isReadOnly) _buildActionButtons(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

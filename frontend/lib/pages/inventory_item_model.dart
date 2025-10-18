@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
+/// Represents an item stored in the inventory.
 class InventoryItem {
   final String? id;
   final String name;
@@ -12,8 +13,9 @@ class InventoryItem {
   final String? location;
   final String? supplier;
   final String? barcode;
-  final int? minStockLevel; 
+  final int? minStockLevel;
   final String? imageUrl;
+  final String? localImagePath; // ✅ Added for locally stored image support
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String? addedByUserId;
@@ -35,6 +37,7 @@ class InventoryItem {
     this.barcode,
     this.minStockLevel,
     this.imageUrl,
+    this.localImagePath, // ✅ Included in constructor
     required this.createdAt,
     this.updatedAt,
     this.addedByUserId,
@@ -43,6 +46,7 @@ class InventoryItem {
     this.updatedByUserName,
   });
 
+  /// Converts object to Firestore-compatible map
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -57,6 +61,7 @@ class InventoryItem {
       'barcode': barcode,
       'minStockLevel': minStockLevel,
       'imageUrl': imageUrl,
+      'localImagePath': localImagePath, // ✅ Added to map
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'addedByUserId': addedByUserId,
@@ -66,6 +71,7 @@ class InventoryItem {
     };
   }
 
+  /// Converts Firestore document into InventoryItem object
   static InventoryItem fromMap(Map<String, dynamic> map, String id) {
     return InventoryItem(
       id: id,
@@ -74,15 +80,22 @@ class InventoryItem {
       quantity: (map['quantity'] ?? 0).toInt(),
       price: (map['price'] ?? 0.0).toDouble(),
       description: map['description'],
-      purchaseDate: map['purchaseDate']?.toDate(),
-      expiryDate: map['expiryDate']?.toDate(),
+      purchaseDate: map['purchaseDate'] is Timestamp
+          ? (map['purchaseDate'] as Timestamp).toDate()
+          : map['purchaseDate'],
+      expiryDate: map['expiryDate'] is Timestamp
+          ? (map['expiryDate'] as Timestamp).toDate()
+          : map['expiryDate'],
       location: map['location'],
       supplier: map['supplier'],
       barcode: map['barcode'],
-      minStockLevel: map['minStockLevel']?.toDouble()?.toInt(), // Cast num? to int?
+      minStockLevel: map['minStockLevel']?.toInt(),
       imageUrl: map['imageUrl'],
+      localImagePath: map['localImagePath'], // ✅ Added here
       createdAt: (map['createdAt'] ?? Timestamp.now()).toDate(),
-      updatedAt: map['updatedAt']?.toDate(),
+      updatedAt: map['updatedAt'] is Timestamp
+          ? (map['updatedAt'] as Timestamp).toDate()
+          : map['updatedAt'],
       addedByUserId: map['addedByUserId'],
       addedByUserName: map['addedByUserName'],
       updatedByUserId: map['updatedByUserId'],
@@ -90,6 +103,7 @@ class InventoryItem {
     );
   }
 
+  /// Copy existing item and change only selected fields
   InventoryItem copyWith({
     String? id,
     String? name,
@@ -102,8 +116,9 @@ class InventoryItem {
     String? location,
     String? supplier,
     String? barcode,
-    int? minStockLevel, // Now it expects int? directly
+    int? minStockLevel,
     String? imageUrl,
+    String? localImagePath, // ✅ Added
     DateTime? createdAt,
     DateTime? updatedAt,
     String? addedByUserId,
@@ -123,8 +138,9 @@ class InventoryItem {
       location: location ?? this.location,
       supplier: supplier ?? this.supplier,
       barcode: barcode ?? this.barcode,
-      minStockLevel: minStockLevel ?? this.minStockLevel, // minStockLevel is already int?
+      minStockLevel: minStockLevel ?? this.minStockLevel,
       imageUrl: imageUrl ?? this.imageUrl,
+      localImagePath: localImagePath ?? this.localImagePath, // ✅ Added
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       addedByUserId: addedByUserId ?? this.addedByUserId,
@@ -135,123 +151,97 @@ class InventoryItem {
   }
 }
 
-class ConsumptionPattern {
-  final String itemId;
-  final String householdId;
-  final double averageDailyUsage;
-  final int usageFrequency; // times used per week
-  final DateTime lastUsed;
-  final DateTime lastRestocked;
-  final int typicalRestockQuantity;
-  final List<UsageRecord> usageHistory;
-
-  ConsumptionPattern({
-    required this.itemId,
-    required this.householdId,
-    required this.averageDailyUsage,
-    required this.usageFrequency,
-    required this.lastUsed,
-    required this.lastRestocked,
-    required this.typicalRestockQuantity,
-    required this.usageHistory,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'itemId': itemId,
-      'householdId': householdId,
-      'averageDailyUsage': averageDailyUsage,
-      'usageFrequency': usageFrequency,
-      'lastUsed': lastUsed.millisecondsSinceEpoch,
-      'lastRestocked': lastRestocked.millisecondsSinceEpoch,
-      'typicalRestockQuantity': typicalRestockQuantity,
-      'usageHistory': usageHistory.map((record) => record.toMap()).toList(),
-    };
-  }
-
-  static ConsumptionPattern fromMap(Map<String, dynamic> map) {
-    return ConsumptionPattern(
-      itemId: map['itemId'],
-      householdId: map['householdId'],
-      averageDailyUsage: map['averageDailyUsage'],
-      usageFrequency: map['usageFrequency'],
-      lastUsed: DateTime.fromMillisecondsSinceEpoch(map['lastUsed']),
-      lastRestocked: DateTime.fromMillisecondsSinceEpoch(map['lastRestocked']),
-      typicalRestockQuantity: map['typicalRestockQuantity'],
-      usageHistory: List<UsageRecord>.from(
-          map['usageHistory'].map((x) => UsageRecord.fromMap(x))),
-    );
-  }
-}
-
+/// Represents a usage record for a specific inventory item.
 class UsageRecord {
-  final DateTime timestamp;
-  final int quantityChange;
-  final String type; // 'used', 'restocked', 'discarded'
-  final String? notes;
+  final DateTime date;
+  final int amountUsed;
 
   UsageRecord({
-    required this.timestamp,
-    required this.quantityChange,
-    required this.type,
-    this.notes,
+    required this.date,
+    required this.amountUsed,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'timestamp': timestamp.millisecondsSinceEpoch,
-      'quantityChange': quantityChange,
-      'type': type,
-      'notes': notes,
+      'date': date,
+      'amountUsed': amountUsed,
     };
   }
 
   static UsageRecord fromMap(Map<String, dynamic> map) {
     return UsageRecord(
-      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp']),
-      quantityChange: map['quantityChange'],
-      type: map['type'],
-      notes: map['notes'],
+      date: map['date'] is Timestamp
+          ? (map['date'] as Timestamp).toDate()
+          : DateTime.parse(map['date']),
+      amountUsed: (map['amountUsed'] ?? 0).toInt(),
     );
   }
 }
 
-class PredictionResult {
-  final String itemId;
-  final DateTime predictedDepletionDate;
-  final double confidenceScore;
-  final int daysUntilEmpty;
-  final String recommendation;
-  final DateTime calculatedAt;
+/// Represents the pattern of consumption for predictive analysis.
+class ConsumptionPattern {
+  final double averageDailyUse;
+  final double usageVariance;
+  final DateTime lastUsedDate;
+  final List<UsageRecord> usageHistory;
 
-  PredictionResult({
-    required this.itemId,
-    required this.predictedDepletionDate,
-    required this.confidenceScore,
-    required this.daysUntilEmpty,
-    required this.recommendation,
-    required this.calculatedAt,
+  ConsumptionPattern({
+    required this.averageDailyUse,
+    required this.usageVariance,
+    required this.lastUsedDate,
+    required this.usageHistory,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'itemId': itemId,
-      'predictedDepletionDate': predictedDepletionDate.millisecondsSinceEpoch,
-      'confidenceScore': confidenceScore,
-      'daysUntilEmpty': daysUntilEmpty,
+      'averageDailyUse': averageDailyUse,
+      'usageVariance': usageVariance,
+      'lastUsedDate': lastUsedDate,
+      'usageHistory': usageHistory.map((u) => u.toMap()).toList(),
+    };
+  }
+
+  static ConsumptionPattern fromMap(Map<String, dynamic> map) {
+    return ConsumptionPattern(
+      averageDailyUse: (map['averageDailyUse'] ?? 0.0).toDouble(),
+      usageVariance: (map['usageVariance'] ?? 0.0).toDouble(),
+      lastUsedDate: map['lastUsedDate'] is Timestamp
+          ? (map['lastUsedDate'] as Timestamp).toDate()
+          : DateTime.parse(map['lastUsedDate']),
+      usageHistory: (map['usageHistory'] as List<dynamic>? ?? [])
+          .map((u) => UsageRecord.fromMap(Map<String, dynamic>.from(u)))
+          .toList(),
+    );
+  }
+}
+
+/// Represents a predicted result such as restock date or shortage alert.
+class PredictionResult {
+  final DateTime predictedRestockDate;
+  final bool isLowStock;
+  final String recommendation;
+
+  PredictionResult({
+    required this.predictedRestockDate,
+    required this.isLowStock,
+    required this.recommendation,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'predictedRestockDate': predictedRestockDate,
+      'isLowStock': isLowStock,
       'recommendation': recommendation,
-      'calculatedAt': calculatedAt.millisecondsSinceEpoch,
     };
   }
 
   static PredictionResult fromMap(Map<String, dynamic> map) {
     return PredictionResult(
-      itemId: map['itemId'],
-      predictedDepletionDate: DateTime.fromMillisecondsSinceEpoch(map['predictedDepletionDate']),
-      confidenceScore: map['confidenceScore'],
-      daysUntilEmpty: map['daysUntilEmpty'],
-      recommendation: map['recommendation'],
-      calculatedAt: DateTime.fromMillisecondsSinceEpoch(map['calculatedAt']),
+      predictedRestockDate: map['predictedRestockDate'] is Timestamp
+          ? (map['predictedRestockDate'] as Timestamp).toDate()
+          : DateTime.parse(map['predictedRestockDate']),
+      isLowStock: map['isLowStock'] ?? false,
+      recommendation: map['recommendation'] ?? '',
     );
   }
 }

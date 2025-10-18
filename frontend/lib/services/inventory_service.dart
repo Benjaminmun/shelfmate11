@@ -1,12 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../pages/inventory_item_model.dart';
+import '../models/inventory_audit_log.dart';
+import '../pages/inventory_item_model.dart' show InventoryItem;
 
 class InventoryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
   bool _isReadOnly = false;
+  
+  static Future<void> enableOfflineSync() async {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  }
   
   void setReadOnly(bool readOnly) {
     _isReadOnly = readOnly;
@@ -40,6 +48,61 @@ class InventoryService {
       }
     }
     return null;
+  }
+
+  // ========== AUDIT LOGGING METHODS ==========
+  
+  Future<void> _logInventoryChange(
+    String householdId,
+    String itemId,
+    String fieldName,
+    dynamic oldValue,
+    dynamic newValue,
+    String updatedByUserName,
+  ) async {
+    final userId = _getUserId();
+    if (userId == null) {
+      print("Error: User ID is null");
+      return;
+    }
+
+    // Fetch item details for the audit log
+    String itemName = 'Unknown Item';
+    String itemImageUrl = '';
+    
+    try {
+      final itemDoc = await _getInventoryCollection(householdId).doc(itemId).get();
+      if (itemDoc.exists) {
+        final itemData = itemDoc.data() as Map<String, dynamic>?;
+        itemName = itemData?['name'] ?? 'Unknown Item';
+        itemImageUrl = itemData?['imageUrl'] ?? '';
+      }
+    } catch (e) {
+      print('Error fetching item details for audit log: $e');
+    }
+
+    final auditLog = InventoryAuditLog(
+      itemId: itemId,
+      itemName: itemName,
+      itemImageUrl: itemImageUrl,
+      fieldName: fieldName,
+      oldValue: oldValue,
+      newValue: newValue,
+      timestamp: DateTime.now(),
+      updatedByUserId: userId,
+      updatedByUserName: updatedByUserName,
+    );
+
+    try {
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('inventory_audit_logs')
+          .add(auditLog.toMap());
+      print('Inventory change logged successfully');
+    } catch (e) {
+      print('Error logging inventory change: $e');
+    }
   }
 
   // ========== PRODUCTS COLLECTION (GLOBAL) ==========
@@ -125,6 +188,19 @@ class InventoryService {
     
     var collection = _getInventoryCollection(householdId);
     var docRef = await collection.add(itemData);
+    
+    // Log the addition
+    if (addedByUserName != null) {
+      await _logInventoryChange(
+        householdId,
+        docRef.id,
+        'created',
+        null,
+        item.name,
+        addedByUserName,
+      );
+    }
+    
     return docRef.id;
   }
 
@@ -134,18 +210,40 @@ class InventoryService {
     if (householdId.isEmpty || item.id == null || item.id!.isEmpty) {
       throw Exception('Invalid parameters for update');
     }
+
+    // Fetch existing item before updating
+    var docRef = _getInventoryCollection(householdId).doc(item.id);
+    final existingItem = await docRef.get();
     
-    final String? updatedByUserName = await _getUserDisplayName();
-    
-    final Map<String, dynamic> updateData = item.toMap();
-    if (updatedByUserName != null) {
-      updateData['updatedByUserName'] = updatedByUserName;
+    if (existingItem.exists) {
+      final Map<String, dynamic> existingData = existingItem.data() as Map<String, dynamic>;
+
+      // Prepare updated data
+      final Map<String, dynamic> updateData = item.toMap();
+      updateData['updatedByUserId'] = _getUserId();
+      updateData['updatedAt'] = FieldValue.serverTimestamp();
+
+      // Get user display name for audit logging
+      final String? updatedByUserName = await _getUserDisplayName();
+
+      // If there are any changes, log them
+      for (var field in updateData.keys) {
+        if (field != 'updatedByUserId' && field != 'updatedAt' && 
+            existingData[field] != updateData[field]) {
+          await _logInventoryChange(
+            householdId,
+            item.id!,
+            field,
+            existingData[field], // old value
+            updateData[field],    // new value
+            updatedByUserName ?? 'Unknown',
+          );
+        }
+      }
+
+      // Finally, update the item in the Firestore collection
+      await docRef.update(updateData);
     }
-    updateData['updatedByUserId'] = _getUserId();
-    updateData['updatedAt'] = FieldValue.serverTimestamp();
-    
-    var collection = _getInventoryCollection(householdId);
-    return collection.doc(item.id).update(updateData);
   }
 
   Future<void> deleteItem(String householdId, String itemId) async {
@@ -154,10 +252,76 @@ class InventoryService {
     if (householdId.isEmpty || itemId.isEmpty) {
       throw Exception('Household ID or Item ID cannot be empty');
     }
+    
+    // Fetch item details before deletion for logging
+    String itemName = 'Unknown Item';
+    try {
+      final itemDoc = await _getInventoryCollection(householdId).doc(itemId).get();
+      if (itemDoc.exists) {
+        final itemData = itemDoc.data() as Map<String, dynamic>?;
+        itemName = itemData?['name'] ?? 'Unknown Item';
+      }
+    } catch (e) {
+      print('Error fetching item details for deletion log: $e');
+    }
+    
+    // Log the deletion
+    final String? updatedByUserName = await _getUserDisplayName();
+    await _logInventoryChange(
+      householdId,
+      itemId,
+      'deleted',
+      itemName, // old value - item existed
+      null,     // new value - item deleted
+      updatedByUserName ?? 'Unknown',
+    );
+    
     var collection = _getInventoryCollection(householdId);
     return collection.doc(itemId).delete();
   }
 
+  // ========== AUDIT LOG QUERY METHODS ==========
+  
+  Stream<QuerySnapshot> getAuditLogs(String householdId, String itemId) {
+    if (householdId.isEmpty || itemId.isEmpty) {
+      return Stream.error(Exception('Household ID or Item ID cannot be empty'));
+    }
+
+    try {
+      var collection = _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('inventory_audit_logs')
+          .where('itemId', isEqualTo: itemId)
+          .orderBy('timestamp', descending: true);
+
+      return collection.snapshots();
+    } catch (e) {
+      return Stream.error(e);
+    }
+  }
+
+  Stream<QuerySnapshot> getAllAuditLogs(String householdId, {int limit = 50}) {
+    if (householdId.isEmpty) {
+      return Stream.error(Exception('Household ID cannot be empty'));
+    }
+
+    try {
+      var collection = _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('inventory_audit_logs')
+          .orderBy('timestamp', descending: true)
+          .limit(limit);
+
+      return collection.snapshots();
+    } catch (e) {
+      return Stream.error(e);
+    }
+  }
+
+  // ========== EXISTING METHODS ==========
+  
   Stream<QuerySnapshot> getItemsStream(String householdId, {
     String sortField = 'name', 
     bool sortAscending = true
@@ -170,6 +334,25 @@ class InventoryService {
       return collection.orderBy(sortField, descending: !sortAscending).snapshots();
     } catch (e) {
       return Stream.error(e);
+    }
+  }
+
+  // Get AI suggestions for low stock items
+  Future<List<InventoryItem>> getAISuggestions(String householdId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('inventory')
+          .where('quantity', isLessThan: 3)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        return InventoryItem.fromMap(doc.data(), doc.id);
+      }).toList();
+    } catch (e) {
+      print('Error getting AI suggestions: $e');
+      return [];
     }
   }
 
@@ -305,20 +488,41 @@ class InventoryService {
       throw Exception('Household ID or Item ID cannot be empty');
     }
     
-    final String? updatedByUserName = await _getUserDisplayName();
+    // Fetch existing item to get old quantity
+    var docRef = _getInventoryCollection(householdId).doc(itemId);
+    final existingItem = await docRef.get();
     
-    var collection = _getInventoryCollection(householdId);
-    final updateData = {
-      'quantity': newQuantity,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    
-    if (updatedByUserName != null) {
-      updateData['updatedByUserName'] = updatedByUserName;
+    if (existingItem.exists) {
+      final existingData = existingItem.data() as Map<String, dynamic>;
+      final oldQuantity = existingData['quantity'] ?? 0;
+      
+      final String? updatedByUserName = await _getUserDisplayName();
+      
+      var collection = _getInventoryCollection(householdId);
+      final updateData = {
+        'quantity': newQuantity,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedByUserId': _getUserId(),
+      };
+      
+      if (updatedByUserName != null) {
+        updateData['updatedByUserName'] = updatedByUserName;
+      }
+      
+      // Log the quantity change
+      if (oldQuantity != newQuantity) {
+        await _logInventoryChange(
+          householdId,
+          itemId,
+          'quantity',
+          oldQuantity,
+          newQuantity,
+          updatedByUserName ?? 'Unknown',
+        );
+      }
+      
+      return collection.doc(itemId).update(updateData);
     }
-    updateData['updatedByUserId'] = _getUserId() as Object;
-    
-    return collection.doc(itemId).update(updateData);
   }
 
   Stream<QuerySnapshot> getItemsNeedingRestockStream(String householdId, {int threshold = 5}) {
@@ -371,4 +575,3 @@ class InventoryService {
     }
   }
 }
-

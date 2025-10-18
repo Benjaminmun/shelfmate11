@@ -28,11 +28,13 @@ class _UserInfoPageState extends State<UserInfoPage>
   bool _isUploadingImage = false;
   File? _selectedImage;
   String? _profilePicUrl;
+  String? _oldProfilePicUrl; // To track old image for deletion
 
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // Color Scheme
   final Color _primaryColor = const Color(0xFF2D5D7C);
@@ -94,11 +96,12 @@ class _UserInfoPageState extends State<UserInfoPage>
           emailController.text =
               data?['email'] ?? _auth.currentUser!.email ?? '';
           _profilePicUrl = data?['profilePicUrl'];
+          _oldProfilePicUrl = data?['profilePicUrl']; // Store old URL
           _isDataLoaded = true;
         });
       }
     } catch (e) {
-      _showSnackBar('Failed to load user data', true);
+      _showSnackBar('Failed to load user data: ${e.toString()}', true);
     } finally {
       setState(() {
         _isLoading = false;
@@ -141,12 +144,33 @@ class _UserInfoPageState extends State<UserInfoPage>
         await _uploadImageToFirebase();
       }
     } catch (e) {
-      _showSnackBar('Error selecting image', true);
+      _showSnackBar('Error selecting image: ${e.toString()}', true);
       setState(() {
         _isUploadingImage = false;
       });
     }
   }
+
+  Future<void> _deleteOldProfilePicture() async {
+  if (_oldProfilePicUrl == null || _oldProfilePicUrl!.isEmpty) return;
+
+  try {
+    // Decode the encoded URL
+    final Uri uri = Uri.parse(_oldProfilePicUrl!);
+    final String encodedPath = uri.pathSegments.last; // e.g. profile_pictures%2Fuid_123456.jpg
+    final String decodedPath = Uri.decodeComponent(encodedPath); // -> profile_pictures/uid_123456.jpg
+
+    final Reference oldFileRef = _storage.ref().child(decodedPath);
+    await oldFileRef.delete();
+
+    print('✅ Old profile picture deleted successfully.');
+  } catch (e) {
+    print('⚠️ Failed to delete old profile picture: $e');
+  }
+}
+
+
+
 
   Future<void> _uploadImageToFirebase() async {
     if (_selectedImage == null) return;
@@ -161,20 +185,38 @@ class _UserInfoPageState extends State<UserInfoPage>
       final fileExtension = _selectedImage!.path.split('.').last.toLowerCase();
       final mimeType = _getMimeType(fileExtension);
 
+      // Generate unique file name with timestamp
+      final String fileName = '${userId}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+
       // Create a reference to the storage location
-      final Reference storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_pictures/$userId.$fileExtension');
+      final Reference storageRef = _storage.ref().child('profile_pictures/$fileName');
 
       // Upload the bytes with proper metadata
       final UploadTask uploadTask = storageRef.putData(
         imageBytes,
-        SettableMetadata(contentType: mimeType),
+        SettableMetadata(
+          contentType: mimeType,
+          customMetadata: {
+            'uploadedBy': userId,
+            'uploadedAt': DateTime.now().toString(),
+          },
+        ),
       );
+
+      // Listen to upload state changes
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        final double progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        print('Upload progress: ${progress.toStringAsFixed(2)}%');
+      });
 
       // Wait for upload to complete
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadURL = await snapshot.ref.getDownloadURL();
+
+      // Delete old profile picture if it exists
+      if (_oldProfilePicUrl != null && _oldProfilePicUrl!.isNotEmpty) {
+        await _deleteOldProfilePicture();
+      }
 
       // Update Firestore
       await _firestore.collection('users').doc(userId).update({
@@ -184,7 +226,9 @@ class _UserInfoPageState extends State<UserInfoPage>
 
       setState(() {
         _profilePicUrl = downloadURL;
+        _oldProfilePicUrl = downloadURL; // Update old URL to current
         _isUploadingImage = false;
+        _selectedImage = null; // Clear selected image after upload
       });
 
       _showSnackBar('Profile picture updated successfully!', false);
@@ -200,8 +244,34 @@ class _UserInfoPageState extends State<UserInfoPage>
       setState(() {
         _isUploadingImage = false;
       });
-      _showSnackBar('Unexpected error during upload', true);
+      _showSnackBar('Unexpected error during upload: ${e.toString()}', true);
       print('Unexpected error: $e');
+    }
+  }
+
+  Future<void> _removeProfilePicture() async {
+    if (_profilePicUrl == null) return;
+
+    try {
+      final userId = _auth.currentUser!.uid;
+
+      // Delete the current profile picture from storage
+      await _deleteOldProfilePicture();
+
+      // Update Firestore to remove profile picture URL
+      await _firestore.collection('users').doc(userId).update({
+        'profilePicUrl': FieldValue.delete(),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _profilePicUrl = null;
+        _oldProfilePicUrl = null;
+      });
+
+      _showSnackBar('Profile picture removed successfully!', false);
+    } catch (e) {
+      _showSnackBar('Failed to remove profile picture: ${e.toString()}', true);
     }
   }
 
@@ -230,6 +300,10 @@ class _UserInfoPageState extends State<UserInfoPage>
         return 'An unknown error occurred. Please try again.';
       case 'storage/quota-exceeded':
         return 'Storage quota exceeded. Please contact support.';
+      case 'storage/object-not-found':
+        return 'File not found. Please try uploading again.';
+      case 'storage/invalid-argument':
+        return 'Invalid file. Please choose a different image.';
       default:
         return 'Upload failed: ${e.message}';
     }
@@ -244,10 +318,10 @@ class _UserInfoPageState extends State<UserInfoPage>
 
     try {
       final userData = {
-        'fullName': fullNameController.text,
-        'phone': phoneController.text,
-        'address': addressController.text,
-        'email': emailController.text,
+        'fullName': fullNameController.text.trim(),
+        'phone': phoneController.text.trim(),
+        'address': addressController.text.trim(),
+        'email': emailController.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -270,7 +344,7 @@ class _UserInfoPageState extends State<UserInfoPage>
       );
       
     } catch (e) {
-      _showSnackBar('Error saving information', true);
+      _showSnackBar('Error saving information: ${e.toString()}', true);
     } finally {
       setState(() {
         _isLoading = false;
@@ -304,6 +378,13 @@ class _UserInfoPageState extends State<UserInfoPage>
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'Dismiss',
+          textColor: Colors.white,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
       ),
     );
   }
@@ -312,6 +393,7 @@ class _UserInfoPageState extends State<UserInfoPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: _cardColor,
@@ -335,7 +417,7 @@ class _UserInfoPageState extends State<UserInfoPage>
               ),
               const SizedBox(height: 16),
               Text(
-                'Choose Profile Picture',
+                'Profile Picture',
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -343,6 +425,8 @@ class _UserInfoPageState extends State<UserInfoPage>
                 ),
               ),
               const SizedBox(height: 24),
+              
+              // Choose from Gallery
               _buildImageSourceOption(
                 icon: Icons.photo_library_rounded,
                 title: 'Choose from Gallery',
@@ -351,6 +435,8 @@ class _UserInfoPageState extends State<UserInfoPage>
                   _pickImage(ImageSource.gallery);
                 },
               ),
+              
+              // Take Photo
               _buildImageSourceOption(
                 icon: Icons.camera_alt_rounded,
                 title: 'Take Photo',
@@ -359,6 +445,19 @@ class _UserInfoPageState extends State<UserInfoPage>
                   _pickImage(ImageSource.camera);
                 },
               ),
+              
+              // Remove Photo (only show if there's a current profile picture)
+              if (_profilePicUrl != null && _profilePicUrl!.isNotEmpty)
+                _buildImageSourceOption(
+                  icon: Icons.delete_rounded,
+                  title: 'Remove Photo',
+                  color: _errorColor,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showRemoveConfirmationDialog();
+                  },
+                ),
+              
               const SizedBox(height: 16),
               Container(
                 width: double.infinity,
@@ -388,22 +487,83 @@ class _UserInfoPageState extends State<UserInfoPage>
     );
   }
 
+  void _showRemoveConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: _errorColor),
+              const SizedBox(width: 8),
+              Text(
+                'Remove Photo',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  color: _textColor,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to remove your profile picture?',
+            style: GoogleFonts.poppins(
+              color: _lightTextColor,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.poppins(
+                  color: _lightTextColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _removeProfilePicture();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: _errorColor,
+              ),
+              child: Text(
+                'Remove',
+                style: GoogleFonts.poppins(
+                  color: _errorColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildImageSourceOption({
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    Color? color,
   }) {
+    final optionColor = color ?? _primaryColor;
+    
     return ListTile(
       leading: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: _primaryColor.withOpacity(0.1),
+          color: optionColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
           icon,
-          color: _primaryColor,
+          color: optionColor,
           size: 22,
         ),
       ),
@@ -480,39 +640,41 @@ class _UserInfoPageState extends State<UserInfoPage>
                                     loadingProgress.expectedTotalBytes!
                                 : null,
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation(_primaryColor),
+                            valueColor: AlwaysStoppedAnimation(_primaryColor),
                           ),
                         );
                       },
                       errorBuilder: (context, error, stackTrace) {
+                        print('Error loading profile image: $error');
                         return _buildDefaultAvatar();
                       },
                     )
                   else if (_isUploadingImage)
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 25,
-                            height: 25,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation(_primaryColor),
+                    Container(
+                      color: _backgroundColor,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 25,
+                              height: 25,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(_primaryColor),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Uploading...',
-                            style: GoogleFonts.poppins(
-                              color: _textColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
+                            const SizedBox(height: 8),
+                            Text(
+                              'Uploading...',
+                              style: GoogleFonts.poppins(
+                                color: _textColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     )
                   else
@@ -578,6 +740,9 @@ class _UserInfoPageState extends State<UserInfoPage>
       ),
     );
   }
+
+  // ... Rest of your existing methods (_buildTextField, _buildActionButton, build, etc.)
+  // Keep all the other methods exactly as you have them in your original code
 
   Widget _buildTextField({
     required TextEditingController controller,

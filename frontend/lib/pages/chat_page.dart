@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:frontend/pages/inventory_edit_page.dart';
+import 'package:frontend/pages/inventory_item_model.dart';
 import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:permission_handler/permission_handler.dart';
@@ -24,7 +26,6 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
   bool _isListening = false;
   final ScrollController _scrollController = ScrollController();
   late AnimationController _typingController;
-  late Animation<double> _typingAnimation;
   final FocusNode _messageFocusNode = FocusNode();
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   bool _showQuickActions = true;
@@ -64,12 +65,9 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
       vsync: this,
     )..repeat(reverse: true);
     
-    _typingAnimation = CurvedAnimation(
-      parent: _typingController,
-      curve: Curves.easeInOut,
-    );
     
     _checkConnection();
+    
     
   }
   
@@ -851,6 +849,8 @@ class ChatBubble extends StatelessWidget {
     required this.fontSizeSmall,
     required this.fontSizeXSmall,
   }) : super(key: key);
+  
+  Color? get warningColor => null;
 
   String _formatTimestamp(DateTime dateTime) {
     final now = DateTime.now();
@@ -860,6 +860,340 @@ class ChatBubble extends StatelessWidget {
       return timeago.format(dateTime, locale: 'en');
     } else {
       return DateFormat('MMM d, y • HH:mm').format(dateTime);
+    }
+  }
+
+  // 🆕 Enhanced method to parse and build product cards
+  Widget _buildMessageContent(BuildContext context, String text) {
+    // Regex to detect product blocks in AI responses
+    final productRegex = RegExp(
+      r'\[PRODUCT\](.*?)\[/PRODUCT\]',
+      dotAll: true,
+    );
+
+    final matches = productRegex.allMatches(text);
+
+    // If no product frames found → return normal text message
+    if (matches.isEmpty) {
+      return Text(
+        text,
+        style: TextStyle(
+          color: isUser 
+            ? Colors.white 
+            : (isError ? errorColor : textPrimary),
+          fontSize: fontSizeMedium,
+          fontWeight: isUser ? FontWeight.w500 : FontWeight.w400,
+          height: 1.5,
+          letterSpacing: -0.2,
+        ),
+      );
+    }
+
+    // 🆕 Parse each product block
+    final products = matches.map((m) {
+      final block = m.group(1)!;
+      final name = RegExp(r'name:\s*(.*)').firstMatch(block)?.group(1)?.trim() ?? 'Unknown';
+      final quantity = RegExp(r'quantity:\s*(.*)').firstMatch(block)?.group(1)?.trim() ?? '0';
+      final category = RegExp(r'category:\s*(.*)').firstMatch(block)?.group(1)?.trim() ?? 'Uncategorized';
+      final expiry = RegExp(r'expiry:\s*(.*)').firstMatch(block)?.group(1)?.trim() ?? 'No expiry';
+      final id = RegExp(r'id:\s*(.*)').firstMatch(block)?.group(1)?.trim() ?? '';
+      
+      return {
+        'name': name,
+        'quantity': quantity,
+        'category': category,
+        'expiry': expiry,
+        'id': id,
+      };
+    }).toList();
+
+    // 🆕 Render each product as a clickable framed card
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Display any text before the first product
+        if (text.substring(0, matches.first.start).trim().isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text(
+              text.substring(0, matches.first.start).trim(),
+              style: TextStyle(
+                color: isError ? errorColor : textPrimary,
+                fontSize: fontSizeMedium,
+                fontWeight: FontWeight.w400,
+                height: 1.5,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+        
+        // Render product cards
+        ...products.map((product) {
+          return _buildProductCard(context, product);
+        }).toList(),
+
+        // Display any text after the last product
+        if (text.substring(matches.last.end).trim().isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text(
+              text.substring(matches.last.end).trim(),
+              style: TextStyle(
+                color: isError ? errorColor : textPrimary,
+                fontSize: fontSizeMedium,
+                fontWeight: FontWeight.w400,
+                height: 1.5,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // 🆕 Build individual product card
+  Widget _buildProductCard(BuildContext context, Map<String, String> product) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 8),
+      child: GestureDetector(
+        onTap: () {
+          // Navigate to InventoryEditPage with product details
+          _navigateToEditPage(context, product);
+        },
+        child: AnimatedContainer(
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFFF0F9FF), // Light blue background
+                Color(0xFFE6F3FF),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: primaryColor.withOpacity(0.2),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: primaryColor.withOpacity(0.1),
+                blurRadius: 8,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Product icon/thumbnail
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: primaryColor.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  _getCategoryIcon(product['category'] ?? ''),
+                  color: primaryColor,
+                  size: 24,
+                ),
+              ),
+              
+              SizedBox(width: 16),
+              
+              // Product details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            product['name'] ?? 'Unknown',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: fontSizeMedium,
+                              color: textPrimary,
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: primaryColor.withOpacity(0.6),
+                        ),
+                      ],
+                    ),
+                    
+                    SizedBox(height: 6),
+                    
+                    // Category and quantity row
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            product['category'] ?? 'Uncategorized',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: fontSizeXSmall,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        
+                        SizedBox(width: 8),
+                        
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: accentColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Qty: ${product['quantity']}',
+                            style: TextStyle(
+                              color: accentColor,
+                              fontSize: fontSizeXSmall,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    SizedBox(height: 4),
+                    
+                    // Expiry date with colored indicator
+                    if (product['expiry'] != null && product['expiry'] != 'No expiry')
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_rounded,
+                            size: 12,
+                            color: _getExpiryColor(product['expiry']!),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Expires: ${_formatExpiryDate(product['expiry']!)}',
+                            style: TextStyle(
+                              color: _getExpiryColor(product['expiry']!),
+                              fontSize: fontSizeXSmall,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🆕 Navigate to edit page
+  void _navigateToEditPage(BuildContext context, Map<String, String> product) {
+    // You'll need to pass householdId and householdName from somewhere
+    // For now, we'll use a placeholder - you might want to get these from your app state
+    final householdId = ''; // You'll need to provide this
+    final householdName = 'Your Household'; // You'll need to provide this
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InventoryEditPage(
+          householdId: householdId,
+          householdName: householdName,
+          item: InventoryItem(
+            id: product['id'],
+            name: product['name'] ?? '',
+            category: product['category'] ?? 'Other',
+            quantity: int.tryParse(product['quantity'] ?? '1') ?? 1,
+            price: 0.0, // Provide a default value or fetch it if available
+            createdAt: DateTime.now(), // Provide a default value or fetch it if available
+            expiryDate: product['expiry'] != null && product['expiry'] != 'No expiry'
+                ? DateTime.tryParse(product['expiry']!)
+                : null,
+          ),
+          userRole: 'admin', // You might want to get this from user state
+        ),
+      ),
+    );
+  }
+
+  // 🆕 Helper methods for product cards
+  IconData _getCategoryIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'dairy':
+        return Icons.local_drink_rounded;
+      case 'meat':
+        return Icons.set_meal_rounded;
+      case 'vegetables':
+        return Icons.eco_rounded;
+      case 'fruits':
+        return Icons.apple_rounded;
+      case 'beverages':
+        return Icons.local_cafe_rounded;
+      case 'cleaning supplies':
+        return Icons.cleaning_services_rounded;
+      case 'personal care':
+        return Icons.soap_rounded;
+      case 'medication':
+        return Icons.medical_services_rounded;
+      default:
+        return Icons.inventory_2_rounded;
+    }
+  }
+
+  Color? _getExpiryColor(String expiry) {
+    try {
+      final expiryDate = DateTime.parse(expiry);
+      final now = DateTime.now();
+      final difference = expiryDate.difference(now).inDays;
+      
+      if (difference < 0) return errorColor; // Expired
+      if (difference <= 3) return errorColor; // Expiring in 3 days
+      if (difference <= 7) return warningColor; // Expiring in 7 days
+      return successColor; // Not expiring soon
+    } catch (e) {
+      return textSecondary; // Invalid date
+    }
+  }
+
+  String _formatExpiryDate(String expiry) {
+    try {
+      final date = DateTime.parse(expiry);
+      final now = DateTime.now();
+      final difference = date.difference(now).inDays;
+      
+      if (difference < 0) return 'Expired';
+      if (difference == 0) return 'Today';
+      if (difference == 1) return 'Tomorrow';
+      if (difference <= 7) return 'In $difference days';
+      
+      return DateFormat('MMM d, y').format(date);
+    } catch (e) {
+      return expiry;
     }
   }
 
@@ -935,19 +1269,11 @@ class ChatBubble extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    text,
-                    style: TextStyle(
-                      color: isUser 
-                        ? Colors.white 
-                        : (isError ? errorColor : textPrimary),
-                      fontSize: fontSizeMedium,
-                      fontWeight: isUser ? FontWeight.w500 : FontWeight.w400,
-                      height: 1.5,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
+                  // 🆕 Use the enhanced message content builder
+                  _buildMessageContent(context, text),
+                  
                   SizedBox(height: 8),
+                  
                   Text(
                     _formatTimestamp(timestamp),
                     style: TextStyle(
@@ -988,3 +1314,6 @@ class ChatBubble extends StatelessWidget {
     );
   }
 }
+
+// 🆕 Add success color constant
+const Color successColor = Color(0xFF10B981);

@@ -40,8 +40,12 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   // Search functionality
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  bool _isRefreshing = false;
   bool _showSearchBar = false;
+
+  // State management for households
+  List<Map<String, dynamic>> _households = [];
+  bool _isLoading = true;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -86,6 +90,9 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         _searchQuery = _searchController.text.toLowerCase();
       });
     });
+
+    // Load households initially
+    _loadHouseholds();
   }
 
   @override
@@ -95,6 +102,28 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     _searchControllerAnimation.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  // Load households and manage state
+  Future<void> _loadHouseholds() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      final households = await _controller.getUserHouseholdsWithDetails();
+      setState(() {
+        _households = households;
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+      print('Error loading households: $e');
+    }
   }
 
   // Enhanced method to create household and navigate to dashboard
@@ -141,10 +170,13 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         Navigator.pop(context);
       }
       
-      // If household was created successfully, navigate to dashboard
+      // If household was created successfully, reload households and navigate
       if (result['success'] == true) {
         final householdId = result['householdId'];
         final householdName = result['householdName'];
+        
+        // Reload households to show the new one immediately
+        await _loadHouseholds();
         
         // Navigate to household dashboard (creator)
         _navigateToHouseholdDashboard(householdId, householdName, 'creator');
@@ -227,8 +259,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   // Refresh households with animation
   Future<void> _refreshHouseholds() async {
     setState(() => _isRefreshing = true);
-    await Future.delayed(const Duration(milliseconds: 1500));
-    setState(() => _isRefreshing = false);
+    await _loadHouseholds();
   }
 
   // Toggle search bar with animation
@@ -920,12 +951,22 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     );
   }
 
+  // Delete household with immediate UI update
   Future<void> _deleteHousehold(BuildContext context, String householdId) async {
     try {
+      // Remove from local state immediately for responsive UI
+      setState(() {
+        _households.removeWhere((household) => household['id'] == householdId);
+      });
+      
       await _controller.deleteHousehold(householdId);
       _showSuccessSnackbar(context, 'Household deleted successfully');
-      setState(() {});
+      
+      // Reload to ensure consistency with backend
+      await _loadHouseholds();
     } catch (e) {
+      // If error, reload to restore correct state
+      await _loadHouseholds();
       _showErrorSnackbar(context, 'Error deleting household: $e');
     }
   }
@@ -1175,32 +1216,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 curve: Curves.easeInOut,
               ),
               Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _controller.getUserHouseholdsWithDetails(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
-                      return _buildLoadingState();
-                    }
-
-                    if (snapshot.hasError) {
-                      return _buildErrorState(snapshot.error.toString());
-                    }
-
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                      return _buildNoHouseholdsState();
-                    }
-
-                    final filteredHouseholds = snapshot.data!.where((household) {
-                      return household['name'].toLowerCase().contains(_searchQuery);
-                    }).toList();
-
-                    if (filteredHouseholds.isEmpty) {
-                      return _buildNoResultsState();
-                    }
-
-                    return _buildHouseholdsList(filteredHouseholds);
-                  },
-                ),
+                child: _buildHouseholdsContent(),
               ),
             ],
           ),
@@ -1217,6 +1233,26 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         ),
       ),
     );
+  }
+
+  Widget _buildHouseholdsContent() {
+    if (_isLoading && _households.isEmpty) {
+      return _buildLoadingState();
+    }
+
+    if (_households.isEmpty) {
+      return _buildNoHouseholdsState();
+    }
+
+    final filteredHouseholds = _households.where((household) {
+      return household['name'].toLowerCase().contains(_searchQuery);
+    }).toList();
+
+    if (filteredHouseholds.isEmpty) {
+      return _buildNoResultsState();
+    }
+
+    return _buildHouseholdsList(filteredHouseholds);
   }
 
   // Enhanced loading state with shimmer animation
@@ -1300,55 +1336,6 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
           ),
         );
       },
-    );
-  }
-
-  Widget _buildErrorState(String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(FeatherIcons.alertCircle, size: 64, color: Colors.orange),
-            const SizedBox(height: 20),
-            Text(
-              'Something went wrong',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                error,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: lightTextColor,
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            ElevatedButton.icon(
-              onPressed: () => setState(() {}),
-              icon: const Icon(FeatherIcons.refreshCw, size: 18),
-              label: const Text('Try Again'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

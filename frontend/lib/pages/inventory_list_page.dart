@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'inventory_item_model.dart';
@@ -475,22 +476,8 @@ class _InventoryListPageState extends State<InventoryListPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Item thumbnail with fallback to icon
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  image: item.imageUrl != null ? DecorationImage(
-                    image: NetworkImage(item.imageUrl!),
-                    fit: BoxFit.cover,
-                  ) : null,
-                ),
-                child: item.imageUrl == null 
-                    ? Icon(Icons.inventory_2_outlined, color: primaryColor, size: 30)
-                    : null,
-              ),
+              // Item thumbnail with support for both local and network images
+              _buildItemThumbnail(item),
               SizedBox(width: 16),
               
               // Item details - This is the main content area
@@ -586,7 +573,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         spacing: 16,
                         children: [
                           _buildDetailItem(Icons.format_list_numbered, '${item.quantity} units'),
-                          _buildDetailItem(Icons.attach_money, '\$${item.price.toStringAsFixed(2)}'),
+                          _buildDetailItem(Icons.attach_money, 'RM ${item.price.toStringAsFixed(2)}'),
                         ],
                       ),
                     ),
@@ -628,6 +615,63 @@ class _InventoryListPageState extends State<InventoryListPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildItemThumbnail(InventoryItem item) {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        color: primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: _buildItemImage(item),
+      ),
+    );
+  }
+
+  Widget _buildItemImage(InventoryItem item) {
+    // Priority: localImagePath > imageUrl > default icon
+    if (item.localImagePath != null && item.localImagePath!.isNotEmpty) {
+      return Image.file(
+        File(item.localImagePath!),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildDefaultIcon();
+        },
+      );
+    } else if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
+      return Image.network(
+        item.imageUrl!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                  : null,
+              color: primaryColor,
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return _buildDefaultIcon();
+        },
+      );
+    } else {
+      return _buildDefaultIcon();
+    }
+  }
+
+  Widget _buildDefaultIcon() {
+    return Center(
+      child: Icon(Icons.inventory_2_outlined, color: primaryColor, size: 30),
     );
   }
 
