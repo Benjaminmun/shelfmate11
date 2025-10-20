@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp, FieldValue;
 
 /// Represents an item stored in the inventory.
 class InventoryItem {
@@ -37,7 +37,7 @@ class InventoryItem {
     this.barcode,
     this.minStockLevel,
     this.imageUrl,
-    this.localImagePath, // ✅ Included in constructor
+    this.localImagePath,
     required this.createdAt,
     this.updatedAt,
     this.addedByUserId,
@@ -54,21 +54,26 @@ class InventoryItem {
       'quantity': quantity,
       'price': price,
       'description': description,
-      'purchaseDate': purchaseDate,
-      'expiryDate': expiryDate,
+      'purchaseDate': _dateToTimestamp(purchaseDate),
+      'expiryDate': _dateToTimestamp(expiryDate),
       'location': location,
       'supplier': supplier,
       'barcode': barcode,
       'minStockLevel': minStockLevel,
       'imageUrl': imageUrl,
-      'localImagePath': localImagePath, // ✅ Added to map
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
+      'localImagePath': localImagePath,
+      'createdAt': _dateToTimestamp(createdAt) ?? FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
       'addedByUserId': addedByUserId,
       'addedByUserName': addedByUserName,
       'updatedByUserId': updatedByUserId,
       'updatedByUserName': updatedByUserName,
     };
+  }
+
+  /// Helper method to convert DateTime to Timestamp
+  Timestamp? _dateToTimestamp(DateTime? date) {
+    return date != null ? Timestamp.fromDate(date) : null;
   }
 
   /// Converts Firestore document into InventoryItem object
@@ -80,22 +85,16 @@ class InventoryItem {
       quantity: (map['quantity'] ?? 0).toInt(),
       price: (map['price'] ?? 0.0).toDouble(),
       description: map['description'],
-      purchaseDate: map['purchaseDate'] is Timestamp
-          ? (map['purchaseDate'] as Timestamp).toDate()
-          : map['purchaseDate'],
-      expiryDate: map['expiryDate'] is Timestamp
-          ? (map['expiryDate'] as Timestamp).toDate()
-          : map['expiryDate'],
+      purchaseDate: _timestampToDate(map['purchaseDate']),
+      expiryDate: _timestampToDate(map['expiryDate']),
       location: map['location'],
       supplier: map['supplier'],
       barcode: map['barcode'],
       minStockLevel: map['minStockLevel']?.toInt(),
       imageUrl: map['imageUrl'],
-      localImagePath: map['localImagePath'], // ✅ Added here
-      createdAt: (map['createdAt'] ?? Timestamp.now()).toDate(),
-      updatedAt: map['updatedAt'] is Timestamp
-          ? (map['updatedAt'] as Timestamp).toDate()
-          : map['updatedAt'],
+      localImagePath: map['localImagePath'],
+      createdAt: _timestampToDate(map['createdAt']) ?? DateTime.now(),
+      updatedAt: _timestampToDate(map['updatedAt']),
       addedByUserId: map['addedByUserId'],
       addedByUserName: map['addedByUserName'],
       updatedByUserId: map['updatedByUserId'],
@@ -103,7 +102,16 @@ class InventoryItem {
     );
   }
 
-  /// Copy existing item and change only selected fields
+  /// Helper method to convert Timestamp to DateTime
+  static DateTime? _timestampToDate(dynamic timestamp) {
+    if (timestamp == null) return null;
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    }
+    return null;
+  }
+
+  /// Creates a copy of the item with updated fields
   InventoryItem copyWith({
     String? id,
     String? name,
@@ -118,7 +126,7 @@ class InventoryItem {
     String? barcode,
     int? minStockLevel,
     String? imageUrl,
-    String? localImagePath, // ✅ Added
+    String? localImagePath,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? addedByUserId,
@@ -140,7 +148,7 @@ class InventoryItem {
       barcode: barcode ?? this.barcode,
       minStockLevel: minStockLevel ?? this.minStockLevel,
       imageUrl: imageUrl ?? this.imageUrl,
-      localImagePath: localImagePath ?? this.localImagePath, // ✅ Added
+      localImagePath: localImagePath ?? this.localImagePath,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       addedByUserId: addedByUserId ?? this.addedByUserId,
@@ -148,6 +156,44 @@ class InventoryItem {
       updatedByUserId: updatedByUserId ?? this.updatedByUserId,
       updatedByUserName: updatedByUserName ?? this.updatedByUserName,
     );
+  }
+
+  /// Creates a map for update operations (only includes changed fields)
+  Map<String, dynamic> toUpdateMap({
+    String? name,
+    String? category,
+    int? quantity,
+    double? price,
+    String? description,
+    DateTime? purchaseDate,
+    DateTime? expiryDate,
+    String? location,
+    String? supplier,
+    String? barcode,
+    int? minStockLevel,
+    String? imageUrl,
+    String? localImagePath,
+  }) {
+    final map = <String, dynamic>{};
+    
+    if (name != null) map['name'] = name;
+    if (category != null) map['category'] = category;
+    if (quantity != null) map['quantity'] = quantity;
+    if (price != null) map['price'] = price;
+    if (description != null) map['description'] = description;
+    if (purchaseDate != null) map['purchaseDate'] = _dateToTimestamp(purchaseDate);
+    if (expiryDate != null) map['expiryDate'] = _dateToTimestamp(expiryDate);
+    if (location != null) map['location'] = location;
+    if (supplier != null) map['supplier'] = supplier;
+    if (barcode != null) map['barcode'] = barcode;
+    if (minStockLevel != null) map['minStockLevel'] = minStockLevel;
+    if (imageUrl != null) map['imageUrl'] = imageUrl;
+    if (localImagePath != null) map['localImagePath'] = localImagePath;
+    
+    // Always update the updatedAt timestamp
+    map['updatedAt'] = FieldValue.serverTimestamp();
+    
+    return map;
   }
 }
 
@@ -163,7 +209,7 @@ class UsageRecord {
 
   Map<String, dynamic> toMap() {
     return {
-      'date': date,
+      'date': Timestamp.fromDate(date),
       'amountUsed': amountUsed,
     };
   }
@@ -172,7 +218,7 @@ class UsageRecord {
     return UsageRecord(
       date: map['date'] is Timestamp
           ? (map['date'] as Timestamp).toDate()
-          : DateTime.parse(map['date']),
+          : DateTime.parse(map['date'].toString()),
       amountUsed: (map['amountUsed'] ?? 0).toInt(),
     );
   }
@@ -196,7 +242,7 @@ class ConsumptionPattern {
     return {
       'averageDailyUse': averageDailyUse,
       'usageVariance': usageVariance,
-      'lastUsedDate': lastUsedDate,
+      'lastUsedDate': Timestamp.fromDate(lastUsedDate),
       'usageHistory': usageHistory.map((u) => u.toMap()).toList(),
     };
   }
@@ -207,7 +253,7 @@ class ConsumptionPattern {
       usageVariance: (map['usageVariance'] ?? 0.0).toDouble(),
       lastUsedDate: map['lastUsedDate'] is Timestamp
           ? (map['lastUsedDate'] as Timestamp).toDate()
-          : DateTime.parse(map['lastUsedDate']),
+          : DateTime.parse(map['lastUsedDate'].toString()),
       usageHistory: (map['usageHistory'] as List<dynamic>? ?? [])
           .map((u) => UsageRecord.fromMap(Map<String, dynamic>.from(u)))
           .toList(),
@@ -229,7 +275,7 @@ class PredictionResult {
 
   Map<String, dynamic> toMap() {
     return {
-      'predictedRestockDate': predictedRestockDate,
+      'predictedRestockDate': Timestamp.fromDate(predictedRestockDate),
       'isLowStock': isLowStock,
       'recommendation': recommendation,
     };
@@ -239,7 +285,7 @@ class PredictionResult {
     return PredictionResult(
       predictedRestockDate: map['predictedRestockDate'] is Timestamp
           ? (map['predictedRestockDate'] as Timestamp).toDate()
-          : DateTime.parse(map['predictedRestockDate']),
+          : DateTime.parse(map['predictedRestockDate'].toString()),
       isLowStock: map['isLowStock'] ?? false,
       recommendation: map['recommendation'] ?? '',
     );

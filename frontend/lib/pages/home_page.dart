@@ -249,7 +249,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
-        childAspectRatio: 1.2,
+        childAspectRatio: 1.0,
       ),
       children: [
         _buildFeatureCard(
@@ -265,8 +265,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           secondaryColor,
         ),
         _buildFeatureCard(
-          'OCR Scanning',
-          'Scan and manage inventory items using OCR',
+          'Barcode Scanning',
+          'Scan and manage inventory items using Barcodes',
           Icons.camera_alt,
           accentColor,
         ),

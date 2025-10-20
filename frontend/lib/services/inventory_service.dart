@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:frontend/pages/dashboard_page.dart';
 import '../models/inventory_audit_log.dart';
 import '../pages/inventory_item_model.dart' show InventoryItem;
 
 class InventoryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final DashboardService _dashboardService = DashboardService();
   
   bool _isReadOnly = false;
   
@@ -189,7 +192,16 @@ class InventoryService {
     var collection = _getInventoryCollection(householdId);
     var docRef = await collection.add(itemData);
     
-    // Log the addition
+    // Log the addition to activities
+    await _dashboardService.logActivity(
+      householdId,
+      '${addedByUserName ?? "Someone"} added ${item.name} to inventory',
+      'add',
+      userId: _getUserId(),
+      userName: addedByUserName,
+    );
+    
+    // Log the addition to audit logs
     if (addedByUserName != null) {
       await _logInventoryChange(
         householdId,
@@ -202,6 +214,39 @@ class InventoryService {
     }
     
     return docRef.id;
+  }
+
+  Future<String> addItemWithErrorHandling(
+    String householdId, 
+    InventoryItem item,
+    BuildContext context,
+  ) async {
+    try {
+      final id = await addItem(householdId, item);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${item.name} added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+      return id;
+    } catch (e) {
+      print('Error adding item: $e');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add ${item.name}: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<void> updateItem(String householdId, InventoryItem item) async {
@@ -226,7 +271,16 @@ class InventoryService {
       // Get user display name for audit logging
       final String? updatedByUserName = await _getUserDisplayName();
 
-      // If there are any changes, log them
+      // Log activity for the update
+      await _dashboardService.logActivity(
+        householdId,
+        '${updatedByUserName ?? "Someone"} updated ${item.name}',
+        'update',
+        userId: _getUserId(),
+        userName: updatedByUserName,
+      );
+
+      // If there are any changes, log them to audit logs
       for (var field in updateData.keys) {
         if (field != 'updatedByUserId' && field != 'updatedAt' && 
             existingData[field] != updateData[field]) {
@@ -243,6 +297,37 @@ class InventoryService {
 
       // Finally, update the item in the Firestore collection
       await docRef.update(updateData);
+    }
+  }
+
+  Future<void> updateItemWithErrorHandling(
+    String householdId, 
+    InventoryItem item,
+    BuildContext context,
+  ) async {
+    try {
+      await updateItem(householdId, item);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${item.name} updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error updating item: $e');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update ${item.name}: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      rethrow;
     }
   }
 
@@ -265,8 +350,19 @@ class InventoryService {
       print('Error fetching item details for deletion log: $e');
     }
     
-    // Log the deletion
+    // Get user display name
     final String? updatedByUserName = await _getUserDisplayName();
+    
+    // Log the deletion to activities
+    await _dashboardService.logActivity(
+      householdId,
+      '${updatedByUserName ?? "Someone"} deleted $itemName from inventory',
+      'delete',
+      userId: _getUserId(),
+      userName: updatedByUserName,
+    );
+    
+    // Log the deletion to audit logs
     await _logInventoryChange(
       householdId,
       itemId,
@@ -278,6 +374,37 @@ class InventoryService {
     
     var collection = _getInventoryCollection(householdId);
     return collection.doc(itemId).delete();
+  }
+
+  Future<void> deleteItemWithErrorHandling(
+    String householdId, 
+    String itemId,
+    BuildContext context,
+  ) async {
+    try {
+      await deleteItem(householdId, itemId);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Item deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error deleting item: $e');
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete item: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   // ========== AUDIT LOG QUERY METHODS ==========
@@ -488,15 +615,27 @@ class InventoryService {
       throw Exception('Household ID or Item ID cannot be empty');
     }
     
-    // Fetch existing item to get old quantity
+    // Fetch existing item to get old quantity and name
     var docRef = _getInventoryCollection(householdId).doc(itemId);
     final existingItem = await docRef.get();
     
     if (existingItem.exists) {
       final existingData = existingItem.data() as Map<String, dynamic>;
       final oldQuantity = existingData['quantity'] ?? 0;
+      final itemName = existingData['name'] ?? 'Unknown Item';
       
       final String? updatedByUserName = await _getUserDisplayName();
+      
+      // Log low stock warning if applicable
+      if (newQuantity < 5 && oldQuantity >= 5) {
+        await _dashboardService.logActivity(
+          householdId,
+          '$itemName is running low (${newQuantity} left)',
+          'warning',
+          userId: _getUserId(),
+          userName: updatedByUserName,
+        );
+      }
       
       var collection = _getInventoryCollection(householdId);
       final updateData = {
@@ -509,8 +648,17 @@ class InventoryService {
         updateData['updatedByUserName'] = updatedByUserName;
       }
       
-      // Log the quantity change
+      // Log the quantity change to activities
       if (oldQuantity != newQuantity) {
+        await _dashboardService.logActivity(
+          householdId,
+          '${updatedByUserName ?? "Someone"} updated $itemName quantity from $oldQuantity to $newQuantity',
+          'update',
+          userId: _getUserId(),
+          userName: updatedByUserName,
+        );
+        
+        // Log to audit logs
         await _logInventoryChange(
           householdId,
           itemId,

@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class InventoryAuditLog {
   final String itemId;
@@ -31,23 +31,23 @@ class InventoryAuditLog {
       'fieldName': fieldName,
       'oldValue': oldValue,
       'newValue': newValue,
-      'timestamp': timestamp,
+      'timestamp': Timestamp.fromDate(timestamp),
       'updatedByUserId': updatedByUserId,
       'updatedByUserName': updatedByUserName,
     };
   }
 
-  factory InventoryAuditLog.fromMap(Map<String, dynamic> map) {
+  factory InventoryAuditLog.fromMap(Map<String, dynamic> map, String id) {
     return InventoryAuditLog(
-      itemId: map['itemId'] as String,
-      itemName: map['itemName'] as String,
-      itemImageUrl: map['itemImageUrl'] as String,
-      fieldName: map['fieldName'] as String,
+      itemId: map['itemId'] ?? '',
+      itemName: map['itemName'] ?? '',
+      itemImageUrl: map['itemImageUrl'] ?? '',
+      fieldName: map['fieldName'] ?? '',
       oldValue: map['oldValue'],
       newValue: map['newValue'],
       timestamp: (map['timestamp'] as Timestamp).toDate(),
-      updatedByUserId: map['updatedByUserId'] as String,
-      updatedByUserName: map['updatedByUserName'] as String,
+      updatedByUserId: map['updatedByUserId'] ?? '',
+      updatedByUserName: map['updatedByUserName'] ?? '',
     );
   }
 }
