@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/member_dashboard_page.dart';
+import '../pages/editor_dashboard_page.dart'; // ADD THIS IMPORT
 import '../pages/login_page.dart';
 
 class PaginationResult {
@@ -62,6 +63,12 @@ class HouseholdServiceController {
   Future<bool> isHouseholdOwner(String householdId) async {
     final role = await getUserRole(householdId);
     return role == 'creator';
+  }
+
+  // Check if user is editor or admin
+  Future<bool> hasEditorAccess(String householdId) async {
+    final role = await getUserRole(householdId);
+    return role == 'creator' || role == 'editor';
   }
 
   // Get households with user role information
@@ -329,16 +336,8 @@ class HouseholdServiceController {
 
       Navigator.of(context).pop();
       
-      // Navigate to member dashboard after joining
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MemberDashboardPage(
-            selectedHousehold: householdName,
-            householdId: householdId,
-          ),
-        ),
-      );
+      // Navigate to appropriate dashboard based on role
+      await selectHousehold(householdName, context, householdId);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -472,7 +471,7 @@ class HouseholdServiceController {
     }
   }
 
-  // Remove a household member
+  // Remove a household member (only for owners)
   Future<void> removeHouseholdMember(String householdId, String userId) async {
     try {
       // Check if current user is the owner
@@ -498,6 +497,51 @@ class HouseholdServiceController {
           .delete();
     } catch (e) {
       throw Exception('Error removing household member: $e');
+    }
+  }
+
+  // Update member role (only for owners)
+  Future<void> updateMemberRole(String householdId, String userId, String newRole) async {
+    try {
+      // Check if current user is the owner
+      final currentUserRole = await getUserRole(householdId);
+      if (currentUserRole != 'creator') {
+        throw Exception('Only household owners can update member roles');
+      }
+
+      // Validate the new role
+      if (!['member', 'editor', 'creator'].contains(newRole)) {
+        throw Exception('Invalid role: $newRole');
+      }
+
+      // Cannot change owner's role
+      if (newRole == 'creator') {
+        throw Exception('Cannot assign creator role to members');
+      }
+
+      // Update role in household members collection
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(userId)
+          .update({
+            'userRole': newRole,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      // Update role in user's personal collection
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('households')
+          .doc(householdId)
+          .update({
+            'userRole': newRole,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      throw Exception('Error updating member role: $e');
     }
   }
 
@@ -598,40 +642,56 @@ class HouseholdServiceController {
     Share.share(shareText);
   }
 
-  // Updated selectHousehold method with role-based navigation
-  void selectHousehold(String householdName, BuildContext context, String householdId) async {
+  // UPDATED: Role-based navigation with editor support
+  Future<void> selectHousehold(String householdName, BuildContext context, String householdId) async {
     try {
       // Get the user's role for this household
       final userRole = await getUserRole(householdId);
       
-      if (userRole == 'creator') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DashboardPage(
-              selectedHousehold: householdName,
-              householdId: householdId,
+      // Navigate to appropriate dashboard based on role
+      switch (userRole) {
+        case 'creator':
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DashboardPage(
+                selectedHousehold: householdName,
+                householdId: householdId,
+              ),
             ),
-          ),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MemberDashboardPage(
-              selectedHousehold: householdName,
-              householdId: householdId,
+          );
+          break;
+        case 'editor':
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EditorDashboardPage(
+                selectedHousehold: householdName,
+                householdId: householdId,
+              ),
             ),
-          ),
-        );
+          );
+          break;
+        case 'member':
+        default:
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MemberDashboardPage(
+                selectedHousehold: householdName,
+                householdId: householdId,
+              ),
+            ),
+          );
+          break;
       }
     } catch (e) {
       debugPrint('Error selecting household: $e');
-      // Fallback to regular dashboard if there's an error
+      // Fallback to member dashboard if there's an error
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => DashboardPage(
+          builder: (_) => MemberDashboardPage(
             selectedHousehold: householdName,
             householdId: householdId,
           ),
@@ -780,6 +840,48 @@ class HouseholdServiceController {
       }
     } catch (e) {
       debugPrint('Error repairing role inconsistencies: $e');
+    }
+  }
+
+  // Get household statistics
+  Future<Map<String, dynamic>> getHouseholdStats(String householdId) async {
+    try {
+      // Get member count
+      final membersSnapshot = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .get();
+
+      // Get inventory count
+      final inventorySnapshot = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('inventory')
+          .get();
+
+      // Get recent activities count (last 7 days)
+      final weekAgo = Timestamp.fromDate(DateTime.now().subtract(Duration(days: 7)));
+      final activitiesSnapshot = await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('activities')
+          .where('timestamp', isGreaterThanOrEqualTo: weekAgo)
+          .get();
+
+      return {
+        'memberCount': membersSnapshot.docs.length,
+        'inventoryCount': inventorySnapshot.docs.length,
+        'recentActivities': activitiesSnapshot.docs.length,
+        'roles': {
+          'creator': membersSnapshot.docs.where((doc) => doc['userRole'] == 'creator').length,
+          'editor': membersSnapshot.docs.where((doc) => doc['userRole'] == 'editor').length,
+          'member': membersSnapshot.docs.where((doc) => doc['userRole'] == 'member').length,
+        },
+      };
+    } catch (e) {
+      debugPrint('Error getting household stats: $e');
+      return {};
     }
   }
 }

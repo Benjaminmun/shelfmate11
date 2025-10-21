@@ -7,9 +7,9 @@ import 'family_members_page.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'dashboard_page.dart';
 import 'member_dashboard_page.dart';
+import 'editor_dashboard_page.dart'; // ADD THIS IMPORT
 
 class HouseholdService extends StatefulWidget {
   @override
@@ -19,7 +19,6 @@ class HouseholdService extends StatefulWidget {
 class _HouseholdServiceState extends State<HouseholdService> with TickerProviderStateMixin {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   
   // Color scheme
   static const Color primaryColor = Color(0xFF2D5D7C);
@@ -45,7 +44,6 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   // State management for households
   List<Map<String, dynamic>> _households = [];
   bool _isLoading = true;
-  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -115,12 +113,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       setState(() {
         _households = households;
         _isLoading = false;
-        _isRefreshing = false;
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _isRefreshing = false;
       });
       print('Error loading households: $e');
     }
@@ -192,73 +188,64 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     }
   }
 
-  // Method to navigate to appropriate dashboard based on user role
+  // UPDATED: Method to navigate to appropriate dashboard based on user role
   void _navigateToHouseholdDashboard(String householdId, String householdName, String userRole) {
-    if (userRole == 'creator') {
-      // Navigate to creator dashboard
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => DashboardPage(
-            householdId: householdId,
-            selectedHousehold: householdName,
-          ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeInOut,
-              )),
-              child: FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
-            );
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    } else {
-      // Navigate to member dashboard
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => MemberDashboardPage(
-            householdId: householdId,
-            selectedHousehold: householdName,
-          ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeInOut,
-              )),
-              child: FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
-            );
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
+    Widget targetPage;
+    
+    // Determine which dashboard to show based on user role
+    switch (userRole) {
+      case 'creator':
+        targetPage = DashboardPage(
+          householdId: householdId,
+          selectedHousehold: householdName,
+        );
+        break;
+      case 'editor':
+        targetPage = EditorDashboardPage(
+          householdId: householdId,
+          selectedHousehold: householdName,
+        );
+        break;
+      case 'member':
+      default:
+        targetPage = MemberDashboardPage(
+          householdId: householdId,
+          selectedHousehold: householdName,
+        );
+        break;
     }
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => targetPage,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOut,
+            )),
+            child: FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+    );
   }
 
-  // Updated method to select household (navigate to appropriate dashboard)
+  // UPDATED: Method to select household with role-based navigation
   void _selectHousehold(String householdId, String householdName, String userRole) {
     _navigateToHouseholdDashboard(householdId, householdName, userRole);
   }
 
   // Refresh households with animation
   Future<void> _refreshHouseholds() async {
-    setState(() => _isRefreshing = true);
     await _loadHouseholds();
   }
 
@@ -1507,20 +1494,19 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                             ),
                           ),
                           const SizedBox(height: 4),
+                          // UPDATED: Enhanced role badge with editor support
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: userRole == 'creator' 
-                                  ? secondaryColor.withOpacity(0.1)
-                                  : primaryColor.withOpacity(0.1),
+                              color: _getRoleColor(userRole).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              userRole == 'creator' ? 'Owner' : 'Member',
+                              _getRoleDisplayName(userRole),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: userRole == 'creator' ? secondaryColor : primaryColor,
+                                color: _getRoleColor(userRole),
                               ),
                             ),
                           ),
@@ -1536,6 +1522,32 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         ),
       ),
     );
+  }
+
+  // NEW: Helper method to get role display name
+  String _getRoleDisplayName(String userRole) {
+    switch (userRole) {
+      case 'creator':
+        return 'Owner';
+      case 'editor':
+        return 'Editor';
+      case 'member':
+      default:
+        return 'Member';
+    }
+  }
+
+  // NEW: Helper method to get role color
+  Color _getRoleColor(String userRole) {
+    switch (userRole) {
+      case 'creator':
+        return secondaryColor;
+      case 'editor':
+        return accentColor;
+      case 'member':
+      default:
+        return primaryColor;
+    }
   }
 
   Widget _buildHouseholdActions(String householdId, String userRole, BuildContext context) {

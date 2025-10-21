@@ -215,6 +215,8 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         return 'Household Owner';
       case 'admin':
         return 'Administrator';
+      case 'editor':
+        return 'Editor';
       case 'member':
         return 'Family Member';
       default:
@@ -266,6 +268,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   Widget _buildRoleBadge(String role) {
     final bool isCreator = role == 'creator';
     final bool isAdmin = role == 'admin';
+    final bool isEditor = role == 'editor';
     
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -274,7 +277,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             ? LinearGradient(colors: [Colors.amber, Colors.orange])
             : isAdmin
                 ? LinearGradient(colors: [Colors.blue, Colors.lightBlue])
-                : LinearGradient(colors: [Colors.green, Colors.lightGreen]),
+                : isEditor
+                    ? LinearGradient(colors: [Colors.purple, Colors.deepPurple])
+                    : LinearGradient(colors: [Colors.green, Colors.lightGreen]),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -282,7 +287,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                 ? Colors.amber.withOpacity(0.3)
                 : isAdmin
                     ? Colors.blue.withOpacity(0.3)
-                    : Colors.green.withOpacity(0.3),
+                    : isEditor
+                        ? Colors.purple.withOpacity(0.3)
+                        : Colors.green.withOpacity(0.3),
             blurRadius: 4,
             offset: Offset(0, 2),
           ),
@@ -292,7 +299,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isCreator ? Icons.star : Icons.person,
+            isCreator ? Icons.star : 
+            isAdmin ? Icons.security :
+            isEditor ? Icons.edit : Icons.person,
             size: 14,
             color: Colors.white,
           ),
@@ -308,6 +317,287 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         ],
       ),
     );
+  }
+
+  // Role change functionality methods
+  void _showRoleChangeDialog(Map<String, dynamic> member) {
+    final String displayName = _getDisplayName(member);
+    final String currentRole = member['userRole'] ?? 'member';
+    final List<String> availableRoles = _getAvailableRoles();
+    String? selectedRole;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.admin_panel_settings, color: primaryColor),
+                  SizedBox(width: 8),
+                  Text("Change Member Role"),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Update permissions for:"),
+                  SizedBox(height: 12),
+                  // Member info card
+                  Container(
+                    padding: EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: _getAvatarColor(displayName),
+                          child: Text(
+                            _getInitials(displayName),
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              _buildRoleBadge(currentRole),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  Text(
+                    "Select New Role:",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  ...availableRoles.map((role) {
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              selectedRole = role;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: selectedRole == role 
+                                  ? primaryColor.withOpacity(0.1)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: selectedRole == role 
+                                    ? primaryColor 
+                                    : Colors.grey[300]!,
+                                width: selectedRole == role ? 2 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _getRoleIcon(role),
+                                  color: _getRoleColor(role),
+                                  size: 20,
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _formatRole(role),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: textPrimary,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        _getRoleDescription(role),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (selectedRole == role)
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: primaryColor,
+                                    size: 20,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  if (availableRoles.isEmpty) ...[
+                    SizedBox(height: 8),
+                    Text(
+                      "You don't have permission to change roles.",
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text("Cancel", style: TextStyle(color: textSecondary)),
+                ),
+                if (availableRoles.isNotEmpty)
+                  ElevatedButton(
+                    onPressed: selectedRole != null && selectedRole != currentRole
+                        ? () => _changeMemberRole(member, selectedRole!)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text("Update Role"),
+                  ),
+              ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<String> _getAvailableRoles() {
+    if (_userRole == 'creator') {
+      return ['admin', 'editor', 'member'];
+    } else if (_userRole == 'admin') {
+      return ['editor', 'member'];
+    }
+    return []; // Members can't change roles
+  }
+
+  IconData _getRoleIcon(String role) {
+    switch (role) {
+      case 'creator':
+        return Icons.star;
+      case 'admin':
+        return Icons.security;
+      case 'editor':
+        return Icons.edit;
+      case 'member':
+        return Icons.person;
+      default:
+        return Icons.person_outline;
+    }
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'creator':
+        return Colors.amber;
+      case 'admin':
+        return Colors.blue;
+      case 'editor':
+        return Colors.green;
+      case 'member':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getRoleDescription(String role) {
+    switch (role) {
+      case 'creator':
+        return 'Full household ownership and management';
+      case 'admin':
+        return 'Can manage members and household settings';
+      case 'editor':
+        return 'Can edit household content and data';
+      case 'member':
+        return 'Can view household content';
+      default:
+        return 'Basic household access';
+    }
+  }
+
+  Future<void> _changeMemberRole(Map<String, dynamic> member, String newRole) async {
+    final String userId = member['userId'];
+    final String displayName = _getDisplayName(member);
+    final String currentRole = member['userRole'] ?? 'member';
+    
+    if (userId == null) {
+      _showErrorSnackBar("Cannot change role: Missing user ID");
+      return;
+    }
+
+    if (newRole == currentRole) {
+      _showErrorSnackBar("User already has the $newRole role");
+      return;
+    }
+
+    Navigator.of(context).pop(); // Close the dialog
+
+    try {
+      await _controller.updateMemberRole(widget.householdId, userId, newRole);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "$displayName's role changed to ${_formatRole(newRole)}",
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      
+      // Refresh the data to show the updated role
+      _loadData();
+    } catch (e) {
+      _showErrorSnackBar("Failed to change role: $e");
+    }
   }
 
   void _showMemberDetails(BuildContext context, Map<String, dynamic> member) {
@@ -439,27 +729,54 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                         ],
                       ),
                       
-                      if (_isOwner && member['userRole'] != 'creator')
+                      if ((_isOwner || _userRole == 'admin') && member['userRole'] != 'creator')
                         Padding(
-                          padding: EdgeInsets.only(top: 32),
-                          child: Container(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _removeMember(_householdMembers.indexOf(member));
-                              },
-                              icon: Icon(Icons.person_remove),
-                              label: Text('Remove from Household'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                          padding: EdgeInsets.only(top: 24),
+                          child: Column(
+                            children: [
+                              // Role Change Button
+                              Container(
+                                width: double.infinity,
+                                margin: EdgeInsets.only(bottom: 12),
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _showRoleChangeDialog(member);
+                                  },
+                                  icon: Icon(Icons.admin_panel_settings),
+                                  label: Text('Change Role'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: primaryColor,
+                                    foregroundColor: Colors.white,
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              
+                              // Remove Button
+                              Container(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _removeMember(_householdMembers.indexOf(member));
+                                  },
+                                  icon: Icon(Icons.person_remove),
+                                  label: Text('Remove from Household'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
@@ -805,7 +1122,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                 ),
                                 
                                 // Action Menu
-                                if (_isOwner && !isCreator && member['userId'] != null)
+                                if ((_isOwner || _userRole == 'admin') && !isCreator && member['userId'] != null)
                                   Container(
                                     width: 36,
                                     height: 36,

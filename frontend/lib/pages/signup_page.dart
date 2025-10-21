@@ -128,26 +128,6 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _signUpWithGoogle() async {
-    // Placeholder for Google Sign Up implementation
-    setState(() { _isLoading = true; });
-    
-    await Future.delayed(Duration(seconds: 2));
-    
-    setState(() { _isLoading = false; });
-    _showDialog('Coming Soon', 'Google Sign Up will be available soon!');
-  }
-
-  Future<void> _signUpWithFacebook() async {
-    // Placeholder for Facebook Sign Up implementation
-    setState(() { _isLoading = true; });
-    
-    await Future.delayed(Duration(seconds: 2));
-    
-    setState(() { _isLoading = false; });
-    _showDialog('Coming Soon', 'Facebook Sign Up will be available soon!');
-  }
-
   void _handleFirebaseAuthError(FirebaseAuthException e) {
     if (e.code == 'weak-password') {
       _showDialog('Error', 'The password provided is too weak.');
@@ -426,41 +406,6 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                           child: _buildElevatedButton(context, 'Create Account', _signUpWithEmailPassword, Color(0xFF4CAF50)),
                         ),
                       ),
-                SizedBox(height: 30),
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: Row(
-                      children: [
-                        Expanded(child: Divider(color: Colors.black.withOpacity(0.2))),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 15.0),
-                          child: Text(
-                            'Or sign up with', 
-                            style: TextStyle(color: Colors.black.withOpacity(0.5), fontSize: 14, fontWeight: FontWeight.w500)
-                          ),
-                        ),
-                        Expanded(child: Divider(color: Colors.black.withOpacity(0.2))),
-                      ],
-                    ),
-                  ),
-                ),
-                SizedBox(height: 30),
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        _buildSocialMediaButton(Icons.g_mobiledata, Color(0xFFDB4437), 'Google', _signUpWithGoogle),
-                        SizedBox(width: 25),
-                        _buildSocialMediaButton(Icons.facebook, Color(0xFF4267B2), 'Facebook', _signUpWithFacebook),
-                      ],
-                    ),
-                  ),
-                ),
                 SizedBox(height: 40),
                 FadeTransition(
                   opacity: _fadeAnimation,
@@ -606,32 +551,4 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildSocialMediaButton(IconData icon, Color color, String tooltip, VoidCallback onPressed) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        elevation: 4,
-        shape: CircleBorder(),
-        child: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle, 
-            color: Colors.white, 
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.2), 
-                blurRadius: 10, 
-                offset: Offset(0, 4)
-              )
-            ]
-          ),
-          child: IconButton(
-            icon: Icon(icon, color: color, size: 28), 
-            onPressed: onPressed
-          ),
-        ),
-      ),
-    );
-  }
 }

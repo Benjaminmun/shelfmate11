@@ -10,185 +10,69 @@ import 'expense_tracker_page.dart';
 import 'profile_page.dart';
 import 'dart:async';
 
-class MemberDashboardPage extends StatefulWidget {
-  final String? selectedHousehold;
-  final String? householdId;
-
-  const MemberDashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
-
-  @override
-  _MemberDashboardPageState createState() => _MemberDashboardPageState();
-}
-
-class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTickerProviderStateMixin {
-  final HouseholdServiceController _householdServiceController = HouseholdServiceController();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   
-  // Modern color scheme matching DashboardPage
-  final Color _primaryColor = Color(0xFF2D5D7C);
-  final Color _secondaryColor = Color.fromARGB(255, 98, 112, 177);
-  final Color _accentColor = Color(0xFF4CC9F0);
-  final Color _successColor = Color(0xFF4ADE80);
-  final Color _warningColor = Color(0xFFF59E0B);
-  final Color _errorColor = Color(0xFFEF4444);
-  final Color _backgroundColor = Color(0xFFF8FAFF);
-  final Color _surfaceColor = Color(0xFFFFFFFF);
-  final Color _textPrimary = Color(0xFF1E293B);
-  final Color _textSecondary = Color(0xFF64748B);
-  final Color _textLight = Color(0xFF94A3B8);
-
-  String _currentHousehold = '';
-  String _currentHouseholdId = '';
-  int _totalItems = 0;
-  int _lowStockItems = 0;
-  int _expiringSoonItems = 0;
-  int _totalCategories = 0;
-  double _totalValue = 0.0;
-  List<Map<String, dynamic>> _recentActivities = [];
-  bool _isLoading = true;
-  bool _hasError = false;
-  String _errorMessage = '';
-  
-  int _currentIndex = 0;
-  StreamSubscription<QuerySnapshot>? _inventorySubscription;
-  StreamSubscription<QuerySnapshot>? _activitiesSubscription;
-
-  // Enhanced animations matching DashboardPage
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _slideAnimation;
-  late Animation<double> _staggerAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    
-    _initializeAnimations();
-    _currentHousehold = widget.selectedHousehold ?? '';
-    _currentHouseholdId = widget.householdId ?? '';
-    
-    if (_currentHouseholdId.isNotEmpty) {
-      _setupRealTimeListeners();
-    } else {
-      _isLoading = false;
+  // Enhanced method to get user info including fullName and role
+  Future<Map<String, dynamic>> _getUserDisplayInfo() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return {'userName': 'Unknown', 'fullName': 'Unknown User', 'role': 'member'};
     }
-  }
-
-  void _initializeAnimations() {
-    _animationController = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 1200),
-    );
     
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
-    );
-    
-    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    
-    _staggerAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Interval(0.3, 1.0, curve: Curves.easeInOut),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _inventorySubscription?.cancel();
-    _activitiesSubscription?.cancel();
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  void _setupRealTimeListeners() {
-    final userId = _auth.currentUser?.uid;
-    if (userId == null || userId.isEmpty || _currentHouseholdId.isEmpty) {
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = 'User not authenticated or household not selected';
-      });
-      return;
-    }
-
     try {
-      // Set up real-time listener for inventory (read-only for members)
-      _inventorySubscription = _firestore
-          .collection('households')
-          .doc(_currentHouseholdId)
-          .collection('inventory')
-          .snapshots()
-          .listen((snapshot) {
-        _calculateStats(snapshot.docs);
-      }, onError: (error) {
-        print('Inventory stream error: $error');
-        if (!_hasError) {
-          setState(() {
-            _hasError = true;
-            _errorMessage = 'Failed to sync inventory: ${error.toString()}';
-          });
-        }
-      });
-
-      // Set up real-time listener for activities (read-only for members)
-      _activitiesSubscription = _firestore
-          .collection('households')
-          .doc(_currentHouseholdId)
-          .collection('activities')
-          .orderBy('timestamp', descending: true)
-          .limit(5)
-          .snapshots()
-          .listen((snapshot) {
-        List<Map<String, dynamic>> recentActivities = [];
-        for (var doc in snapshot.docs) {
-          recentActivities.add({
-            'message': doc['message'] ?? 'No message',
-            'timestamp': doc['timestamp'] ?? Timestamp.now(),
-            'type': doc['type'] ?? 'info',
-          });
-        }
-        setState(() {
-          _recentActivities = recentActivities;
-          _hasError = false;
-        });
-      }, onError: (error) {
-        print('Activities stream error: $error');
-        // Activities are optional, so we don't treat this as a fatal error
-      });
-
-      // Start animations after data loads
-      _animationController.forward();
-      
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+        final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
+        final role = data?['role'] as String? ?? 'member'; // Default to 'member' if not set
+        
+        return {
+          'userName': userName,
+          'fullName': fullName,
+          'role': role,
+        };
+      }
     } catch (e) {
-      print('Error setting up real-time listeners: $e');
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = 'Failed to set up real-time sync: ${e.toString()}';
-      });
+      print('Error fetching user info: $e');
     }
+    
+    // Fallback to Firebase Auth display name
+    final fallbackName = user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+    return {
+      'userName': fallbackName,
+      'fullName': fallbackName,
+      'role': 'member',
+    };
   }
 
-  void _calculateStats(List<QueryDocumentSnapshot> inventoryDocs) {
-    int totalItems = inventoryDocs.length;
+  // Real-time inventory stats stream
+  Stream<Map<String, dynamic>> getInventoryStatsStream(String householdId) {
+    if (householdId.isEmpty) {
+      return Stream.value({});
+    }
+    
+    return _firestore
+        .collection('households')
+        .doc(householdId)
+        .collection('inventory')
+        .snapshots()
+        .asyncMap((snapshot) async {
+          return await _calculateStats(snapshot);
+        });
+  }
+  
+  Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
+    int totalItems = snapshot.docs.length;
     int lowStockItems = 0;
     int expiringSoonItems = 0;
     int totalCategories = 0;
     double totalValue = 0.0;
     Set<String> categories = Set();
 
-    for (var doc in inventoryDocs) {
+    for (var doc in snapshot.docs) {
       final data = doc.data() as Map<String, dynamic>;
       final quantity = (data['quantity'] ?? 0).toInt();
       final price = (data['price'] ?? 0).toDouble();
@@ -213,46 +97,317 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
 
     totalCategories = categories.length;
 
-    setState(() {
-      _totalItems = totalItems;
-      _lowStockItems = lowStockItems;
-      _expiringSoonItems = expiringSoonItems;
-      _totalCategories = totalCategories;
-      _totalValue = totalValue;
-      _isLoading = false;
-      _hasError = false;
-    });
+    return {
+      'totalItems': totalItems,
+      'lowStockItems': lowStockItems,
+      'expiringSoonItems': expiringSoonItems,
+      'totalCategories': totalCategories,
+      'totalValue': totalValue,
+    };
+  }
+}
+
+// Enhanced Pulse Indicator with glow effect
+class PulseIndicator extends StatefulWidget {
+  final Color color;
+  final double size;
+  
+  const PulseIndicator({Key? key, required this.color, this.size = 8}) : super(key: key);
+  
+  @override
+  _PulseIndicatorState createState() => _PulseIndicatorState();
+}
+
+class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
+  }
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(_animation.value * 0.8),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: widget.color.withOpacity(_animation.value * 0.4),
+                blurRadius: 8,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Animated Stat Number Widget
+class AnimatedStatNumber extends StatefulWidget {
+  final int value;
+  final TextStyle style;
+  final Duration duration;
+
+  const AnimatedStatNumber({
+    Key? key,
+    required this.value,
+    required this.style,
+    this.duration = const Duration(milliseconds: 800),
+  }) : super(key: key);
+
+  @override
+  _AnimatedStatNumberState createState() => _AnimatedStatNumberState();
+}
+
+class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<int> _animation;
+  late int _previousValue;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousValue = widget.value;
+    _controller = AnimationController(
+      duration: widget.duration,
+      vsync: this,
+    );
+    
+    _animation = IntTween(begin: _previousValue, end: widget.value).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+    
+    _controller.forward();
   }
 
-  Future<void> _retryLoadData() async {
+  @override
+  void didUpdateWidget(AnimatedStatNumber oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _previousValue = _animation.value;
+      _controller.reset();
+      _animation = IntTween(begin: _previousValue, end: widget.value).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+      );
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Text(
+          _animation.value.toString(),
+          style: widget.style,
+        );
+      },
+    );
+  }
+}
+
+class MemberDashboardPage extends StatefulWidget {
+  final String? selectedHousehold;
+  final String? householdId;
+
+  const MemberDashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
+
+  @override
+  _MemberDashboardPageState createState() => _MemberDashboardPageState();
+}
+
+class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTickerProviderStateMixin {
+  final HouseholdServiceController _householdServiceController = HouseholdServiceController();
+  final DashboardService _dashboardService = DashboardService();
+  
+  // Enhanced color scheme with gradients
+  final Color _primaryColor = Color(0xFF2D5D7C);
+  final Color _secondaryColor = Color(0xFF6270B1);
+  final Color _accentColor = Color(0xFF4CC9F0);
+  final Color _successColor = Color(0xFF10B981);
+  final Color _warningColor = Color(0xFFF59E0B);
+  final Color _errorColor = Color(0xFFEF4444);
+  final Color _backgroundColor = Color(0xFFF8FAFF);
+  final Color _surfaceColor = Color(0xFFFFFFFF);
+  final Color _textPrimary = Color(0xFF1E293B);
+  final Color _textSecondary = Color(0xFF64748B);
+  final Color _textLight = Color(0xFF94A3B8);
+
+  String _currentHousehold = '';
+  String _currentHouseholdId = '';
+  String _userFullName = '';
+  String _userRole = 'member'; // Default to member
+  int _totalItems = 0;
+  int _lowStockItems = 0;
+  int _expiringSoonItems = 0;
+  double _totalValue = 0.0;
+  bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+  
+  int _currentIndex = 0;
+
+  // Stream subscriptions for real-time data
+  StreamSubscription<Map<String, dynamic>>? _statsSubscription;
+
+  // Enhanced animations
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    _initializeAnimations();
+    _currentHousehold = widget.selectedHousehold ?? '';
+    _currentHouseholdId = widget.householdId ?? '';
+    _loadUserData();
+    
+    if (_currentHouseholdId.isNotEmpty) {
+      _setupRealTimeSubscriptions();
+    } else {
+      _isLoading = false;
+    }
+  }
+
+  void _initializeAnimations() {
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 1500),
+    );
+  }
+
+  // Enhanced user data loading with fullName and role support
+  void _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Use the enhanced method to get user info
+      final userInfo = await _dashboardService._getUserDisplayInfo();
+      
+      setState(() {
+        _userFullName = userInfo['fullName'] ?? 'User';
+        _userRole = userInfo['role'] ?? 'member'; // Get user role
+      });
+    }
+  }
+
+  void _setupRealTimeSubscriptions() {
     setState(() {
       _isLoading = true;
       _hasError = false;
     });
-    
+
     // Cancel existing subscriptions
-    _inventorySubscription?.cancel();
-    _activitiesSubscription?.cancel();
-    
-    // Set up new listeners
-    _setupRealTimeListeners();
+    _statsSubscription?.cancel();
+
+    // Set up real-time stats subscription
+    _statsSubscription = _dashboardService
+        .getInventoryStatsStream(_currentHouseholdId)
+        .listen((stats) {
+      if (mounted) {
+        setState(() {
+          _totalItems = stats['totalItems'] ?? 0;
+          _lowStockItems = stats['lowStockItems'] ?? 0;
+          _expiringSoonItems = stats['expiringSoonItems'] ?? 0;
+          _totalValue = stats['totalValue'] ?? 0.0;
+          _isLoading = false;
+          _hasError = false;
+        });
+        
+        // Start animations when first data arrives
+        if (!_animationController.isAnimating) {
+          _animationController.forward();
+        }
+      }
+    }, onError: (error) {
+      print('Stats stream error: $error');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _errorMessage = 'Failed to load real-time data: ${error.toString()}';
+        });
+      }
+    });
   }
 
+  @override
+  void dispose() {
+    _statsSubscription?.cancel();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _manualRefresh() async {
+    if (_currentHouseholdId.isNotEmpty) {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      _setupRealTimeSubscriptions();
+    }
+  }
+
+  Future<void> _retryLoadData() async {
+    if (_currentHouseholdId.isNotEmpty) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+      _setupRealTimeSubscriptions();
+    }
+  }
+
+
   Widget _getPage(int index) {
-    switch (index) {
+    final adjustedIndex = _getAdjustedIndex(index);
+
+    switch (adjustedIndex) {
       case 0: return _buildDashboardContent();
       case 1: return InventoryListPage(
         householdId: _currentHouseholdId,
         householdName: _currentHousehold,
-        isReadOnly: true, // Important: Members have read-only access
       );
       case 2: return ExpenseTrackerPage(
-        householdId: _currentHouseholdId,
-        isReadOnly: true, // Members have read-only access to expenses
+        householdId: _currentHouseholdId, 
+        isReadOnly: true
       );
       case 3: return ProfilePage();
       default: return _buildDashboardContent();
     }
+  }
+
+  int _getAdjustedIndex(int index) {
+    // For members, tabs are: Dashboard, Inventory, Expenses, Profile
+    return index;
   }
 
   @override
@@ -283,18 +438,30 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   AppBar _buildAppBar() {
     return AppBar(
       automaticallyImplyLeading: false,
-      title: AnimatedSwitcher(
-        duration: Duration(milliseconds: 300),
-        child: Text(
-          _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
-          key: ValueKey(_currentHousehold),
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-            letterSpacing: -0.5,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedSwitcher(
+            duration: Duration(milliseconds: 300),
+            child: Text(
+              _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
+              key: ValueKey(_currentHousehold),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
           ),
-        ),
+          Text(
+            'Role: ${_userRole.toUpperCase()}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
       ),
       backgroundColor: _primaryColor,
       elevation: 0,
@@ -306,16 +473,14 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         ),
       ),
       actions: [
-        if (_hasError)
-          _buildAppBarAction(
-            Icons.refresh_rounded,
-            'Retry Loading Data',
-            _retryLoadData,
-          ),
-        _buildAppBarAction(
-          Icons.chat_rounded,
-          'AI Assistant',
-          _currentHouseholdId.isNotEmpty ? () {
+        IconButton(
+          icon: Icon(Icons.refresh_rounded, size: 24),
+          onPressed: _manualRefresh,
+          tooltip: 'Refresh Data',
+        ),
+        IconButton(
+          icon: Icon(Icons.chat_rounded, size: 24),
+          onPressed: _currentHouseholdId.isNotEmpty ? () {
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -323,38 +488,37 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
               ),
             );
           } : null,
+          tooltip: 'AI Assistant',
         ),
         if (_currentHousehold.isNotEmpty)
-          _buildAppBarAction(
-            Icons.swap_horiz_rounded,
-            'Switch Household',
-            () {
+          IconButton(
+            icon: Icon(Icons.swap_horiz_rounded, size: 24),
+            onPressed: () {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (context) => HouseholdService()),
               );
             },
+            tooltip: 'Switch Household',
           ),
       ],
     );
   }
 
-  Widget _buildAppBarAction(IconData icon, String tooltip, VoidCallback? onPressed) {
-    return IconButton(
-      icon: Icon(icon, size: 24),
-      onPressed: onPressed,
-      tooltip: tooltip,
-      color: onPressed != null ? Colors.white : Colors.white.withOpacity(0.3),
-    );
-  }
-
   Widget _buildBottomNavigationBar() {
+    final navItems = [
+      _buildNavItem(Icons.dashboard_rounded, 'Dashboard', 0),
+      _buildNavItem(Icons.inventory_2_rounded, 'Inventory', 1),
+      _buildNavItem(Icons.analytics_rounded, 'Expenses', 2),
+      _buildNavItem(Icons.person_rounded, 'Profile', 3),
+    ];
+
     return Container(
       decoration: BoxDecoration(
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 25,
             spreadRadius: 2,
           ),
         ],
@@ -377,13 +541,8 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
           unselectedItemColor: _textLight,
           selectedFontSize: 12,
           unselectedFontSize: 12,
-          elevation: 8,
-          items: [
-            _buildNavItem(Icons.dashboard_rounded, 'Dashboard', 0),
-            _buildNavItem(Icons.inventory_2_rounded, 'Inventory', 1),
-            _buildNavItem(Icons.analytics_rounded, 'Expenses', 2),
-            _buildNavItem(Icons.person_rounded, 'Profile', 3),
-          ],
+          elevation: 12,
+          items: navItems,
         ),
       ),
     );
@@ -404,39 +563,28 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
   }
 
   Widget _buildDashboardContent() {
-    return AnimatedBuilder(
-      animation: _animationController,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, _slideAnimation.value * (1 - _staggerAnimation.value)),
-          child: Opacity(
-            opacity: _fadeAnimation.value,
-            child: SingleChildScrollView(
-              physics: BouncingScrollPhysics(),
-              padding: EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildWelcomeHeader(),
-                  SizedBox(height: 24),
-                  _buildQuickStats(),
-                  SizedBox(height: 24),
-                  _buildQuickActions(),
-                  SizedBox(height: 24),
-                  _buildRecentActivitySection(),
-                  SizedBox(height: 80), // Extra space for bottom navigation
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: _manualRefresh,
+      color: _primaryColor,
+      backgroundColor: _surfaceColor,
+      child: ListView(
+        physics: AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(20),
+        children: [
+          _buildWelcomeHeader(),
+          SizedBox(height: 24),
+          _buildQuickStats(),
+          SizedBox(height: 24),
+          _buildQuickActions(),
+          SizedBox(height: 70),
+        ],
+      ),
     );
   }
 
   Widget _buildWelcomeHeader() {
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -446,8 +594,8 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: _primaryColor.withOpacity(0.3),
-            blurRadius: 25,
+            color: _primaryColor.withOpacity(0.4),
+            blurRadius: 30,
             offset: Offset(0, 10),
           ),
         ],
@@ -459,10 +607,10 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Welcome!',
+                  'Welcome Back, $_userFullName!',
                   style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                     letterSpacing: -0.5,
                   ),
@@ -470,37 +618,62 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                 SizedBox(height: 8),
                 Text(
                   _currentHousehold.isNotEmpty 
-                      ? 'Viewing $_currentHousehold inventory as a member'
-                      : 'View household inventory information',
+                      ? 'Your $_currentHousehold inventory is looking great!'
+                      : 'Manage your household inventory efficiently',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 15,
+                    color: Colors.white.withOpacity(0.95),
                     height: 1.4,
                   ),
                 ),
                 SizedBox(height: 16),
-                _buildMemberBadge(),
+                _buildStatusIndicator(),
               ],
             ),
           ),
           SizedBox(width: 16),
           Container(
-            width: 70,
-            height: 70,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.2),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.1),
+                  blurRadius: 15,
+                  spreadRadius: 2,
+                ),
+              ],
             ),
-            child: Icon(Icons.visibility_rounded, color: Colors.white, size: 35),
+            child: Icon(Icons.home_rounded, color: Colors.white, size: 40),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMemberBadge() {
+  Widget _buildStatusIndicator() {
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+    
+    if (_hasError) {
+      statusColor = _errorColor;
+      statusText = 'Needs Attention';
+      statusIcon = Icons.error_outline_rounded;
+    } else if (_isLoading) {
+      statusColor = _warningColor;
+      statusText = 'Loading...';
+      statusIcon = Icons.schedule_rounded;
+    } else {
+      statusColor = _successColor;
+      statusText = 'Live & Updated';
+      statusIcon = Icons.check_circle_rounded;
+    }
+    
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(20),
@@ -508,19 +681,15 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: _hasError ? _errorColor : _successColor,
-              shape: BoxShape.circle,
-            ),
-          ),
+          if (!_hasError && !_isLoading)
+            PulseIndicator(color: statusColor, size: 10),
+          SizedBox(width: 6),
+          Icon(statusIcon, color: Colors.white, size: 16),
           SizedBox(width: 8),
           Text(
-            _hasError ? 'Connection Issue' : 'Member Access - View Only',
+            statusText,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               color: Colors.white,
               fontWeight: FontWeight.w600,
             ),
@@ -534,85 +703,10 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Inventory Overview',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: _textPrimary,
-            letterSpacing: -0.5,
-          ),
-        ),
-        SizedBox(height: 16),
-        GridView(
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.1,
-          ),
+        Row(
           children: [
-            _buildStatCard(
-              'Total Items',
-              _totalItems.toString(),
-              Icons.inventory_2_rounded,
-              _primaryColor,
-            ),
-            _buildStatCard(
-              'Low Stock',
-              _lowStockItems.toString(),
-              Icons.warning_amber_rounded,
-              _warningColor,
-            ),
-            _buildStatCard(
-              'Expiring Soon',
-              _expiringSoonItems.toString(),
-              Icons.calendar_today_rounded,
-              _errorColor,
-            ),
-            _buildStatCard(
-              'Total Value',
-              'RM${_totalValue.toStringAsFixed(0)}',
-              Icons.attach_money_rounded,
-              _successColor,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            SizedBox(height: 12),
             Text(
-              value,
+              'Inventory Overview',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -620,13 +714,146 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                 letterSpacing: -0.5,
               ),
             ),
+            SizedBox(width: 8),
+            PulseIndicator(color: _primaryColor, size: 6),
+          ],
+        ),
+        SizedBox(height: 16),
+        GridView(
+          shrinkWrap: true,
+          physics: NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.8,
+          ),
+          children: [
+            _buildEnhancedStatCard(
+              'Total Items',
+              _totalItems,
+              Icons.inventory_2_rounded,
+              _primaryColor,
+              'All items in inventory',
+            ),
+            _buildEnhancedStatCard(
+              'Low Stock',
+              _lowStockItems,
+              Icons.warning_amber_rounded,
+              _warningColor,
+              'Items below 5 quantity',
+            ),
+            _buildEnhancedStatCard(
+              'Expiring Soon',
+              _expiringSoonItems,
+              Icons.calendar_today_rounded,
+              _errorColor,
+              'Expiring in 7 days',
+            ),
+            _buildEnhancedStatCard(
+              'Total Value',
+              _totalValue.toInt(),
+              Icons.attach_money_rounded,
+              _successColor,
+              'Total inventory worth',
+              isCurrency: true,
+            )
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEnhancedStatCard(String title, int value, IconData icon, Color color, String subtitle, {bool isCurrency = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                ),
+                if (value > 0 && title == 'Low Stock')
+                  PulseIndicator(color: _warningColor, size: 8),
+                if (value > 0 && title == 'Expiring Soon')
+                  PulseIndicator(color: _errorColor, size: 8),
+              ],
+            ),
+            SizedBox(height: 16),
+            // Modified this part to include RM symbol for currency
+            if (isCurrency)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'RM ',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  AnimatedStatNumber(
+                    value: value,
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              )
+            else
+              AnimatedStatNumber(
+                value: value,
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: _textPrimary,
+                  letterSpacing: -1.0,
+                ),
+              ),
             SizedBox(height: 4),
             Text(
               title,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 color: _textSecondary,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: _textLight,
               ),
             ),
           ],
@@ -642,38 +869,38 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         Text(
           'Quick Actions',
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
             color: _textPrimary,
             letterSpacing: -0.5,
           ),
         ),
-        SizedBox(height: 16),
+        SizedBox(height: 18),
         GridView(
           shrinkWrap: true,
           physics: NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.15,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.9,
           ),
           children: [
-            _buildActionCard(
-              'View Inventory',
-              'Browse household items',
+            _buildEnhancedActionCard(
+              'Manage Inventory',
+              'View and organize your items',
               Icons.inventory_2_rounded,
               _primaryColor,
               () => setState(() => _currentIndex = 1),
             ),
-            _buildActionCard(
-              'View Expenses',
-              'Monitor household spending',
+            _buildEnhancedActionCard(
+              'Expense Tracking',
+              'Monitor your spending',
               Icons.analytics_rounded,
               _warningColor,
               () => setState(() => _currentIndex = 2),
             ),
-            _buildActionCard(
+            _buildEnhancedActionCard(
               'AI Assistant',
               'Get help with your inventory',
               Icons.chat_rounded,
@@ -687,12 +914,17 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                 );
               },
             ),
-            _buildActionCard(
-              'Your Profile',
-              'Manage your account',
-              Icons.person_rounded,
+            _buildEnhancedActionCard(
+              'Switch Household',
+              'Change to another household',
+              Icons.swap_horiz_rounded,
               _successColor,
-              () => setState(() => _currentIndex = 3),
+              () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => HouseholdService()),
+                );
+              },
             ),
           ],
         ),
@@ -700,7 +932,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildActionCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildEnhancedActionCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
     return Material(
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(16),
@@ -708,37 +940,49 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: EdgeInsets.all(16),
+          padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.black.withOpacity(0.05)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: EdgeInsets.all(8),
+                padding: EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 18),
+                child: Icon(icon, color: color, size: 20),
               ),
-              SizedBox(height: 12),
+              SizedBox(height: 16),
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                   color: _textPrimary,
                 ),
               ),
-              SizedBox(height: 4),
+              SizedBox(height: 6),
               Text(
                 subtitle,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: _textSecondary,
+                  height: 1.3,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -746,160 +990,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildRecentActivitySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Recent Activity',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: _textPrimary,
-                letterSpacing: -0.5,
-              ),
-            ),
-            if (_recentActivities.isNotEmpty)
-              TextButton(
-                onPressed: () {},
-                child: Text(
-                  'View All',
-                  style: TextStyle(
-                    color: _primaryColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        SizedBox(height: 16),
-        _recentActivities.isEmpty
-            ? _buildEmptyState()
-            : Container(
-                decoration: BoxDecoration(
-                  color: _surfaceColor,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
-                  itemCount: _recentActivities.length,
-                  separatorBuilder: (context, index) => Divider(height: 1, indent: 16, endIndent: 16),
-                  itemBuilder: (context, index) {
-                    final activity = _recentActivities[index];
-                    return _buildActivityItem(activity);
-                  },
-                ),
-              ),
-      ],
-    );
-  }
-
-  Widget _buildActivityItem(Map<String, dynamic> activity) {
-    final icon = _getActivityIcon(activity['type']);
-    final color = _getActivityColor(activity['type']);
-    
-    return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 18),
-      ),
-      title: Text(
-        activity['message'] ?? 'No message',
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: _textPrimary,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        _formatTimestamp(activity['timestamp']),
-        style: TextStyle(
-          fontSize: 11,
-          color: _textLight,
-        ),
-      ),
-    );
-  }
-
-  IconData _getActivityIcon(String type) {
-    switch (type) {
-      case 'add': return Icons.add_circle_rounded;
-      case 'update': return Icons.edit_rounded;
-      case 'delete': return Icons.delete_rounded;
-      case 'warning': return Icons.warning_rounded;
-      default: return Icons.info_rounded;
-    }
-  }
-
-  Color _getActivityColor(String type) {
-    switch (type) {
-      case 'add': return _successColor;
-      case 'update': return _accentColor;
-      case 'delete': return _errorColor;
-      case 'warning': return _warningColor;
-      default: return _primaryColor;
-    }
-  }
-
-  Widget _buildEmptyState() {
-    return Container(
-      padding: EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.history_rounded, size: 48, color: _textLight.withOpacity(0.3)),
-          SizedBox(height: 12),
-          Text(
-            'No recent activity',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: _textSecondary,
-            ),
-          ),
-          SizedBox(height: 6),
-          Text(
-            'Household activities will appear here',
-            style: TextStyle(
-              fontSize: 12,
-              color: _textLight,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
       ),
     );
   }
@@ -936,7 +1026,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
               ),
               SizedBox(height: 8),
               Text(
-                'Choose a household to view its information',
+                'Choose a household to manage its inventory',
                 style: TextStyle(
                   fontSize: 14,
                   color: _textSecondary,
@@ -958,7 +1048,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                       household['name'] ?? 'Unnamed Household',
                       household['createdAt'] ?? Timestamp.now(),
                       household['id'] ?? '',
-                      household['userRole'] ?? 'member',
                     );
                   },
                 ),
@@ -1076,7 +1165,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             ),
             SizedBox(height: 16),
             Text(
-              'No households available',
+              'No households yet',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
@@ -1087,12 +1176,30 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                'You need to be invited to a household to access this feature',
+                'Create your first household to get started',
                 style: TextStyle(
                   fontSize: 14,
                   color: _textSecondary,
                 ),
                 textAlign: TextAlign.center,
+              ),
+            ),
+            SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => _householdServiceController.createNewHousehold(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryColor,
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
+              ),
+              child: Text(
+                'Create New Household',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -1101,7 +1208,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId, String userRole) {
+  Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId) {
     DateTime createdDate = createdAt.toDate();
     
     return Material(
@@ -1114,7 +1221,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
             _currentHouseholdId = householdId;
             _isLoading = true;
           });
-          _setupRealTimeListeners();
+          _setupRealTimeSubscriptions();
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
@@ -1165,24 +1272,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
                   color: _textLight,
                 ),
               ),
-              SizedBox(height: 6),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: userRole == 'creator' 
-                      ? _successColor.withOpacity(0.1)
-                      : _primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  userRole == 'creator' ? 'Owner' : 'Member',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: userRole == 'creator' ? _successColor : _primaryColor,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -1190,23 +1279,8 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
     );
   }
 
+  // Utility methods
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
-  }
-
-  String _formatTimestamp(Timestamp timestamp) {
-    final date = timestamp.toDate();
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
   }
 }

@@ -10,6 +10,7 @@ class InventoryAuditLog {
   final DateTime timestamp;
   final String updatedByUserId;
   final String updatedByUserName;
+  final String updatedByFullName; // Add this field
 
   InventoryAuditLog({
     required this.itemId,
@@ -21,6 +22,7 @@ class InventoryAuditLog {
     required this.timestamp,
     required this.updatedByUserId,
     required this.updatedByUserName,
+    required this.updatedByFullName, // Add this parameter
   });
 
   Map<String, dynamic> toMap() {
@@ -34,6 +36,7 @@ class InventoryAuditLog {
       'timestamp': Timestamp.fromDate(timestamp),
       'updatedByUserId': updatedByUserId,
       'updatedByUserName': updatedByUserName,
+      'updatedByFullName': updatedByFullName, // Include in Firestore
     };
   }
 
@@ -48,6 +51,7 @@ class InventoryAuditLog {
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       updatedByUserId: map['updatedByUserId'] ?? '',
       updatedByUserName: map['updatedByUserName'] ?? '',
+      updatedByFullName: map['updatedByFullName'] ?? '', // Extract from Firestore
     );
   }
 }

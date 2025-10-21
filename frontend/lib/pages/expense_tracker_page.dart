@@ -38,6 +38,11 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   int _touchedIndex = -1;
   bool _showChart = true;
 
+  // Month tracking state
+  DateTime _selectedMonth = DateTime.now();
+  List<MonthlySummary> _monthlySummaries = [];
+  bool _isLoadingMonthlyData = false;
+
   // Color palette
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color secondaryColor = Color(0xFF5A8BA8);
@@ -68,6 +73,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     super.initState();
     _setupInventoryStream();
     _initializeAnimations();
+    _loadMonthlySummaries();
   }
 
   void _initializeAnimations() {
@@ -93,12 +99,85 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   }
 
   void _setupInventoryStream() {
+    // Get the first and last day of selected month
+    final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
+    final lastDay = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0, 23, 59, 59);
+
     _inventoryStream = _firestore
         .collection('households')
         .doc(widget.householdId)
         .collection('inventory')
+        .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
+        .where('updatedAt', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
         .orderBy('updatedAt', descending: true)
         .snapshots();
+  }
+
+  // Load monthly summaries for the past 12 months
+  Future<void> _loadMonthlySummaries() async {
+    setState(() {
+      _isLoadingMonthlyData = true;
+    });
+
+    try {
+      final now = DateTime.now();
+      final summaries = <MonthlySummary>[];
+      
+      for (int i = 0; i < 12; i++) {
+        final month = DateTime(now.year, now.month - i, 1);
+        final firstDay = DateTime(month.year, month.month, 1);
+        final lastDay = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
+
+        final snapshot = await _firestore
+            .collection('households')
+            .doc(widget.householdId)
+            .collection('inventory')
+            .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
+            .where('updatedAt', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
+            .get();
+
+        double monthlyTotal = 0.0;
+        final items = snapshot.docs.map((doc) {
+          final data = doc.data();
+          final price = _parseDouble(data['price']);
+          final quantity = _parseInt(data['quantity']);
+          final totalValue = price * quantity;
+          monthlyTotal += totalValue;
+          return {
+            'id': doc.id,
+            'name': data['name']?.toString() ?? 'Unnamed Item',
+            'category': data['category']?.toString() ?? 'Other',
+            'quantity': quantity,
+            'price': price,
+            'totalValue': totalValue,
+            'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          };
+        }).toList();
+
+        summaries.add(MonthlySummary(
+          month: month,
+          totalExpenses: monthlyTotal,
+          itemCount: items.length,
+        ));
+      }
+
+      setState(() {
+        _monthlySummaries = summaries;
+        _isLoadingMonthlyData = false;
+      });
+    } catch (error) {
+      print('Error loading monthly summaries: $error');
+      setState(() {
+        _isLoadingMonthlyData = false;
+      });
+    }
+  }
+
+  void _changeMonth(int delta) {
+    setState(() {
+      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + delta);
+      _setupInventoryStream();
+    });
   }
 
   _InventoryData _processInventoryData(List<QueryDocumentSnapshot> docs) {
@@ -111,7 +190,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
       final data = doc.data() as Map<String, dynamic>;
       
       final price = _parseDouble(data['price']);
-      final quantity = _parseInt(data['quantity']); // Changed to integer
+      final quantity = _parseInt(data['quantity']);
       final totalValue = price * quantity;
       final category = data['category']?.toString() ?? 'Other';
       final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now();
@@ -120,7 +199,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
         'id': doc.id,
         'name': data['name']?.toString() ?? 'Unnamed Item',
         'category': category,
-        'quantity': quantity, // Now integer
+        'quantity': quantity,
         'price': price,
         'totalValue': totalValue,
         'updatedAt': updatedAt,
@@ -254,7 +333,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     final categories = categoryTotals.entries.toList();
     
     return Container(
-      height: 325,
+      height: 400,
       padding: EdgeInsets.all(16),
       child: Column(
         children: [
@@ -480,7 +559,191 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
-  Widget _buildSummaryCard(double totalExpenses, DateTime? latestUpdate) {
+  // Month Selector Widget
+  Widget _buildMonthSelector() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            icon: Icon(Icons.chevron_left, color: primaryColor),
+            onPressed: () => _changeMonth(-1),
+          ),
+          GestureDetector(
+            onTap: _showMonthlyHistory,
+            child: Column(
+              children: [
+                Text(
+                  DateFormat('MMMM yyyy').format(_selectedMonth),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Tap to view history',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: lightTextColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.chevron_right, color: primaryColor),
+            onPressed: () {
+              final now = DateTime.now();
+              final nextMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1);
+              if (nextMonth.isBefore(DateTime(now.year, now.month + 1))) {
+                _changeMonth(1);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Monthly History Widget
+  Widget _buildMonthlyHistory() {
+    if (_isLoadingMonthlyData) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Monthly History',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+          SizedBox(height: 12),
+          Container(
+            height: 295,
+            child: ListView(
+              children: _monthlySummaries.map((summary) {
+                final isCurrent = summary.month.month == _selectedMonth.month && 
+                                summary.month.year == _selectedMonth.year;
+                return ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isCurrent ? primaryColor.withOpacity(0.1) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isCurrent ? primaryColor : Colors.transparent,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        DateFormat('MMM').format(summary.month),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isCurrent ? primaryColor : lightTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    DateFormat('MMMM yyyy').format(summary.month),
+                    style: TextStyle(
+                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.normal,
+                      color: isCurrent ? primaryColor : textColor,
+                    ),
+                  ),
+                  trailing: Text(
+                    'RM ${summary.totalExpenses.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: summary.totalExpenses > 0 ? textColor : lightTextColor,
+                    ),
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _selectedMonth = summary.month;
+                      _setupInventoryStream();
+                    });
+                    Navigator.pop(context); // Close the dialog
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMonthlyHistory() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: 500),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Select Month',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _buildMonthlyHistory(),
+              ),
+              SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(double totalExpenses, DateTime? latestUpdate, int itemCount) {
+    final monthlyComparison = _getMonthlyComparison(totalExpenses);
+
     return Container(
       padding: EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -517,18 +780,67 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Total Expenses", style: TextStyle(color: Colors.white70, fontSize: 16)),
+                    Text(
+                      "${DateFormat('MMMM yyyy').format(_selectedMonth)} Expenses", 
+                      style: TextStyle(color: Colors.white70, fontSize: 16)
+                    ),
                     SizedBox(height: 4),
-                    Text(_formatUpdateTime(latestUpdate), style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text(
+                      '$itemCount items • ${_formatUpdateTime(latestUpdate)}', 
+                      style: TextStyle(color: Colors.white60, fontSize: 12)
+                    ),
                   ],
                 ),
               ),
             ],
           ),
           SizedBox(height: 16),
-          Text("RM ${totalExpenses.toStringAsFixed(2)}", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700)),
+          Text(
+            "RM ${totalExpenses.toStringAsFixed(2)}", 
+            style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700)
+          ),
+          if (monthlyComparison != null) ...[
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  monthlyComparison.isIncrease ? Icons.arrow_upward : Icons.arrow_downward,
+                  color: Colors.white70,
+                  size: 16,
+                ),
+                SizedBox(width: 4),
+                Text(
+                  '${monthlyComparison.percentage.toStringAsFixed(1)}% from last month',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  MonthlyComparison? _getMonthlyComparison(double currentMonthTotal) {
+    if (_monthlySummaries.length < 2) return null;
+
+    final currentIndex = _monthlySummaries.indexWhere((summary) =>
+      summary.month.month == _selectedMonth.month && 
+      summary.month.year == _selectedMonth.year
+    );
+
+    if (currentIndex == -1 || currentIndex + 1 >= _monthlySummaries.length) return null;
+
+    final previousMonth = _monthlySummaries[currentIndex + 1];
+    if (previousMonth.totalExpenses == 0) return null;
+
+    final difference = currentMonthTotal - previousMonth.totalExpenses;
+    final percentage = (difference / previousMonth.totalExpenses * 100).abs();
+
+    return MonthlyComparison(
+      isIncrease: difference > 0,
+      percentage: percentage,
+      difference: difference,
     );
   }
 
@@ -603,7 +915,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Item thumbnail - Same as InventoryListPage
+              // Item thumbnail
               _buildItemThumbnail(item),
               SizedBox(width: 16),
               
@@ -644,7 +956,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                         Icon(Icons.format_list_numbered, size: 16, color: lightTextColor),
                         SizedBox(width: 4),
                         Text(
-                          '${item['quantity']} ${item['quantity'] == 1 ? 'unit' : 'units'}', // Integer display with proper pluralization
+                          '${item['quantity']} ${item['quantity'] == 1 ? 'unit' : 'units'}',
                           style: TextStyle(fontSize: 14, color: lightTextColor),
                         ),
                         SizedBox(width: 16),
@@ -681,7 +993,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
-  // Item Thumbnail Widget - Same as InventoryListPage
+  // Item Thumbnail Widget
   Widget _buildItemThumbnail(Map<String, dynamic> item) {
     return Container(
       width: 60,
@@ -697,7 +1009,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
-  // Item Image Widget - Same as InventoryListPage
+  // Item Image Widget
   Widget _buildItemImage(Map<String, dynamic> item) {
     // Priority: localImagePath > imageUrl > default icon
     if (item['localImagePath'] != null && item['localImagePath'].isNotEmpty) {
@@ -754,82 +1066,6 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
       case 'medication': return Icons.medical_services; 
       default: return Icons.category;
     }
-  }
-
-  Widget _buildContent(_InventoryData inventoryData) {
-    final filteredItems = _applySearchAndSort(inventoryData.items, _searchQuery, _sortBy);
-
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: RefreshIndicator(
-        onRefresh: () async {
-          _setupInventoryStream();
-          setState(() {});
-        },
-        color: primaryColor,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSummaryCard(inventoryData.totalExpenses, inventoryData.latestUpdateTime),
-                    SizedBox(height: 28),
-                    
-                    // Chart/List Toggle
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Expense Breakdown', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor)),
-                        IconButton(
-                          icon: Icon(_showChart ? Icons.list : Icons.pie_chart, color: primaryColor),
-                          onPressed: () => setState(() => _showChart = !_showChart),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 16),
-                    
-                    // Interactive Chart or Category List
-                    _showChart 
-                      ? _buildExpenseChart(inventoryData.categoryTotals, inventoryData.totalExpenses)
-                      : _buildCategoryList(inventoryData.categoryTotals, inventoryData.totalExpenses),
-                    
-                    SizedBox(height: 28),
-                    Text('Recent Expenses', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor)),
-                    SizedBox(height: 16),
-                    _buildSearchBar(),
-                    SizedBox(height: 16),
-                    Row(children: [
-                      _buildSortChip('Date', 'date'),
-                      SizedBox(width: 8),
-                      _buildSortChip('Price', 'price'),
-                      SizedBox(width: 8),
-                      _buildSortChip('Category', 'category'),
-                    ]),
-                    SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
-            
-            // Animated Expense List with Images
-            filteredItems.isEmpty
-              ? SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: _buildEmptyState()))
-              : SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20),
-                      child: _buildExpenseItem(filteredItems[index], index),
-                    ),
-                    childCount: filteredItems.length,
-                  ),
-                ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildCategoryList(Map<String, double> categoryTotals, double totalExpenses) {
@@ -889,6 +1125,85 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
+  Widget _buildContent(_InventoryData inventoryData) {
+    final filteredItems = _applySearchAndSort(inventoryData.items, _searchQuery, _sortBy);
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: RefreshIndicator(
+        onRefresh: () async {
+          _setupInventoryStream();
+          _loadMonthlySummaries();
+          setState(() {});
+        },
+        color: primaryColor,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildMonthSelector(),
+                    SizedBox(height: 20),
+                    _buildSummaryCard(inventoryData.totalExpenses, inventoryData.latestUpdateTime, inventoryData.items.length),
+                    SizedBox(height: 28),
+                    
+                    // Chart/List Toggle
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Expense Breakdown', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor)),
+                        IconButton(
+                          icon: Icon(_showChart ? Icons.list : Icons.pie_chart, color: primaryColor),
+                          onPressed: () => setState(() => _showChart = !_showChart),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 16),
+                    
+                    // Interactive Chart or Category List
+                    _showChart 
+                      ? _buildExpenseChart(inventoryData.categoryTotals, inventoryData.totalExpenses)
+                      : _buildCategoryList(inventoryData.categoryTotals, inventoryData.totalExpenses),
+                    
+                    SizedBox(height: 28),
+                    Text('Recent Expenses', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor)),
+                    SizedBox(height: 16),
+                    _buildSearchBar(),
+                    SizedBox(height: 16),
+                    Row(children: [
+                      _buildSortChip('Date', 'date'),
+                      SizedBox(width: 8),
+                      _buildSortChip('Price', 'price'),
+                      SizedBox(width: 8),
+                      _buildSortChip('Category', 'category'),
+                    ]),
+                    SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Animated Expense List with Images
+            filteredItems.isEmpty
+              ? SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: _buildEmptyState()))
+              : SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: _buildExpenseItem(filteredItems[index], index),
+                    ),
+                    childCount: filteredItems.length,
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -899,6 +1214,12 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
         backgroundColor: primaryColor,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(24))),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.calendar_today, color: Colors.white),
+            onPressed: _showMonthlyHistory,
+          ),
+        ],
       ),
       floatingActionButton: !widget.isReadOnly ? FloatingActionButton(
         onPressed: () {
@@ -942,6 +1263,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     return RefreshIndicator(
       onRefresh: () async {
         _setupInventoryStream();
+        _loadMonthlySummaries();
         setState(() {});
       },
       color: primaryColor,
@@ -951,7 +1273,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSummaryCard(0.0, null),
+            _buildMonthSelector(),
+            SizedBox(height: 20),
+            _buildSummaryCard(0.0, null, 0),
             SizedBox(height: 28),
             _buildEmptyState(),
           ],
@@ -959,6 +1283,31 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
       ),
     );
   }
+}
+
+// Data classes for monthly tracking
+class MonthlySummary {
+  final DateTime month;
+  final double totalExpenses;
+  final int itemCount;
+
+  MonthlySummary({
+    required this.month,
+    required this.totalExpenses,
+    required this.itemCount,
+  });
+}
+
+class MonthlyComparison {
+  final bool isIncrease;
+  final double percentage;
+  final double difference;
+
+  MonthlyComparison({
+    required this.isIncrease,
+    required this.percentage,
+    required this.difference,
+  });
 }
 
 class _InventoryData {

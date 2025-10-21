@@ -16,11 +16,11 @@ class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
-  // Enhanced method to get user info including fullName
-  Future<Map<String, String>> _getUserDisplayInfo() async {
+  // Enhanced method to get user info including fullName and role
+  Future<Map<String, dynamic>> _getUserDisplayInfo() async {
     final user = _auth.currentUser;
     if (user == null) {
-      return {'userName': 'Unknown', 'fullName': 'Unknown User'};
+      return {'userName': 'Unknown', 'fullName': 'Unknown User', 'role': 'member'};
     }
     
     try {
@@ -29,10 +29,12 @@ class DashboardService {
         final data = userDoc.data();
         final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
         final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
+        final role = data?['role'] as String? ?? 'member'; // Default to 'member' if not set
         
         return {
           'userName': userName,
           'fullName': fullName,
+          'role': role,
         };
       }
     } catch (e) {
@@ -44,6 +46,7 @@ class DashboardService {
     return {
       'userName': fallbackName,
       'fullName': fallbackName,
+      'role': 'member',
     };
   }
 
@@ -127,7 +130,7 @@ class DashboardService {
                 'timestamp': data['timestamp'] ?? Timestamp.now(),
                 'type': data['type'] ?? 'info',
                 'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User', // Add fullName support
+                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
                 'oldValue': data['oldValue'],
@@ -173,7 +176,7 @@ class DashboardService {
           'timestamp': data['timestamp'] ?? Timestamp.now(),
           'type': data['type'] ?? 'info',
           'userName': data['userName'] ?? 'Unknown User',
-          'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User', // Add fullName support
+          'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
           'userId': data['userId'] ?? '',
           'itemName': data['itemName'],
           'oldValue': data['oldValue'],
@@ -223,7 +226,7 @@ class DashboardService {
                 'timestamp': data['timestamp'] ?? Timestamp.now(),
                 'type': data['type'] ?? 'info',
                 'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User', // Add fullName support
+                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
                 'oldValue': data['oldValue'],
@@ -244,7 +247,7 @@ class DashboardService {
     String type, {
     String? userId,
     String? userName,
-    String? fullName, // Add fullName parameter
+    String? fullName,
     String? itemName,
     dynamic oldValue,
     dynamic newValue,
@@ -272,7 +275,7 @@ class DashboardService {
             'timestamp': FieldValue.serverTimestamp(),
             'userId': userId ?? _auth.currentUser?.uid,
             'userName': finalUserName ?? _auth.currentUser?.displayName ?? 'User',
-            'fullName': finalFullName ?? finalUserName ?? 'User', // Store fullName
+            'fullName': finalFullName ?? finalUserName ?? 'User',
             'itemName': itemName,
             'oldValue': oldValue,
             'newValue': newValue,
@@ -846,17 +849,17 @@ class ActivityShimmer extends StatelessWidget {
   }
 }
 
-class DashboardPage extends StatefulWidget {
+class EditorDashboardPage extends StatefulWidget {
   final String? selectedHousehold;
   final String? householdId;
 
-  const DashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
+  const EditorDashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
 
   @override
-  _DashboardPageState createState() => _DashboardPageState();
+  _EditorDashboardPageState createState() => _EditorDashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> with SingleTickerProviderStateMixin {
+class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTickerProviderStateMixin {
   final HouseholdServiceController _householdServiceController = HouseholdServiceController();
   final DashboardService _dashboardService = DashboardService();
   
@@ -876,6 +879,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   String _currentHousehold = '';
   String _currentHouseholdId = '';
   String _userFullName = '';
+  String _userRole = 'editor'; // Default to editor
   int _totalItems = 0;
   int _lowStockItems = 0;
   int _expiringSoonItems = 0;
@@ -921,7 +925,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     );
   }
 
-  // Enhanced user data loading with fullName support
+  // Enhanced user data loading with fullName and role support
   void _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -930,6 +934,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
       
       setState(() {
         _userFullName = userInfo['fullName'] ?? 'User';
+        _userRole = userInfo['role'] ?? 'editor'; // Get user role
       });
     }
   }
@@ -1096,7 +1101,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         householdId: _currentHouseholdId,
         householdName: _currentHousehold,
       );
-      case 3: return ExpenseTrackerPage(householdId: _currentHouseholdId, isReadOnly: true); 
+      case 3: return ExpenseTrackerPage(householdId: _currentHouseholdId, isReadOnly: true);
       case 4: return ProfilePage();
       default: return _buildDashboardContent();
     }
@@ -1130,18 +1135,30 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   AppBar _buildAppBar() {
     return AppBar(
       automaticallyImplyLeading: false,
-      title: AnimatedSwitcher(
-        duration: Duration(milliseconds: 300),
-        child: Text(
-          _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
-          key: ValueKey(_currentHousehold),
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-            letterSpacing: -0.5,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AnimatedSwitcher(
+            duration: Duration(milliseconds: 300),
+            child: Text(
+              _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
+              key: ValueKey(_currentHousehold),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
           ),
-        ),
+          Text(
+            'Role: ${_userRole.toUpperCase()}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
       ),
       backgroundColor: _primaryColor,
       elevation: 0,
@@ -1186,6 +1203,14 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   }
 
   Widget _buildBottomNavigationBar() {
+    final navItems = [
+      _buildNavItem(Icons.dashboard_rounded, 'Dashboard', 0),
+      _buildNavItem(Icons.inventory_2_rounded, 'Inventory', 1),
+      _buildNavItem(Icons.add_circle_rounded, 'Add Item', 2),
+      _buildNavItem(Icons.analytics_rounded, 'Expenses', 3),
+      _buildNavItem(Icons.person_rounded, 'Profile', 4),
+    ];
+
     return Container(
       decoration: BoxDecoration(
         boxShadow: [
@@ -1215,13 +1240,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           selectedFontSize: 12,
           unselectedFontSize: 12,
           elevation: 12,
-          items: [
-            _buildNavItem(Icons.dashboard_rounded, 'Dashboard', 0),
-            _buildNavItem(Icons.inventory_2_rounded, 'Inventory', 1),
-            _buildNavItem(Icons.add_circle_rounded, 'Add Item', 2),
-            _buildNavItem(Icons.analytics_rounded, 'Expenses', 3),
-            _buildNavItem(Icons.person_rounded, 'Profile', 4),
-          ],
+          items: navItems,
         ),
       ),
     );
@@ -1439,7 +1458,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               'Total inventory worth',
               isCurrency: true,
             )
-              
           ],
         ),
       ],
@@ -1447,102 +1465,102 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   }
 
   Widget _buildEnhancedStatCard(String title, int value, IconData icon, Color color, String subtitle, {bool isCurrency = false}) {
-  return Container(
-    decoration: BoxDecoration(
-      color: _surfaceColor,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.08),
-          blurRadius: 15,
-          offset: Offset(0, 5),
-        ),
-      ],
-    ),
-    child: Padding(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              if (value > 0 && title == 'Low Stock')
-                PulseIndicator(color: _warningColor, size: 8),
-              if (value > 0 && title == 'Expiring Soon')
-                PulseIndicator(color: _errorColor, size: 8),
-            ],
-          ),
-          SizedBox(height: 16),
-          // Modified this part to include RM symbol for currency
-          if (isCurrency)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'RM ',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: _textPrimary,
-                    letterSpacing: 0,
-                  ),
-                ),
-                AnimatedStatNumber(
-                  value: value,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: _textPrimary,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            )
-          else
-            AnimatedStatNumber(
-              value: value,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: _textPrimary,
-                letterSpacing: -1.0,
-              ),
-            ),
-          SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              color: _textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 11,
-              color: _textLight,
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: Offset(0, 5),
           ),
         ],
       ),
-    ),
-  );
-}
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                ),
+                if (value > 0 && title == 'Low Stock')
+                  PulseIndicator(color: _warningColor, size: 8),
+                if (value > 0 && title == 'Expiring Soon')
+                  PulseIndicator(color: _errorColor, size: 8),
+              ],
+            ),
+            SizedBox(height: 16),
+            // Modified this part to include RM symbol for currency
+            if (isCurrency)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'RM ',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  AnimatedStatNumber(
+                    value: value,
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              )
+            else
+              AnimatedStatNumber(
+                value: value,
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: _textPrimary,
+                  letterSpacing: -1.0,
+                ),
+              ),
+            SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                color: _textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: _textLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildActivitySection() {
     return Column(

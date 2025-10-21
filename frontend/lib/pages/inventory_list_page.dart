@@ -6,6 +6,65 @@ import '../services/inventory_service.dart';
 import 'inventory_edit_page.dart';
 import 'dart:async';
 
+// =============================================
+// EXPIRY DATE MANAGEMENT & NOTIFICATIONS
+// =============================================
+
+class ExpiryDateManager {
+  // Check if item is expiring soon (within 7 days)
+  static bool isExpiringSoon(DateTime? expiryDate) {
+    if (expiryDate == null) return false;
+    final now = DateTime.now();
+    final difference = expiryDate.difference(now);
+    return difference.inDays <= 7 && difference.inDays >= 0;
+  }
+  
+  // Check if item is expired
+  static bool isExpired(DateTime? expiryDate) {
+    if (expiryDate == null) return false;
+    return expiryDate.isBefore(DateTime.now());
+  }
+  
+  // Get expiry status color
+  static Color getExpiryStatusColor(DateTime? expiryDate) {
+    if (expiryDate == null) return Colors.grey; // No expiry date
+    
+    if (isExpired(expiryDate)) {
+      return Colors.red; // Expired
+    } else if (isExpiringSoon(expiryDate)) {
+      return Colors.orange; // Expiring soon
+    } else {
+      return Colors.green; // Not expiring soon
+    }
+  }
+  
+  // Get expiry status text
+  static String getExpiryStatusText(DateTime? expiryDate) {
+    if (expiryDate == null) return 'No Expiry';
+    
+    if (isExpired(expiryDate)) {
+      final days = DateTime.now().difference(expiryDate).inDays;
+      return 'Expired ${days == 0 ? 'today' : '$days days ago'}';
+    } else if (isExpiringSoon(expiryDate)) {
+      final days = expiryDate.difference(DateTime.now()).inDays;
+      return 'Expires in $days ${days == 1 ? 'day' : 'days'}';
+    } else {
+      final days = expiryDate.difference(DateTime.now()).inDays;
+      return 'Expires in $days ${days == 1 ? 'day' : 'days'}';
+    }
+  }
+
+  // Get days until expiry
+  static int? getDaysUntilExpiry(DateTime? expiryDate) {
+    if (expiryDate == null) return null;
+    final now = DateTime.now();
+    if (expiryDate.isBefore(now)) {
+      return -now.difference(expiryDate).inDays;
+    }
+    return expiryDate.difference(now).inDays;
+  }
+}
+
 class InventoryListPage extends StatefulWidget {
   final String householdId;
   final String householdName;
@@ -38,6 +97,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
   String _selectedCategory = 'All';
   List<String> _categories = ['All'];
   bool _showLowStockOnly = false;
+  bool _showExpiringSoonOnly = false;
   String _sortField = 'name';
   bool _sortAscending = true;
   DocumentSnapshot? _lastDocument;
@@ -165,6 +225,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
               _buildSortOption('Quantity', 'quantity'),
               _buildSortOption('Price', 'price'),
               _buildSortOption('Expiry Date', 'expiryDate'),
+              _buildSortOption('Category', 'category'),
               SizedBox(height: 16),
               Row(
                 children: [
@@ -230,6 +291,71 @@ class _InventoryListPageState extends State<InventoryListPage> {
     );
   }
 
+  void _showFilterOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Filter Options',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              SizedBox(height: 16),
+              SwitchListTile(
+                title: Text('Show Low Stock Only'),
+                subtitle: Text('Items with quantity less than 5'),
+                value: _showLowStockOnly,
+                onChanged: (value) {
+                  setState(() {
+                    _showLowStockOnly = value;
+                    if (value) _showExpiringSoonOnly = false;
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              SwitchListTile(
+                title: Text('Show Expiring Soon Only'),
+                subtitle: Text('Items expiring within 7 days'),
+                value: _showExpiringSoonOnly,
+                onChanged: (value) {
+                  setState(() {
+                    _showExpiringSoonOnly = value;
+                    if (value) _showLowStockOnly = false;
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  minimumSize: Size(double.infinity, 50),
+                ),
+                child: Text('Close'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,6 +373,11 @@ class _InventoryListPageState extends State<InventoryListPage> {
           borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
         ),
         actions: [
+          IconButton(
+            icon: Icon(Icons.filter_list),
+            onPressed: _showFilterOptions,
+            tooltip: 'Filter items',
+          ),
           IconButton(
             icon: Icon(Icons.sort),
             onPressed: _showSortOptions,
@@ -330,28 +461,72 @@ class _InventoryListPageState extends State<InventoryListPage> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.warning,
-                          color: _showLowStockOnly ? Colors.orange : lightTextColor,
+                      if (_showLowStockOnly || _showExpiringSoonOnly)
+                        IconButton(
+                          icon: Icon(
+                            Icons.filter_alt,
+                            color: Colors.orange,
+                          ),
+                          onPressed: _showFilterOptions,
+                          tooltip: 'Active filters',
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _showLowStockOnly = !_showLowStockOnly;
-                          });
-                        },
-                        tooltip: 'Show low stock items only',
-                      ),
                     ],
                   ),
                 ],
               ),
             ),
+
+            // Active filters indicator
+            if (_showLowStockOnly || _showExpiringSoonOnly)
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: Colors.orange.withOpacity(0.1),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _showLowStockOnly && _showExpiringSoonOnly
+                            ? 'Showing: Low Stock & Expiring Soon'
+                            : _showLowStockOnly
+                                ? 'Showing: Low Stock Only'
+                                : 'Showing: Expiring Soon Only',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _showLowStockOnly = false;
+                          _showExpiringSoonOnly = false;
+                        });
+                      },
+                      child: Text(
+                        'Clear',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: _showLowStockOnly
-                    ? _inventoryService.getLowStockItemsStream(widget.householdId, threshold: 5)
-                    : _inventoryService.getItemsStream(widget.householdId, sortField: _sortField, sortAscending: _sortAscending),
+                stream: _inventoryService.getItemsStream(
+                  widget.householdId, 
+                  sortField: _sortField, 
+                  sortAscending: _sortAscending
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return _buildErrorState('Error loading inventory: ${snapshot.error}');
@@ -362,7 +537,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   }
 
                   if (!snapshot.hasData || (snapshot.data!.docs.isEmpty && _allItems.isEmpty)) {
-                    return _showLowStockOnly ? _buildNoLowStockState() : _buildEmptyState();
+                    return _buildEmptyState();
                   }
 
                   // Process items
@@ -380,14 +555,17 @@ class _InventoryListPageState extends State<InventoryListPage> {
                     items = _allItems;
                   }
 
-                  // Filter items based on search query and category
+                  // Filter items based on search query, category, and active filters
                   final filteredItems = items.where((item) {
                     final matchesSearch = item.name.toLowerCase().contains(_searchQuery) ||
                         (item.description?.toLowerCase().contains(_searchQuery) ?? false) ||
                         (item.category.toLowerCase().contains(_searchQuery));
                     final matchesCategory = _selectedCategory == 'All' || item.category == _selectedCategory;
                     final matchesLowStock = !_showLowStockOnly || item.quantity < 5;
-                    return matchesSearch && matchesCategory && matchesLowStock;
+                    final matchesExpiringSoon = !_showExpiringSoonOnly || 
+                        (item.expiryDate != null && ExpiryDateManager.isExpiringSoon(item.expiryDate));
+                    
+                    return matchesSearch && matchesCategory && matchesLowStock && matchesExpiringSoon;
                   }).toList();
 
                   if (filteredItems.isEmpty) {
@@ -456,9 +634,11 @@ class _InventoryListPageState extends State<InventoryListPage> {
 
   Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
     final bool isLowStock = item.quantity < 5;
-    final bool isExpiringSoon = item.expiryDate != null && 
-        item.expiryDate!.isAfter(DateTime.now()) &&
-        item.expiryDate!.difference(DateTime.now()).inDays <= 7;
+    final bool hasExpiryDate = item.expiryDate != null;
+    final Color expiryStatusColor = ExpiryDateManager.getExpiryStatusColor(item.expiryDate);
+    final String expiryStatusText = ExpiryDateManager.getExpiryStatusText(item.expiryDate);
+    final bool isExpired = ExpiryDateManager.isExpired(item.expiryDate);
+    final bool isExpiringSoon = ExpiryDateManager.isExpiringSoon(item.expiryDate);
     
     return Card(
       elevation: 4,
@@ -476,8 +656,30 @@ class _InventoryListPageState extends State<InventoryListPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Item thumbnail with support for both local and network images
-              _buildItemThumbnail(item),
+              // Item thumbnail with expiry status indicator
+              Stack(
+                children: [
+                  _buildItemThumbnail(item),
+                  if (hasExpiryDate && (isExpired || isExpiringSoon))
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: expiryStatusColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: Icon(
+                          isExpired ? Icons.error : Icons.warning,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               SizedBox(width: 16),
               
               // Item details - This is the main content area
@@ -485,17 +687,44 @@ class _InventoryListPageState extends State<InventoryListPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.name,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // Item name and expiry status
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (hasExpiryDate)
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: expiryStatusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: expiryStatusColor, width: 1),
+                            ),
+                            child: Text(
+                              expiryStatusText,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: expiryStatusColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    SizedBox(height: 4),
+                    SizedBox(height: 8),
+                    
+                    // Category and status chips
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -539,7 +768,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                               ],
                             ),
                           ),
-                        if (isExpiringSoon)
+                        if (isExpired)
                           Container(
                             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
@@ -553,7 +782,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                 Icon(Icons.error_outline, size: 14, color: Colors.red),
                                 SizedBox(width: 4),
                                 Text(
-                                  'Expiring Soon',
+                                  'Expired',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.red,
@@ -565,26 +794,77 @@ class _InventoryListPageState extends State<InventoryListPage> {
                           ),
                       ],
                     ),
-                    SizedBox(height: 8),
-                    // Quantity and price in a row with constraints
-                    Container(
-                      width: double.infinity,
-                      child: Wrap(
-                        spacing: 16,
-                        children: [
-                          _buildDetailItem(Icons.format_list_numbered, '${item.quantity} units'),
-                          _buildDetailItem(Icons.attach_money, 'RM ${item.price.toStringAsFixed(2)}'),
+                    SizedBox(height: 12),
+                    
+                    // Item details in a compact layout
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Quantity and price
+                        Row(
+                          children: [
+                            _buildDetailItem(Icons.format_list_numbered, '${item.quantity} units'),
+                            SizedBox(width: 16),
+                            _buildDetailItem(Icons.attach_money, 'RM ${item.price.toStringAsFixed(2)}'),
+                          ],
+                        ),
+                        SizedBox(height: 8),
+                        
+                        // Expiry date with color coding
+                        if (hasExpiryDate)
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 16, color: expiryStatusColor),
+                              SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _formatDate(item.expiryDate!),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: expiryStatusColor,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                              SizedBox(width: 4),
+                              Text(
+                                'No expiry date',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        
+                        // Location
+                        if (item.location != null && item.location!.isNotEmpty) ...[
+                          SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(Icons.location_on, size: 16, color: lightTextColor),
+                              SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  item.location!,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: lightTextColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
-                      ),
+                      ],
                     ),
-                    if (item.expiryDate != null) ...[
-                      SizedBox(height: 8),
-                      _buildDetailItem(Icons.calendar_today, _formatDate(item.expiryDate!)),
-                    ],
-                    if (item.location != null) ...[
-                      SizedBox(height: 8),
-                      _buildDetailItem(Icons.location_on, item.location!),
-                    ],
                   ],
                 ),
               ),
@@ -676,23 +956,16 @@ class _InventoryListPageState extends State<InventoryListPage> {
   }
 
   Widget _buildDetailItem(IconData icon, String text) {
-    return Container(
-      constraints: BoxConstraints(maxWidth: 150),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: lightTextColor),
-          SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 14, color: lightTextColor),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: lightTextColor),
+        SizedBox(width: 4),
+        Text(
+          text,
+          style: TextStyle(fontSize: 14, color: lightTextColor),
+        ),
+      ],
     );
   }
 
@@ -824,27 +1097,6 @@ class _InventoryListPageState extends State<InventoryListPage> {
     );
   }
 
-  Widget _buildNoLowStockState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inventory_2_outlined, size: 64, color: lightTextColor.withOpacity(0.5)),
-          SizedBox(height: 16),
-          Text(
-            'No low stock items',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: textColor),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'All items are sufficiently stocked',
-            style: TextStyle(fontSize: 14, color: lightTextColor),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildNoResultsState() {
     return Center(
       child: Column(
@@ -860,6 +1112,23 @@ class _InventoryListPageState extends State<InventoryListPage> {
           Text(
             'Try adjusting your search or filter',
             style: TextStyle(fontSize: 14, color: lightTextColor),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _searchController.clear();
+                _searchQuery = '';
+                _selectedCategory = 'All';
+                _showLowStockOnly = false;
+                _showExpiringSoonOnly = false;
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Clear All Filters'),
           ),
         ],
       ),

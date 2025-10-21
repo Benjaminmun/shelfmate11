@@ -153,23 +153,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 ),
                 const SizedBox(height: 40),
                 // Divider with text and animation
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: _buildDividerWithText('Or continue with'),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                // Social media buttons with animation
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: _buildSocialMediaButtons(),
-                  ),
-                ),
-                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -235,7 +218,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         fontSize: 18,
         fontWeight: FontWeight.w500,
         color: textColor.withOpacity(0.7),
-        letterSpacing: 0.5,
+        letterSpacing: 0.1,
       ),
       textAlign: TextAlign.center,
     );
@@ -247,9 +230,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.0,
+        crossAxisSpacing: 13,
+        mainAxisSpacing: 13,
+        childAspectRatio: 0.82,
       ),
       children: [
         _buildFeatureCard(
@@ -418,47 +401,4 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildSocialMediaButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        _buildSocialMediaButton(Icons.g_mobiledata, const Color(0xFFDB4437), 'Google'),
-        const SizedBox(width: 25),
-        _buildSocialMediaButton(Icons.facebook, const Color(0xFF4267B2), 'Facebook'),
-        const SizedBox(width: 25),
-        _buildSocialMediaButton(Icons.email, Colors.black, 'Email'),
-      ],
-    );
-  }
-
-  Widget _buildSocialMediaButton(IconData icon, Color color, String tooltip) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        elevation: 4,
-        shape: const CircleBorder(),
-        child: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: cardColor,
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: IconButton(
-            icon: Icon(icon, color: color, size: 28),
-            onPressed: () {
-              // Add social media login logic here
-            },
-          ),
-        ),
-      ),
-    );
-  }
 }

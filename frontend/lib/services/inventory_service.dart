@@ -33,24 +33,35 @@ class InventoryService {
     return _auth.currentUser?.uid;
   }
 
-  Future<String?> _getUserDisplayName() async {
+  // Enhanced method to get user display name with full name support
+  Future<Map<String, String>> _getUserDisplayInfo() async {
     final user = _auth.currentUser;
-    if (user != null) {
-      if (user.displayName != null && user.displayName!.isNotEmpty) {
-        return user.displayName;
-      }
-      
-      try {
-        final userDoc = await _firestore.collection('users').doc(user.uid).get();
-        if (userDoc.exists) {
-          final data = userDoc.data();
-          return data?['displayName'] as String?;
-        }
-      } catch (e) {
-        print('Error fetching user display name: $e');
-      }
+    if (user == null) {
+      return {'userName': 'Unknown', 'fullName': 'Unknown User'};
     }
-    return null;
+    
+    try {
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        final data = userDoc.data();
+        final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+        final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
+        
+        return {
+          'userName': userName,
+          'fullName': fullName,
+        };
+      }
+    } catch (e) {
+      print('Error fetching user info: $e');
+    }
+    
+    // Fallback to Firebase Auth display name
+    final fallbackName = user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+    return {
+      'userName': fallbackName,
+      'fullName': fallbackName,
+    };
   }
 
   // ========== AUDIT LOGGING METHODS ==========
@@ -62,6 +73,7 @@ class InventoryService {
     dynamic oldValue,
     dynamic newValue,
     String updatedByUserName,
+    String updatedByFullName, // Add fullName parameter
   ) async {
     final userId = _getUserId();
     if (userId == null) {
@@ -94,6 +106,7 @@ class InventoryService {
       timestamp: DateTime.now(),
       updatedByUserId: userId,
       updatedByUserName: updatedByUserName,
+      updatedByFullName: updatedByFullName, // Include full name
     );
 
     try {
@@ -141,10 +154,49 @@ class InventoryService {
         ...productData,
         'createdAt': FieldValue.serverTimestamp(),
         'createdBy': _getUserId(),
+        // Ensure localImagePath is included if provided
+        'localImagePath': productData['localImagePath'] ?? '',
       });
     } catch (e) {
       print('Error adding product to global collection: $e');
       throw Exception('Failed to add product to database');
+    }
+  }
+
+  // NEW: Method to update local image path for a product
+  Future<void> updateProductLocalImage(String barcode, String localImagePath) async {
+    _checkReadOnly();
+    
+    try {
+      await _firestore.collection('products').doc(barcode).update({
+        'localImagePath': localImagePath,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': _getUserId(),
+      });
+    } catch (e) {
+      print('Error updating product local image: $e');
+      throw Exception('Failed to update product image');
+    }
+  }
+
+  // NEW: Method to get products with local images
+  Future<List<Map<String, dynamic>>> getProductsWithLocalImages(String householdId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('products')
+          .where('localImagePath', isNotEqualTo: '')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          ...data,
+        };
+      }).toList();
+    } catch (e) {
+      print('Error getting products with local images: $e');
+      return [];
     }
   }
 
@@ -167,12 +219,13 @@ class InventoryService {
       throw Exception('Household ID cannot be empty');
     }
     
-    final String? addedByUserName = await _getUserDisplayName();
+    final userInfo = await _getUserDisplayInfo();
+    final addedByUserName = userInfo['userName']!;
+    final addedByFullName = userInfo['fullName']!;
     
     final Map<String, dynamic> itemData = item.toMap();
-    if (addedByUserName != null) {
-      itemData['addedByUserName'] = addedByUserName;
-    }
+    itemData['addedByUserName'] = addedByUserName;
+    itemData['addedByFullName'] = addedByFullName; // Store full name
     itemData['addedByUserId'] = _getUserId();
     
     // If item has a barcode, ensure it exists in global products
@@ -185,7 +238,11 @@ class InventoryService {
           'brand': item.supplier ?? '',
           'description': item.description,
           'imageUrl': item.imageUrl,
+          'localImagePath': item.localImagePath ?? '', // Include local image path
         });
+      } else if (item.localImagePath != null && item.localImagePath!.isNotEmpty) {
+        // Update existing product with local image path
+        await updateProductLocalImage(item.barcode!, item.localImagePath!);
       }
     }
     
@@ -195,23 +252,23 @@ class InventoryService {
     // Log the addition to activities
     await _dashboardService.logActivity(
       householdId,
-      '${addedByUserName ?? "Someone"} added ${item.name} to inventory',
+      '$addedByFullName added ${item.name} to inventory',
       'add',
       userId: _getUserId(),
       userName: addedByUserName,
+      fullName: addedByFullName, // Include full name
     );
     
     // Log the addition to audit logs
-    if (addedByUserName != null) {
-      await _logInventoryChange(
-        householdId,
-        docRef.id,
-        'created',
-        null,
-        item.name,
-        addedByUserName,
-      );
-    }
+    await _logInventoryChange(
+      householdId,
+      docRef.id,
+      'created',
+      null,
+      item.name,
+      addedByUserName,
+      addedByFullName, // Include full name
+    );
     
     return docRef.id;
   }
@@ -263,26 +320,38 @@ class InventoryService {
     if (existingItem.exists) {
       final Map<String, dynamic> existingData = existingItem.data() as Map<String, dynamic>;
 
+      // Get user display info for audit logging
+      final userInfo = await _getUserDisplayInfo();
+      final updatedByUserName = userInfo['userName']!;
+      final updatedByFullName = userInfo['fullName']!;
+
       // Prepare updated data
       final Map<String, dynamic> updateData = item.toMap();
       updateData['updatedByUserId'] = _getUserId();
+      updateData['updatedByUserName'] = updatedByUserName;
+      updateData['updatedByFullName'] = updatedByFullName; // Store full name
       updateData['updatedAt'] = FieldValue.serverTimestamp();
 
-      // Get user display name for audit logging
-      final String? updatedByUserName = await _getUserDisplayName();
+      // If item has a barcode and local image, update the global product
+      if (item.barcode != null && item.barcode!.isNotEmpty && 
+          item.localImagePath != null && item.localImagePath!.isNotEmpty) {
+        await updateProductLocalImage(item.barcode!, item.localImagePath!);
+      }
 
       // Log activity for the update
       await _dashboardService.logActivity(
         householdId,
-        '${updatedByUserName ?? "Someone"} updated ${item.name}',
+        '$updatedByFullName updated ${item.name}',
         'update',
         userId: _getUserId(),
         userName: updatedByUserName,
+        fullName: updatedByFullName, // Include full name
       );
 
       // If there are any changes, log them to audit logs
       for (var field in updateData.keys) {
-        if (field != 'updatedByUserId' && field != 'updatedAt' && 
+        if (field != 'updatedByUserId' && field != 'updatedByUserName' && 
+            field != 'updatedByFullName' && field != 'updatedAt' && 
             existingData[field] != updateData[field]) {
           await _logInventoryChange(
             householdId,
@@ -290,7 +359,8 @@ class InventoryService {
             field,
             existingData[field], // old value
             updateData[field],    // new value
-            updatedByUserName ?? 'Unknown',
+            updatedByUserName,
+            updatedByFullName, // Include full name
           );
         }
       }
@@ -350,16 +420,19 @@ class InventoryService {
       print('Error fetching item details for deletion log: $e');
     }
     
-    // Get user display name
-    final String? updatedByUserName = await _getUserDisplayName();
+    // Get user display info
+    final userInfo = await _getUserDisplayInfo();
+    final updatedByUserName = userInfo['userName']!;
+    final updatedByFullName = userInfo['fullName']!;
     
     // Log the deletion to activities
     await _dashboardService.logActivity(
       householdId,
-      '${updatedByUserName ?? "Someone"} deleted $itemName from inventory',
+      '$updatedByFullName deleted $itemName from inventory',
       'delete',
       userId: _getUserId(),
       userName: updatedByUserName,
+      fullName: updatedByFullName, // Include full name
     );
     
     // Log the deletion to audit logs
@@ -369,7 +442,8 @@ class InventoryService {
       'deleted',
       itemName, // old value - item existed
       null,     // new value - item deleted
-      updatedByUserName ?? 'Unknown',
+      updatedByUserName,
+      updatedByFullName, // Include full name
     );
     
     var collection = _getInventoryCollection(householdId);
@@ -447,7 +521,7 @@ class InventoryService {
     }
   }
 
-  // ========== EXISTING METHODS ==========
+  // ========== EXISTING METHODS (UPDATED FOR FULL NAME SUPPORT) ==========
   
   Stream<QuerySnapshot> getItemsStream(String householdId, {
     String sortField = 'name', 
@@ -624,7 +698,10 @@ class InventoryService {
       final oldQuantity = existingData['quantity'] ?? 0;
       final itemName = existingData['name'] ?? 'Unknown Item';
       
-      final String? updatedByUserName = await _getUserDisplayName();
+      // Get user display info
+      final userInfo = await _getUserDisplayInfo();
+      final updatedByUserName = userInfo['userName']!;
+      final updatedByFullName = userInfo['fullName']!;
       
       // Log low stock warning if applicable
       if (newQuantity < 5 && oldQuantity >= 5) {
@@ -634,6 +711,7 @@ class InventoryService {
           'warning',
           userId: _getUserId(),
           userName: updatedByUserName,
+          fullName: updatedByFullName, // Include full name
         );
       }
       
@@ -642,20 +720,19 @@ class InventoryService {
         'quantity': newQuantity,
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedByUserId': _getUserId(),
+        'updatedByUserName': updatedByUserName,
+        'updatedByFullName': updatedByFullName, // Store full name
       };
-      
-      if (updatedByUserName != null) {
-        updateData['updatedByUserName'] = updatedByUserName;
-      }
       
       // Log the quantity change to activities
       if (oldQuantity != newQuantity) {
         await _dashboardService.logActivity(
           householdId,
-          '${updatedByUserName ?? "Someone"} updated $itemName quantity from $oldQuantity to $newQuantity',
+          '$updatedByFullName updated $itemName quantity from $oldQuantity to $newQuantity',
           'update',
           userId: _getUserId(),
           userName: updatedByUserName,
+          fullName: updatedByFullName, // Include full name
         );
         
         // Log to audit logs
@@ -665,7 +742,8 @@ class InventoryService {
           'quantity',
           oldQuantity,
           newQuantity,
-          updatedByUserName ?? 'Unknown',
+          updatedByUserName,
+          updatedByFullName, // Include full name
         );
       }
       
@@ -720,6 +798,38 @@ class InventoryService {
     } catch (e) {
       print('Error getting paginated items: $e');
       throw Exception('Failed to load items');
+    }
+  }
+
+  // NEW: Method to get inventory items with local images
+  Future<List<InventoryItem>> getItemsWithLocalImages(String householdId) async {
+    try {
+      final snapshot = await _getInventoryCollection(householdId)
+          .where('localImagePath', isNotEqualTo: '')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }).toList();
+    } catch (e) {
+      print('Error getting items with local images: $e');
+      return [];
+    }
+  }
+
+  // NEW: Method to update local image path for an inventory item
+  Future<void> updateItemLocalImage(String householdId, String itemId, String localImagePath) async {
+    _checkReadOnly();
+    
+    try {
+      await _getInventoryCollection(householdId).doc(itemId).update({
+        'localImagePath': localImagePath,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedByUserId': _getUserId(),
+      });
+    } catch (e) {
+      print('Error updating item local image: $e');
+      throw Exception('Failed to update item image');
     }
   }
 }
