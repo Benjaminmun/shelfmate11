@@ -371,34 +371,5 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildDividerWithText(String text) {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(
-            color: lightTextColor.withOpacity(0.3),
-            thickness: 1,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15.0),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: lightTextColor,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Divider(
-            color: lightTextColor.withOpacity(0.3),
-            thickness: 1,
-          ),
-        ),
-      ],
-    );
-  }
 
 }

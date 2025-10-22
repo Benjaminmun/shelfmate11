@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'household_service.dart';
-import 'inventory_list_page.dart';
+import 'member_inventory_list_page.dart';
 import 'chat_page.dart';
 import '../services/household_service_controller.dart';
 import 'expense_tracker_page.dart';
@@ -392,7 +392,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
 
     switch (adjustedIndex) {
       case 0: return _buildDashboardContent();
-      case 1: return InventoryListPage(
+      case 1: return MemberInventoryListPage(
         householdId: _currentHouseholdId,
         householdName: _currentHousehold,
       );

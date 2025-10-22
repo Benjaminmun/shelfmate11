@@ -19,6 +19,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final TextEditingController passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _passwordError = false; // Track password errors for visual feedback
   final _formKey = GlobalKey<FormState>();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -58,15 +59,19 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
 
   @override
   void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
   Future<void> _loginWithEmailPassword() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Prevent double-tap and ensure form is valid
+    if (_isLoading || !_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
+      _passwordError = false; // Reset password error state
     });
 
     try {
@@ -86,8 +91,9 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       // Check if user info exists in Firestore
       final userInfoExists = await _checkUserInfoExists(userCredential.user!.uid);
       
+      if (!mounted) return;
+      
       if (userInfoExists) {
-        // Navigate directly to HouseholdService
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
@@ -102,7 +108,6 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           ),
         );
       } else {
-        // Navigate to UserInfoPage to collect user information
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
@@ -128,11 +133,14 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
     } catch (e) {
+      if (!mounted) return;
       _showDialog('Error', 'An unexpected error occurred. Please try again.');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -161,10 +169,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   Future<bool> _checkUserInfoExists(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
-      // Check if the document exists and has the required fields
       if (doc.exists) {
         final data = doc.data();
-        // Check if the user has completed their profile (has phone and address)
         return data != null && 
                data['phone'] != null && 
                data['phone'].toString().isNotEmpty &&
@@ -181,9 +187,16 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     if (e.code == 'user-not-found') {
       _showDialog('Error', 'No user found for that email.');
     } else if (e.code == 'wrong-password') {
-      _showDialog('Error', 'Incorrect password.');
+      setState(() => _passwordError = true); // Set visual error state
+      _showDialog('Error', 'Incorrect password. Please try again.');
+    } else if (e.code == 'invalid-email') {
+      _showDialog('Error', 'Invalid email address format.');
+    } else if (e.code == 'too-many-requests') {
+      _showDialog('Error', 'Too many login attempts. Please try again later.');
+    } else if (e.code == 'user-disabled') {
+      _showDialog('Error', 'This account has been disabled.');
     } else {
-      _showDialog('Error', e.message!);
+      _showDialog('Error', e.message ?? 'An authentication error occurred.');
     }
   }
 
@@ -198,26 +211,42 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(title == 'Success' ? Icons.check_circle : Icons.error_outline, 
-                      color: title == 'Success' ? Color(0xFF4CAF50) : Colors.red, 
-                      size: 60),
+                Icon(
+                  title == 'Success' ? Icons.check_circle : Icons.error_outline, 
+                  color: title == 'Success' ? Color(0xFF4CAF50) : Colors.red, 
+                  size: 60
+                ),
                 SizedBox(height: 16),
-                Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2D5D7C))),
+                Text(
+                  title, 
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2D5D7C))
+                ),
                 SizedBox(height: 16),
-                Text(message, textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+                Text(
+                  message, 
+                  textAlign: TextAlign.center, 
+                  style: TextStyle(fontSize: 16)
+                ),
                 SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
                       Navigator.of(context).pop();
+                      // Clear password error when user acknowledges the error
+                      if (title != 'Success') {
+                        setState(() => _passwordError = false);
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: title == 'Success' ? Color(0xFF4CAF50) : Color(0xFF2D5D7C),
                       padding: EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(title == 'Success' ? 'Continue' : 'Try Again', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      title == 'Success' ? 'Continue' : 'Try Again', 
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)
+                    ),
                   ),
                 ),
               ],
@@ -351,10 +380,30 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             controller: passwordController, 
                             label: 'Password', 
                             obscureText: _obscurePassword, 
-                            onToggle: () => setState(() => _obscurePassword = !_obscurePassword)
+                            onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                            hasError: _passwordError, // Pass error state to field
                           ),
                         ),
                       ),
+                      if (_passwordError) ...[
+                        SizedBox(height: 8),
+                        FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: SlideTransition(
+                            position: _slideAnimation,
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline, size: 16, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Incorrect password. Please try again.',
+                                  style: TextStyle(color: Colors.red, fontSize: 14),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -376,10 +425,11 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                   ),
                 ),
                 SizedBox(height: 30),
-                _isLoading
-                    ? FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Container(
+                AnimatedSwitcher(
+                  duration: Duration(milliseconds: 300),
+                  child: _isLoading
+                      ? Container(
+                          key: ValueKey('loading'),
                           width: 56,
                           height: 56,
                           padding: EdgeInsets.all(12),
@@ -387,33 +437,21 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
                             strokeWidth: 3,
                           ),
+                        )
+                      : FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: SlideTransition(
+                            position: _slideAnimation,
+                            child: _buildElevatedButton(
+                              context, 
+                              'Log In', 
+                              _loginWithEmailPassword, 
+                              Color(0xFF4CAF50)
+                            ),
+                          ),
                         ),
-                      )
-                    : FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: SlideTransition(
-                          position: _slideAnimation,
-                          child: _buildElevatedButton(context, 'Log In', _loginWithEmailPassword, Color(0xFF4CAF50)),
-                        ),
-                      ),
-                SizedBox(height: 30),
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    ),
-                  ),
-                SizedBox(height: 30),
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                    ),
-                  ),
                 ),
-                SizedBox(height: 40),
+                SizedBox(height: 30),
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: SlideTransition(
@@ -443,7 +481,10 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                               transitionDuration: Duration(milliseconds: 600),
                             ),
                           ),
-                          child: Text('Sign Up', style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.w600)),
+                          child: Text(
+                            'Sign Up', 
+                            style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.w600)
+                          ),
                         ),
                       ],
                     ),
@@ -458,7 +499,12 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildTextField({
+    required TextEditingController controller, 
+    required String label, 
+    required IconData icon, 
+    TextInputType keyboardType = TextInputType.text
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, 
@@ -475,6 +521,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         controller: controller,
         keyboardType: keyboardType,
         style: TextStyle(fontSize: 16),
+        autofillHints: [AutofillHints.email],
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'Please enter your email';
@@ -490,7 +537,11 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16), 
             borderSide: BorderSide.none
-          ), 
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: Color(0xFF4CAF50), width: 2),
+          ),
           filled: true, 
           fillColor: Colors.transparent
         ),
@@ -498,7 +549,13 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildPasswordField({required TextEditingController controller, required String label, required bool obscureText, required VoidCallback onToggle}) {
+  Widget _buildPasswordField({
+    required TextEditingController controller, 
+    required String label, 
+    required bool obscureText, 
+    required VoidCallback onToggle,
+    bool hasError = false, // New parameter for error state
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, 
@@ -509,35 +566,53 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             blurRadius: 10, 
             offset: Offset(0, 4)
           )
-        ]
+        ],
+        border: hasError ? Border.all(color: Colors.red, width: 1.5) : null, // Visual error indicator
       ),
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
-        style: TextStyle(fontSize: 16),
+        style: TextStyle(fontSize: 16, color: hasError ? Colors.red : null),
+        autofillHints: [AutofillHints.password],
+        onChanged: (value) {
+          // Clear error state when user starts typing
+          if (hasError) {
+            setState(() => _passwordError = false);
+          }
+        },
+        onFieldSubmitted: (_) => _loginWithEmailPassword(), // Submit on enter key
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'Please enter your password';
           }
-          if (value.length < 6) {
-            return 'Password must be at least 6 characters';
-          }
+          // Removed the 6-character validation - users already have established passwords
           return null;
         },
         decoration: InputDecoration(
-          labelText: label, 
-          prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)), 
-          suffixIcon: IconButton(
-            icon: Icon(
-              obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, 
-              color: Color(0xFF2D5D7C)
-            ), 
-            onPressed: onToggle
+          labelText: label,
+          labelStyle: TextStyle(color: hasError ? Colors.red : null),
+          prefixIcon: Icon(Icons.lock_outline, color: hasError ? Colors.red : Color(0xFF2D5D7C)), 
+          suffixIcon: Tooltip(
+            message: obscureText ? 'Show password' : 'Hide password',
+            child: IconButton(
+              icon: Icon(
+                obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, 
+                color: hasError ? Colors.red : Color(0xFF2D5D7C)
+              ), 
+              onPressed: onToggle,
+            ),
           ), 
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16), 
             borderSide: BorderSide.none
-          ), 
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: hasError ? Colors.red : Color(0xFF4CAF50), 
+              width: 2
+            ),
+          ),
           filled: true, 
           fillColor: Colors.transparent
         ),
@@ -550,7 +625,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       width: double.infinity,
       height: 58,
       child: ElevatedButton(
-        onPressed: onPressed,
+        onPressed: _isLoading ? null : onPressed, // Disable when loading
         style: ElevatedButton.styleFrom(
           backgroundColor: color, 
           elevation: 0, 

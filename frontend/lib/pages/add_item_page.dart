@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
+import 'add_item_manually.dart'; // Import the separate file
 
 // Initialize cameras list
 List<CameraDescription> cameras = [];
@@ -60,7 +61,7 @@ class ExpiryDateManager {
 }
 
 // =============================================
-// REAL-TIME BARCODE SCANNER
+// REAL-TIME BARCODE SCANNER - FULL SCREEN
 // =============================================
 
 class RealTimeBarcodeScanner extends StatefulWidget {
@@ -101,7 +102,7 @@ class _RealTimeBarcodeScannerState extends State<RealTimeBarcodeScanner> {
 
       _cameraController = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.high,
         enableAudio: false,
       );
 
@@ -178,19 +179,21 @@ class _RealTimeBarcodeScannerState extends State<RealTimeBarcodeScanner> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // Camera preview
-            if (_isCameraInitialized)
-              Center(
-                child: AspectRatio(
-                  aspectRatio: _cameraController.value.aspectRatio,
-                  child: CameraPreview(_cameraController),
-                ),
-              )
-            else
-              Center(
+      body: Stack(
+        children: [
+          // Full screen camera preview
+          if (_isCameraInitialized)
+            SizedBox(
+              width: double.infinity,
+              height: double.infinity,
+              child: CameraPreview(_cameraController),
+            )
+          else
+            Container(
+              width: double.infinity,
+              height: double.infinity,
+              color: Colors.black,
+              child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -203,174 +206,219 @@ class _RealTimeBarcodeScannerState extends State<RealTimeBarcodeScanner> {
                   ],
                 ),
               ),
-
-            // Scanner overlay
-            _buildScannerOverlay(),
-
-            // Close button
-            Positioned(
-              top: 16,
-              left: 16,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: Icon(Icons.close, color: Colors.white),
-                  onPressed: widget.onCancel,
-                ),
-              ),
             ),
 
-            // Status indicator
-            if (_isProcessing)
-              Positioned(
-                bottom: 100,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          strokeWidth: 2,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Scanning...',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          // Scanner overlay - centered with transparent cutout
+          _buildScannerOverlay(),
 
-            if (_barcodeFound)
-              Positioned(
-                bottom: 100,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text(
-                          'Barcode Found!',
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+          // Close button - positioned in top left with safe area
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 16,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
               ),
+              child: IconButton(
+                icon: Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: widget.onCancel,
+              ),
+            ),
+          ),
 
-            // Instructions
+          // Status indicator - positioned at bottom center
+          if (_isProcessing)
             Positioned(
-              bottom: 30,
+              bottom: MediaQuery.of(context).padding.bottom + 120,
               left: 0,
               right: 0,
               child: Center(
                 child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                   decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.blue.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(25),
                   ),
-                  child: Text(
-                    'Position barcode within the frame',
-                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Text(
+                        'Scanning...',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+
+          if (_barcodeFound)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + 120,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Barcode Found!',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Instructions - positioned at bottom with safe area
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 30,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Position barcode within the frame',
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildScannerOverlay() {
-    return Center(
-      child: Container(
-        width: 250,
-        height: 150,
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: _barcodeFound ? Colors.green : Colors.white,
-            width: 3,
+    final size = MediaQuery.of(context).size;
+    final scannerSize = size.width * 0.7;
+
+    return Stack(
+      children: [
+        // Semi-transparent overlay
+        ColorFiltered(
+          colorFilter: ColorFilter.mode(
+            Colors.black.withOpacity(0.6),
+            BlendMode.srcOut,
           ),
-          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  backgroundBlendMode: BlendMode.dstOut,
+                ),
+              ),
+              // Transparent cutout for scanner area
+              Center(
+                child: Container(
+                  width: scannerSize,
+                  height: scannerSize * 0.6,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        child: CustomPaint(
-          painter: ScannerOverlayPainter(isScanning: !_barcodeFound),
+
+        // Scanner frame and animation
+        Center(
+          child: Container(
+            width: scannerSize,
+            height: scannerSize * 0.6,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: _barcodeFound ? Colors.green : Colors.white,
+                width: 3,
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: CustomPaint(
+              painter: ScannerOverlayPainter(
+                isScanning: !_barcodeFound,
+                scannerHeight: scannerSize * 0.6,
+              ),
+            ),
+          ),
         ),
-      ),
+
+        // Corner accents
+        Center(
+          child: Container(
+            width: scannerSize,
+            height: scannerSize * 0.6,
+            child: CustomPaint(
+              painter: ScannerCornersPainter(
+                color: _barcodeFound ? Colors.green : Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class ScannerOverlayPainter extends CustomPainter {
   final bool isScanning;
+  final double scannerHeight;
 
-  ScannerOverlayPainter({required this.isScanning});
+  ScannerOverlayPainter({required this.isScanning, required this.scannerHeight});
 
   @override
   void paint(Canvas canvas, Size size) {
-
     // Draw scanning line
     if (isScanning) {
       final scanningPaint = Paint()
         ..color = Colors.green
-        ..strokeWidth = 3;
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke;
 
-      final lineY = (DateTime.now().millisecondsSinceEpoch / 20) % size.height;
+      final lineY = (DateTime.now().millisecondsSinceEpoch / 20) % scannerHeight;
       canvas.drawLine(
         Offset(0, lineY),
         Offset(size.width, lineY),
         scanningPaint,
       );
+
+      // Add a glow effect to the scanning line
+      final glowPaint = Paint()
+        ..color = Colors.green.withOpacity(0.3)
+        ..strokeWidth = 8;
+
+      canvas.drawLine(
+        Offset(0, lineY),
+        Offset(size.width, lineY),
+        glowPaint,
+      );
     }
-
-    // Draw corner accents
-    final cornerPaint = Paint()
-      ..color = isScanning ? Colors.green : Colors.white
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke;
-
-    final cornerLength = 20.0;
-
-    // Top-left corner
-    canvas.drawLine(Offset(0, 0), Offset(cornerLength, 0), cornerPaint);
-    canvas.drawLine(Offset(0, 0), Offset(0, cornerLength), cornerPaint);
-
-    // Top-right corner
-    canvas.drawLine(Offset(size.width, 0), Offset(size.width - cornerLength, 0), cornerPaint);
-    canvas.drawLine(Offset(size.width, 0), Offset(size.width, cornerLength), cornerPaint);
-
-    // Bottom-left corner
-    canvas.drawLine(Offset(0, size.height), Offset(cornerLength, size.height), cornerPaint);
-    canvas.drawLine(Offset(0, size.height), Offset(0, size.height - cornerLength), cornerPaint);
-
-    // Bottom-right corner
-    canvas.drawLine(Offset(size.width, size.height), Offset(size.width - cornerLength, size.height), cornerPaint);
-    canvas.drawLine(Offset(size.width, size.height), Offset(size.width, size.height - cornerLength), cornerPaint);
   }
 
   @override
@@ -379,552 +427,41 @@ class ScannerOverlayPainter extends CustomPainter {
   }
 }
 
-// =============================================
-// ENHANCED INVENTORY EDIT PAGE WITH EXPIRY DATE
-// =============================================
+class ScannerCornersPainter extends CustomPainter {
+  final Color color;
 
-class InventoryEditPage extends StatefulWidget {
-  final String householdId;
-  final String householdName;
-  final String userRole;
-  final String? barcode;
-  final Map<String, dynamic>? existingItem;
-
-  const InventoryEditPage({
-    Key? key,
-    required this.householdId,
-    required this.householdName,
-    required this.userRole,
-    this.barcode,
-    this.existingItem,
-  }) : super(key: key);
+  ScannerCornersPainter({required this.color});
 
   @override
-  _InventoryEditPageState createState() => _InventoryEditPageState();
-}
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke;
 
-class _InventoryEditPageState extends State<InventoryEditPage> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _brandController = TextEditingController();
-  final TextEditingController _quantityController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _minStockController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
+    final cornerLength = 25.0;
 
-  String _selectedCategory = 'Other';
-  DateTime? _expiryDate;
-  DateTime? _purchaseDate;
-  bool _hasExpiryDate = false;
-  bool _isLoading = false;
 
-  final List<String> _categories = [
-    'Food',
-    'Beverages',
-    'Cleaning Supplies',
-    'Personal Care',
-    'Medication',
-    'Other'
-  ];
+    // Top-left corner
+    canvas.drawLine(Offset(0, 0), Offset(cornerLength, 0), paint);
+    canvas.drawLine(Offset(0, 0), Offset(0, cornerLength), paint);
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeForm();
-  }
+    // Top-right corner
+    canvas.drawLine(Offset(size.width, 0), Offset(size.width - cornerLength, 0), paint);
+    canvas.drawLine(Offset(size.width, 0), Offset(size.width, cornerLength), paint);
 
-  void _initializeForm() {
-    if (widget.existingItem != null) {
-      // Editing existing item
-      _nameController.text = widget.existingItem!['name'] ?? '';
-      _brandController.text = widget.existingItem!['brand'] ?? '';
-      _quantityController.text = (widget.existingItem!['quantity'] ?? 1).toString();
-      _locationController.text = widget.existingItem!['location'] ?? '';
-      _minStockController.text = (widget.existingItem!['minStockLevel'] ?? 1).toString();
-      _descriptionController.text = widget.existingItem!['description'] ?? '';
-      _selectedCategory = widget.existingItem!['category'] ?? 'Other';
-      
-      // Handle expiry date
-      if (widget.existingItem!['expiryDate'] != null) {
-        _expiryDate = (widget.existingItem!['expiryDate'] as Timestamp).toDate();
-        _hasExpiryDate = true;
-      }
-      
-      // Handle purchase date
-      if (widget.existingItem!['purchaseDate'] != null) {
-        _purchaseDate = (widget.existingItem!['purchaseDate'] as Timestamp).toDate();
-      }
-    } else if (widget.barcode != null) {
-      // New item with barcode - prefill with barcode info if available
-      _loadProductInfo(widget.barcode!);
-    } else {
-      // New manual item - set default purchase date to today
-      _purchaseDate = DateTime.now();
-      _minStockController.text = '1';
-      _quantityController.text = '1';
-    }
-  }
+    // Bottom-left corner
+    canvas.drawLine(Offset(0, size.height), Offset(cornerLength, size.height), paint);
+    canvas.drawLine(Offset(0, size.height), Offset(0, size.height - cornerLength), paint);
 
-  Future<void> _loadProductInfo(String barcode) async {
-    try {
-      final productDoc = await FirebaseFirestore.instance
-          .collection('products')
-          .doc(barcode)
-          .get();
-
-      if (productDoc.exists) {
-        final productData = productDoc.data()!;
-        setState(() {
-          _nameController.text = productData['name'] ?? '';
-          _brandController.text = productData['brand'] ?? '';
-          _selectedCategory = productData['category'] ?? 'Other';
-          _descriptionController.text = productData['description'] ?? '';
-          _purchaseDate = DateTime.now();
-          _minStockController.text = '1';
-          _quantityController.text = '1';
-        });
-      }
-    } catch (e) {
-      print('❌ Error loading product info: $e');
-    }
-  }
-
-  Future<void> _selectDate(BuildContext context, bool isExpiryDate) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: isExpiryDate ? 
-          (_expiryDate ?? DateTime.now().add(Duration(days: 30))) : 
-          (_purchaseDate ?? DateTime.now()),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    
-    if (picked != null) {
-      setState(() {
-        if (isExpiryDate) {
-          _expiryDate = picked;
-        } else {
-          _purchaseDate = picked;
-        }
-      });
-    }
-  }
-
-  Future<void> _saveItem() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId == null) throw Exception('User not authenticated');
-
-      final itemData = {
-        'barcode': widget.barcode,
-        'name': _nameController.text.trim(),
-        'brand': _brandController.text.trim(),
-        'category': _selectedCategory,
-        'quantity': int.tryParse(_quantityController.text) ?? 1,
-        'minStockLevel': int.tryParse(_minStockController.text) ?? 1,
-        'location': _locationController.text.trim(),
-        'expiryDate': _hasExpiryDate ? Timestamp.fromDate(_expiryDate!) : null,
-        'purchaseDate': Timestamp.fromDate(_purchaseDate ?? DateTime.now()),
-        'description': _descriptionController.text.trim(),
-        'addedAt': FieldValue.serverTimestamp(),
-        'addedByUserId': userId,
-        'addedByUserName': FirebaseAuth.instance.currentUser?.displayName ?? 'Unknown User',
-        'householdId': widget.householdId,
-        'householdName': widget.householdName,
-        'lastUpdated': FieldValue.serverTimestamp(),
-        'hasExpiryDate': _hasExpiryDate,
-      };
-
-      if (widget.existingItem != null) {
-        // Update existing item
-        await _firestore
-            .collection('households')
-            .doc(widget.householdId)
-            .collection('inventory')
-            .doc(widget.existingItem!['id'])
-            .update(itemData);
-      } else {
-        // Add new item
-        await _firestore
-            .collection('households')
-            .doc(widget.householdId)
-            .collection('inventory')
-            .add(itemData);
-      }
-
-      // Schedule notifications if expiry date is set
-      if (_hasExpiryDate && _expiryDate != null) {
-        await _scheduleExpiryNotifications(_expiryDate!, _nameController.text);
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.existingItem != null ? 
-              '✅ Item updated successfully' : 
-              '✅ Item added successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error saving item: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _scheduleExpiryNotifications(DateTime expiryDate, String itemName) async {
-    // This would integrate with your notification system
-    // For now, we'll just print the schedule
-    final now = DateTime.now();
-    final daysUntilExpiry = expiryDate.difference(now).inDays;
-    
-    print('📅 Scheduling notifications for $itemName');
-    print('   Expiry date: $expiryDate');
-    print('   Days until expiry: $daysUntilExpiry');
-    
-    // Schedule notifications at 7 days, 3 days, 1 day, and on expiry day
-    if (daysUntilExpiry <= 7) {
-      print('   🔔 Will notify user about expiring item');
-    }
+    // Bottom-right corner
+    canvas.drawLine(Offset(size.width, size.height), Offset(size.width - cornerLength, size.height), paint);
+    canvas.drawLine(Offset(size.width, size.height), Offset(size.width, size.height - cornerLength), paint);
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.existingItem != null ? 'Edit Item' : 'Add Item Manually'),
-        actions: [
-          if (widget.existingItem != null)
-            IconButton(
-              icon: Icon(Icons.delete),
-              onPressed: _isLoading ? null : _deleteItem,
-            ),
-        ],
-      ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator())
-          : Form(
-              key: _formKey,
-              child: ListView(
-                padding: EdgeInsets.all(16),
-                children: [
-                  _buildBasicInfoSection(),
-                  SizedBox(height: 20),
-                  _buildInventorySection(),
-                  SizedBox(height: 20),
-                  _buildDateSection(),
-                  SizedBox(height: 30),
-                  _buildSaveButton(),
-                ],
-              ),
-            ),
-    );
-  }
-
-  Widget _buildBasicInfoSection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Product Information',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            TextFormField(
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: 'Product Name *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter product name';
-                }
-                return null;
-              },
-            ),
-            SizedBox(height: 12),
-            TextFormField(
-              controller: _brandController,
-              decoration: InputDecoration(
-                labelText: 'Brand',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _selectedCategory,
-              decoration: InputDecoration(
-                labelText: 'Category',
-                border: OutlineInputBorder(),
-              ),
-              items: _categories.map((category) {
-                return DropdownMenuItem(
-                  value: category,
-                  child: Text(category),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedCategory = value!;
-                });
-              },
-            ),
-            SizedBox(height: 12),
-            TextFormField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'Description',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInventorySection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Inventory Details',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _quantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Quantity *',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter quantity';
-                      }
-                      final num = int.tryParse(value);
-                      if (num == null || num < 0) {
-                        return 'Please enter valid quantity';
-                      }
-                      return null;
-                    },
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _minStockController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Min Stock Level',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            TextFormField(
-              controller: _locationController,
-              decoration: InputDecoration(
-                labelText: 'Storage Location',
-                border: OutlineInputBorder(),
-                hintText: 'e.g., Pantry, Fridge, Freezer',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDateSection() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Dates',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 16),
-            ListTile(
-              leading: Icon(Icons.calendar_today),
-              title: Text('Purchase Date'),
-              subtitle: Text(_purchaseDate != null 
-                  ? '${_purchaseDate!.day}/${_purchaseDate!.month}/${_purchaseDate!.year}'
-                  : 'Not set'),
-              trailing: IconButton(
-                icon: Icon(Icons.edit_calendar),
-                onPressed: () => _selectDate(context, false),
-              ),
-            ),
-            Divider(),
-            SwitchListTile(
-              title: Text('Has Expiry Date'),
-              subtitle: Text(_hasExpiryDate 
-                  ? 'Product will expire and send notifications'
-                  : 'Product does not expire'),
-              value: _hasExpiryDate,
-              onChanged: (value) {
-                setState(() {
-                  _hasExpiryDate = value;
-                  if (value && _expiryDate == null) {
-                    _expiryDate = DateTime.now().add(Duration(days: 30));
-                  }
-                });
-              },
-            ),
-            if (_hasExpiryDate) ...[
-              ListTile(
-                leading: Icon(Icons.event_busy,
-                    color: ExpiryDateManager.getExpiryStatusColor(_expiryDate)),
-                title: Text('Expiry Date'),
-                subtitle: Text(_expiryDate != null
-                    ? '${_expiryDate!.day}/${_expiryDate!.month}/${_expiryDate!.year}'
-                    : 'Not set'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_expiryDate != null)
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: ExpiryDateManager.getExpiryStatusColor(_expiryDate),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          ExpiryDateManager.getExpiryStatusText(_expiryDate),
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                    IconButton(
-                      icon: Icon(Icons.edit_calendar),
-                      onPressed: () => _selectDate(context, true),
-                    ),
-                  ],
-                ),
-              ),
-              if (_expiryDate != null && 
-                  ExpiryDateManager.isExpiringSoon(_expiryDate))
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(12),
-                  margin: EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    border: Border.all(color: Colors.orange),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'This item is expiring soon!',
-                          style: TextStyle(color: Colors.orange),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSaveButton() {
-    return ElevatedButton(
-      onPressed: _isLoading ? null : _saveItem,
-      style: ElevatedButton.styleFrom(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        backgroundColor: Colors.green,
-      ),
-      child: _isLoading
-          ? SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(
-              widget.existingItem != null ? 'Update Item' : 'Add Item',
-              style: TextStyle(fontSize: 16),
-            ),
-    );
-  }
-
-  Future<void> _deleteItem() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete Item'),
-        content: Text('Are you sure you want to delete this item?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      setState(() => _isLoading = true);
-      try {
-        await _firestore
-            .collection('households')
-            .doc(widget.householdId)
-            .collection('inventory')
-            .doc(widget.existingItem!['id'])
-            .delete();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Item deleted successfully')),
-        );
-
-        Navigator.pop(context);
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Error deleting item: $e')),
-        );
-      } finally {
-        setState(() => _isLoading = false);
-      }
-    }
+  bool shouldRepaint(covariant ScannerCornersPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 
@@ -1032,7 +569,7 @@ class InventoryListItem extends StatelessWidget {
 }
 
 // =============================================
-// MAIN ADD ITEM PAGE
+// MAIN ADD ITEM PAGE WITH ENHANCED NAVIGATION
 // =============================================
 
 class AddItemPage extends StatefulWidget {
@@ -1246,7 +783,7 @@ class _AddItemPageState extends State<AddItemPage> {
     }
   }
 
-  // Enhanced API fetching with error handling
+  // Enhanced API fetching with automatic navigation
   Future<void> _fetchFromOpenFoodFacts(String barcode) async {
     if (widget.isReadOnly) return;
     
@@ -1275,8 +812,9 @@ class _AddItemPageState extends State<AddItemPage> {
             ),
           );
         } else {
-          // Product not found in OpenFoodFacts
-          _showProductNotFoundDialog(barcode);
+          // Product not found in OpenFoodFacts - AUTO NAVIGATE TO EDIT PAGE
+          print('🔍 Product not found in OpenFoodFacts, navigating to edit page');
+          _autoNavigateToEditPageWithBarcode(barcode);
         }
       } else {
         throw Exception('API request failed with status: ${response.statusCode}');
@@ -1284,21 +822,21 @@ class _AddItemPageState extends State<AddItemPage> {
     } on http.ClientException catch (e) {
       // Network error - try to use cached data if available
       print('🌐 Network error: $e');
-      await _tryUseCachedData(barcode);
+      await _tryUseCachedDataOrNavigate(barcode);
     } on TimeoutException catch (e) {
       // Timeout - try to use cached data if available
       print('⏰ API timeout: $e');
-      await _tryUseCachedData(barcode);
+      await _tryUseCachedDataOrNavigate(barcode);
     } catch (e) {
       print('❌ Error fetching from OpenFoodFacts: $e');
-      await _tryUseCachedData(barcode);
+      await _tryUseCachedDataOrNavigate(barcode);
     } finally {
       setState(() => _isFetchingFromAPI = false);
     }
   }
 
-  // Fallback to cached data when API fails
-  Future<void> _tryUseCachedData(String barcode) async {
+  // Updated fallback method that navigates to edit page when no cached data
+  Future<void> _tryUseCachedDataOrNavigate(String barcode) async {
     try {
       final productDoc = await _firestore
           .collection('products')
@@ -1316,18 +854,38 @@ class _AddItemPageState extends State<AddItemPage> {
         );
         _showProductDetails(productData, barcode);
       } else {
-        _showProductNotFoundDialog(barcode);
+        // No cached data available - AUTO NAVIGATE TO EDIT PAGE
+        print('🔍 No cached data found, navigating to edit page');
+        _autoNavigateToEditPageWithBarcode(barcode);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ API unavailable and no cached data found'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      _showProductNotFoundDialog(barcode);
+      // Any error - AUTO NAVIGATE TO EDIT PAGE
+      print('❌ Error accessing cache, navigating to edit page: $e');
+      _autoNavigateToEditPageWithBarcode(barcode);
     }
+  }
+
+  // New method for automatic navigation to edit page
+  void _autoNavigateToEditPageWithBarcode(String barcode) {
+    if (widget.isReadOnly) return;
+    
+    // Close any open dialogs first
+    Navigator.popUntil(context, (route) => route is! PopupRoute);
+    
+    // Show a brief snackbar message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('📝 Product not found. Please enter details manually.'),
+        backgroundColor: accentColor,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+    
+    // Navigate to edit page after a short delay
+    Future.delayed(Duration(milliseconds: 500), () {
+      _navigateToEditPageWithBarcode(barcode);
+    });
   }
 
   // Category mapping applied with enhanced data
@@ -1648,97 +1206,6 @@ class _AddItemPageState extends State<AddItemPage> {
     }
   }
 
-  void _showProductNotFoundDialog(String barcode) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.all(20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.search_off,
-                  size: 60,
-                  color: warningColor,
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Product Not Found',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'This barcode was not found in our database or OpenFoodFacts.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: lightTextColor,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Barcode: $barcode',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: lightTextColor,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: lightTextColor,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text('Cancel'),
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _navigateToEditPageWithBarcode(barcode);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: warningColor,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text('Add Manually'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // Category validation before saving
   Future<void> _addToHousehold(Map<String, dynamic> product, String barcode) async {
     if (_isAddingToHousehold) return;
@@ -1919,10 +1386,10 @@ class _AddItemPageState extends State<AddItemPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => InventoryEditPage(
+        builder: (context) => AddItemManually(
           householdId: widget.householdId,
           householdName: widget.householdName,
-          userRole: 'creator',
+          userRole: widget.isReadOnly ? 'member' : 'creator',
           barcode: null,
         ),
       ),
@@ -1935,10 +1402,10 @@ class _AddItemPageState extends State<AddItemPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => InventoryEditPage(
+        builder: (context) => AddItemManually(
           householdId: widget.householdId,
           householdName: widget.householdName,
-          userRole: 'creator',
+          userRole: widget.isReadOnly ? 'member' : 'creator',
           barcode: barcode,
         ),
       ),

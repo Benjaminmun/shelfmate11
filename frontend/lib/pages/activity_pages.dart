@@ -1103,7 +1103,7 @@ class ActivityDetailPage extends StatelessWidget {
   }
 
   DateTime _toGmtPlus8(DateTime dateTime) {
-    return dateTime.add(Duration(hours: 8));
+    return dateTime.add(Duration(hours: 0));
   }
 
   String _formatFullDate(DateTime date) {
@@ -1114,7 +1114,7 @@ class ActivityDetailPage extends StatelessWidget {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
     final second = date.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second GMT+8';
+    return '$hour:$minute:$second ';
   }
 
   String _getWeekday(int weekday) {

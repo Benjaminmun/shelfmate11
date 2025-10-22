@@ -559,10 +559,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     final String displayName = _getDisplayName(member);
     final String currentRole = member['userRole'] ?? 'member';
     
-    if (userId == null) {
-      _showErrorSnackBar("Cannot change role: Missing user ID");
-      return;
-    }
 
     if (newRole == currentRole) {
       _showErrorSnackBar("User already has the $newRole role");

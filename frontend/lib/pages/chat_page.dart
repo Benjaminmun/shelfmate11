@@ -30,7 +30,6 @@ class _ChatPageState extends State<ChatPage> with SingleTickerProviderStateMixin
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   bool _showQuickActions = true;
 
-  // Enhanced Color Palette
   final Color _primaryColor = Color(0xFF2D5D7C); // More vibrant blue
   final Color _secondaryColor = Color(0xFF2D5D7C);
   final Color _accentColor = Color(0xFF10B981); // Emerald green
