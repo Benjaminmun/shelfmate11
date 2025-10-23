@@ -213,8 +213,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     switch (role) {
       case 'creator':
         return 'Household Owner';
-      case 'admin':
-        return 'Administrator';
       case 'editor':
         return 'Editor';
       case 'member':
@@ -267,15 +265,13 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   Widget _buildRoleBadge(String role) {
     final bool isCreator = role == 'creator';
-    final bool isAdmin = role == 'admin';
+    
     final bool isEditor = role == 'editor';
     
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         gradient: isCreator 
-            ? LinearGradient(colors: [Colors.amber, Colors.orange])
-            : isAdmin
                 ? LinearGradient(colors: [Colors.blue, Colors.lightBlue])
                 : isEditor
                     ? LinearGradient(colors: [Colors.purple, Colors.deepPurple])
@@ -285,8 +281,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
           BoxShadow(
             color: isCreator 
                 ? Colors.amber.withOpacity(0.3)
-                : isAdmin
-                    ? Colors.blue.withOpacity(0.3)
                     : isEditor
                         ? Colors.purple.withOpacity(0.3)
                         : Colors.green.withOpacity(0.3),
@@ -300,7 +294,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         children: [
           Icon(
             isCreator ? Icons.star : 
-            isAdmin ? Icons.security :
             isEditor ? Icons.edit : Icons.person,
             size: 14,
             color: Colors.white,
@@ -502,9 +495,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   List<String> _getAvailableRoles() {
     if (_userRole == 'creator') {
-      return ['admin', 'editor', 'member'];
-    } else if (_userRole == 'admin') {
-      return ['editor', 'member'];
+      return [ 'editor', 'member'];
     }
     return []; // Members can't change roles
   }
@@ -513,8 +504,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     switch (role) {
       case 'creator':
         return Icons.star;
-      case 'admin':
-        return Icons.security;
+
       case 'editor':
         return Icons.edit;
       case 'member':
@@ -543,8 +533,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     switch (role) {
       case 'creator':
         return 'Full household ownership and management';
-      case 'admin':
-        return 'Can manage members and household settings';
       case 'editor':
         return 'Can edit household content and data';
       case 'member':
@@ -903,11 +891,11 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                   children: [
                     CircleAvatar(
                       backgroundColor: _getAvatarColor(displayName),
+                      radius: 24,
                       child: Text(
                         _getInitials(displayName),
                         style: TextStyle(color: Colors.white),
                       ),
-                      radius: 24,
                     ),
                     SizedBox(width: 12),
                     Expanded(
@@ -1375,7 +1363,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             if (_isOwner)
               ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: Implement invite functionality
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Row(

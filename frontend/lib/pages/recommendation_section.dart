@@ -122,8 +122,8 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         PulseIndicator(color: widget.primaryColor, size: 6),
         Spacer(),
         if (_smartRecommendations.isNotEmpty)
-          _buildRecommendationCounter(),
-        SizedBox(width: 8),
+        
+        SizedBox(width: 10),
         IconButton(
           icon: Icon(Icons.refresh_rounded, size: 20),
           onPressed: _refreshRecommendations,
@@ -134,72 +134,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     );
   }
 
-  Widget _buildRecommendationCounter() {
-    int critical = _smartRecommendations.where((r) => r['priority'] == 'critical').length;
-    int high = _smartRecommendations.where((r) => r['priority'] == 'high').length;
-    int total = _smartRecommendations.length;
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: widget.primaryColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (critical > 0) ...[
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: widget.errorColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            SizedBox(width: 4),
-            Text(
-              '$critical',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: widget.errorColor,
-              ),
-            ),
-            SizedBox(width: 8),
-          ],
-          if (high > 0) ...[
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: widget.warningColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            SizedBox(width: 4),
-            Text(
-              '$high',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: widget.warningColor,
-              ),
-            ),
-            SizedBox(width: 8),
-          ],
-          Text(
-            '$total',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: widget.primaryColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  
 
   Widget _buildRecommendationsLoading() {
     return Container(

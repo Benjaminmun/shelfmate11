@@ -28,7 +28,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   String _searchQuery = '';
   String _sortBy = 'date';
   Timer? _debounceTimer;
-  Stream<QuerySnapshot>? _inventoryStream;
+  Stream<QuerySnapshot>? _expensesStream;
 
   // Animation controllers
   late AnimationController _animationController;
@@ -53,6 +53,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   final Color successColor = Color(0xFF00B894);
   final Color warningColor = Color(0xFFFDCB6E);
   final Color dangerColor = Color(0xFFD63031);
+  final Color usageColor = Color(0xFFFF9800);
 
   // Category colors for chart
   final List<Color> chartColors = [
@@ -71,9 +72,13 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   @override
   void initState() {
     super.initState();
-    _setupInventoryStream();
+    _setupExpensesStream();
     _initializeAnimations();
     _loadMonthlySummaries();
+    // Run migration once
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _migrateToExpenseTracking();
+    });
   }
 
   void _initializeAnimations() {
@@ -98,19 +103,69 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     super.dispose();
   }
 
-  void _setupInventoryStream() {
+  void _setupExpensesStream() {
     // Get the first and last day of selected month
     final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
     final lastDay = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0, 23, 59, 59);
 
-    _inventoryStream = _firestore
+    _expensesStream = _firestore
         .collection('households')
         .doc(widget.householdId)
-        .collection('inventory')
-        .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
-        .where('updatedAt', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
-        .orderBy('updatedAt', descending: true)
+        .collection('expenses')
+        .where('purchaseDate', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
+        .where('purchaseDate', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
+        .orderBy('purchaseDate', descending: true)
         .snapshots();
+  }
+
+  // Migrate from inventory-based tracking to expense tracking
+  Future<void> _migrateToExpenseTracking() async {
+    try {
+      final inventorySnapshot = await _firestore
+          .collection('households')
+          .doc(widget.householdId)
+          .collection('inventory')
+          .get();
+
+      for (var doc in inventorySnapshot.docs) {
+        final data = doc.data();
+        final expenseId = 'expense_${doc.id}';
+        
+        // Check if expense already exists
+        final expenseDoc = await _firestore
+            .collection('households')
+            .doc(widget.householdId)
+            .collection('expenses')
+            .doc(expenseId)
+            .get();
+
+        if (!expenseDoc.exists) {
+          // Create expense record with original quantity tracking
+          await _firestore
+              .collection('households')
+              .doc(widget.householdId)
+              .collection('expenses')
+            .doc(expenseId)
+            .set({
+            'name': data['name'],
+            'category': data['category'] ?? 'Other',
+            'price': data['price'] ?? 0.0,
+            'originalQuantity': data['quantity'] ?? 1,
+            'currentQuantity': data['quantity'] ?? 1,
+            'totalExpense': (data['price'] ?? 0.0) * (data['quantity'] ?? 1),
+            'purchaseDate': data['updatedAt'] ?? Timestamp.now(),
+            'createdAt': Timestamp.now(),
+            'updatedAt': Timestamp.now(),
+            'description': data['description'] ?? '',
+            'imageUrl': data['imageUrl'],
+            'localImagePath': data['localImagePath'],
+            'inventoryItemId': doc.id, // Reference to original inventory item
+          });
+        }
+      }
+    } catch (error) {
+      print('Migration error: $error');
+    }
   }
 
   // Load monthly summaries for the past 12 months
@@ -131,27 +186,16 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
         final snapshot = await _firestore
             .collection('households')
             .doc(widget.householdId)
-            .collection('inventory')
-            .where('updatedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
-            .where('updatedAt', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
+            .collection('expenses')
+            .where('purchaseDate', isGreaterThanOrEqualTo: Timestamp.fromDate(firstDay))
+            .where('purchaseDate', isLessThanOrEqualTo: Timestamp.fromDate(lastDay))
             .get();
 
         double monthlyTotal = 0.0;
         final items = snapshot.docs.map((doc) {
-          final data = doc.data();
-          final price = _parseDouble(data['price']);
-          final quantity = _parseInt(data['quantity']);
-          final totalValue = price * quantity;
-          monthlyTotal += totalValue;
-          return {
-            'id': doc.id,
-            'name': data['name']?.toString() ?? 'Unnamed Item',
-            'category': data['category']?.toString() ?? 'Other',
-            'quantity': quantity,
-            'price': price,
-            'totalValue': totalValue,
-            'updatedAt': (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-          };
+          final item = _processExpenseItem(doc);
+          monthlyTotal += item['totalExpense'];
+          return item;
         }).toList();
 
         summaries.add(MonthlySummary(
@@ -176,55 +220,70 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   void _changeMonth(int delta) {
     setState(() {
       _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + delta);
-      _setupInventoryStream();
+      _setupExpensesStream();
     });
   }
 
-  _InventoryData _processInventoryData(List<QueryDocumentSnapshot> docs) {
+  // Process expense item with proper expense tracking
+  Map<String, dynamic> _processExpenseItem(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    
+    final price = _parseDouble(data['price']);
+    final originalQuantity = _parseInt(data['originalQuantity']);
+    final currentQuantity = _parseInt(data['currentQuantity']);
+    
+    // Calculate total expense based on ORIGINAL quantity (never changes)
+    final totalExpense = price * originalQuantity;
+    
+    final category = data['category']?.toString() ?? 'Other';
+    final purchaseDate = (data['purchaseDate'] as Timestamp?)?.toDate() ?? DateTime.now();
+    
+    return {
+      'id': doc.id,
+      'name': data['name']?.toString() ?? 'Unnamed Item',
+      'category': category,
+      'price': price,
+      'originalQuantity': originalQuantity,
+      'currentQuantity': currentQuantity,
+      'totalExpense': totalExpense, // This NEVER changes
+      'purchaseDate': purchaseDate,
+      'description': data['description']?.toString() ?? '',
+      'imageUrl': data['imageUrl']?.toString(),
+      'localImagePath': data['localImagePath']?.toString(),
+      'hasBeenUsed': originalQuantity > currentQuantity,
+      'inventoryItemId': data['inventoryItemId'],
+    };
+  }
+
+  ExpenseData _processExpenseData(List<QueryDocumentSnapshot> docs) {
     double total = 0.0;
     Map<String, double> categoryTotals = {};
     List<Map<String, dynamic>> items = [];
-    DateTime? latestUpdate;
+    DateTime? latestPurchase;
 
     for (var doc in docs) {
-      final data = doc.data() as Map<String, dynamic>;
+      final item = _processExpenseItem(doc);
       
-      final price = _parseDouble(data['price']);
-      final quantity = _parseInt(data['quantity']);
-      final totalValue = price * quantity;
-      final category = data['category']?.toString() ?? 'Other';
-      final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-      
-      items.add({
-        'id': doc.id,
-        'name': data['name']?.toString() ?? 'Unnamed Item',
-        'category': category,
-        'quantity': quantity,
-        'price': price,
-        'totalValue': totalValue,
-        'updatedAt': updatedAt,
-        'description': data['description']?.toString() ?? '',
-        'imageUrl': data['imageUrl']?.toString(),
-        'localImagePath': data['localImagePath']?.toString(),
-      });
+      items.add(item);
 
-      if (latestUpdate == null || updatedAt.isAfter(latestUpdate)) {
-        latestUpdate = updatedAt;
+      if (latestPurchase == null || item['purchaseDate'].isAfter(latestPurchase)) {
+        latestPurchase = item['purchaseDate'];
       }
 
-      total += totalValue;
+      // Use totalExpense for totals (based on original quantity)
+      total += item['totalExpense'];
       categoryTotals.update(
-        category,
-        (value) => value + totalValue,
-        ifAbsent: () => totalValue,
+        item['category'],
+        (value) => value + item['totalExpense'],
+        ifAbsent: () => item['totalExpense'],
       );
     }
 
-    return _InventoryData(
+    return ExpenseData(
       items: items,
       totalExpenses: total,
       categoryTotals: categoryTotals,
-      latestUpdateTime: latestUpdate,
+      latestPurchaseTime: latestPurchase,
     );
   }
 
@@ -243,11 +302,11 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     List<Map<String, dynamic>> sorted = List.from(filtered);
     
     if (sortBy == 'price') {
-      sorted.sort((a, b) => b['totalValue'].compareTo(a['totalValue']));
+      sorted.sort((a, b) => b['totalExpense'].compareTo(a['totalExpense']));
     } else if (sortBy == 'category') {
       sorted.sort((a, b) => a['category'].compareTo(b['category']));
     } else {
-      sorted.sort((a, b) => b['updatedAt'].compareTo(a['updatedAt']));
+      sorted.sort((a, b) => b['purchaseDate'].compareTo(a['purchaseDate']));
     }
     
     return sorted;
@@ -495,7 +554,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
             SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
-                _setupInventoryStream();
+                _setupExpensesStream();
                 setState(() {});
               },
               icon: Icon(Icons.refresh, size: 20),
@@ -532,7 +591,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inventory_2_outlined, size: 80, color: lightTextColor.withOpacity(0.5)),
+          Icon(Icons.receipt_long, size: 80, color: lightTextColor.withOpacity(0.5)),
           SizedBox(height: 24),
           Text(
             _searchQuery.isEmpty ? 'No Expenses Yet' : 'No Matching Expenses',
@@ -692,7 +751,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                   onTap: () {
                     setState(() {
                       _selectedMonth = summary.month;
-                      _setupInventoryStream();
+                      _setupExpensesStream();
                     });
                     Navigator.pop(context); // Close the dialog
                   },
@@ -741,7 +800,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
-  Widget _buildSummaryCard(double totalExpenses, DateTime? latestUpdate, int itemCount) {
+  Widget _buildSummaryCard(double totalExpenses, DateTime? latestPurchase, int itemCount) {
     final monthlyComparison = _getMonthlyComparison(totalExpenses);
 
     return Container(
@@ -786,7 +845,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                     ),
                     SizedBox(height: 4),
                     Text(
-                      '$itemCount items • ${_formatUpdateTime(latestUpdate)}', 
+                      '$itemCount purchases • ${_formatUpdateTime(latestPurchase)}', 
                       style: TextStyle(color: Colors.white60, fontSize: 12)
                     ),
                   ],
@@ -897,11 +956,14 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
-  // Updated Expense Item with Image Support and Integer Quantity
+  // Updated Expense Item with proper expense tracking
   Widget _buildExpenseItem(Map<String, dynamic> item, int index) {
-    final double totalAmount = item['price'] * item['quantity'];
+    final double totalAmount = item['totalExpense'];
     final categoryColor = chartColors[item['category'].hashCode % chartColors.length];
-    final date = DateFormat('MMM dd').format(item['updatedAt']);
+    final date = DateFormat('MMM dd').format(item['purchaseDate']);
+    final hasBeenUsed = item['hasBeenUsed'];
+    final currentQuantity = item['currentQuantity'];
+    final originalQuantity = item['originalQuantity'];
 
     return AnimatedContainer(
       duration: Duration(milliseconds: 300),
@@ -915,8 +977,25 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Item thumbnail
-              _buildItemThumbnail(item),
+              // Item thumbnail with usage indicator
+              Stack(
+                children: [
+                  _buildItemThumbnail(item),
+                  if (hasBeenUsed)
+                    Positioned(
+                      top: -5,
+                      right: -5,
+                      child: Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: usageColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.arrow_downward, size: 12, color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
               SizedBox(width: 16),
               
               // Item details
@@ -951,15 +1030,42 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                       ),
                     ),
                     SizedBox(height: 8),
+                    
+                    // Quantity information with usage indicator
                     Row(
                       children: [
                         Icon(Icons.format_list_numbered, size: 16, color: lightTextColor),
                         SizedBox(width: 4),
-                        Text(
-                          '${item['quantity']} ${item['quantity'] == 1 ? 'unit' : 'units'}',
-                          style: TextStyle(fontSize: 14, color: lightTextColor),
-                        ),
-                        SizedBox(width: 16),
+                        if (hasBeenUsed)
+                          RichText(
+                            text: TextSpan(
+                              style: TextStyle(fontSize: 14, color: lightTextColor),
+                              children: [
+                                TextSpan(
+                                  text: '$currentQuantity',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: usageColor,
+                                  ),
+                                ),
+                                TextSpan(text: '/$originalQuantity '),
+                                TextSpan(text: 'units left'),
+                              ],
+                            ),
+                          )
+                        else
+                          Text(
+                            '$originalQuantity ${originalQuantity == 1 ? 'unit' : 'units'} purchased',
+                            style: TextStyle(fontSize: 14, color: lightTextColor),
+                          ),
+                      ],
+                    ),
+                    
+                    SizedBox(height: 8),
+                    
+                    // Expense information - ALWAYS shows original purchase amount
+                    Row(
+                      children: [
                         Icon(Icons.attach_money, size: 16, color: lightTextColor),
                         SizedBox(width: 4),
                         Text(
@@ -970,15 +1076,33 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                             fontSize: 16,
                           ),
                         ),
+                        SizedBox(width: 8),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: primaryColor.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            'Purchase amount',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: primaryColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
+                    
                     SizedBox(height: 4),
                     Row(
                       children: [
                         Icon(Icons.calendar_today, size: 16, color: lightTextColor),
                         SizedBox(width: 4),
                         Text(
-                          date,
+                          'Purchased on $date',
                           style: TextStyle(fontSize: 14, color: lightTextColor),
                         ),
                       ],
@@ -1048,7 +1172,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
 
   Widget _buildDefaultIcon() {
     return Center(
-      child: Icon(Icons.inventory_2_outlined, color: primaryColor, size: 30),
+      child: Icon(Icons.shopping_cart, color: primaryColor, size: 30),
     );
   }
 
@@ -1125,14 +1249,14 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
     );
   }
 
-  Widget _buildContent(_InventoryData inventoryData) {
-    final filteredItems = _applySearchAndSort(inventoryData.items, _searchQuery, _sortBy);
+  Widget _buildContent(ExpenseData expenseData) {
+    final filteredItems = _applySearchAndSort(expenseData.items, _searchQuery, _sortBy);
 
     return FadeTransition(
       opacity: _fadeAnimation,
       child: RefreshIndicator(
         onRefresh: () async {
-          _setupInventoryStream();
+          _setupExpensesStream();
           _loadMonthlySummaries();
           setState(() {});
         },
@@ -1147,7 +1271,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                   children: [
                     _buildMonthSelector(),
                     SizedBox(height: 20),
-                    _buildSummaryCard(inventoryData.totalExpenses, inventoryData.latestUpdateTime, inventoryData.items.length),
+                    _buildSummaryCard(expenseData.totalExpenses, expenseData.latestPurchaseTime, expenseData.items.length),
                     SizedBox(height: 28),
                     
                     // Chart/List Toggle
@@ -1165,8 +1289,8 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
                     
                     // Interactive Chart or Category List
                     _showChart 
-                      ? _buildExpenseChart(inventoryData.categoryTotals, inventoryData.totalExpenses)
-                      : _buildCategoryList(inventoryData.categoryTotals, inventoryData.totalExpenses),
+                      ? _buildExpenseChart(expenseData.categoryTotals, expenseData.totalExpenses)
+                      : _buildCategoryList(expenseData.categoryTotals, expenseData.totalExpenses),
                     
                     SizedBox(height: 28),
                     Text('Recent Expenses', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: textColor)),
@@ -1236,7 +1360,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ) : null,
       body: StreamBuilder<QuerySnapshot>(
-        stream: _inventoryStream,
+        stream: _expensesStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return _buildLoadingState();
@@ -1251,9 +1375,9 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
           }
 
           final docs = snapshot.data!.docs;
-          final inventoryData = _processInventoryData(docs);
+          final expenseData = _processExpenseData(docs);
 
-          return _buildContent(inventoryData);
+          return _buildContent(expenseData);
         },
       ),
     );
@@ -1262,7 +1386,7 @@ class _ExpenseTrackerPageState extends State<ExpenseTrackerPage> with SingleTick
   Widget _buildEmptyContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _setupInventoryStream();
+        _setupExpensesStream();
         _loadMonthlySummaries();
         setState(() {});
       },
@@ -1310,16 +1434,16 @@ class MonthlyComparison {
   });
 }
 
-class _InventoryData {
+class ExpenseData {
   final List<Map<String, dynamic>> items;
   final double totalExpenses;
   final Map<String, double> categoryTotals;
-  final DateTime? latestUpdateTime;
+  final DateTime? latestPurchaseTime;
 
-  _InventoryData({
+  ExpenseData({
     required this.items,
     required this.totalExpenses,
     required this.categoryTotals,
-    this.latestUpdateTime,
+    this.latestPurchaseTime,
   });
 }

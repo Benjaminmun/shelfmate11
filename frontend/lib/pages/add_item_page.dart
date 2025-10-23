@@ -437,7 +437,7 @@ class ScannerCornersPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..strokeWidth = 4
-      ..style = PaintingStyle.stroke;
+      ..style; PaintingStyle.stroke;
 
     final cornerLength = 25.0;
 
@@ -569,7 +569,7 @@ class InventoryListItem extends StatelessWidget {
 }
 
 // =============================================
-// MAIN ADD ITEM PAGE WITH ENHANCED NAVIGATION
+// MAIN ADD ITEM PAGE WITH SIMPLE FADE IN ANIMATION
 // =============================================
 
 class AddItemPage extends StatefulWidget {
@@ -588,11 +588,13 @@ class AddItemPage extends StatefulWidget {
   _AddItemPageState createState() => _AddItemPageState();
 }
 
-class _AddItemPageState extends State<AddItemPage> {
+class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStateMixin {
   bool _isAddingToHousehold = false;
   bool _isFetchingFromAPI = false;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
 
   // Fixed categories
   final List<String> _fixedCategories = [
@@ -614,6 +616,33 @@ class _AddItemPageState extends State<AddItemPage> {
   final Color accentColor = Color(0xFFFF9800);
   final Color disabledColor = Color(0xFF9E9E9E);
   final Color warningColor = Color(0xFFFF6B35);
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Initialize simple fade animation
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 500), // Shorter duration for fade
+    );
+    
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeIn,
+    ));
+    
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   // Updated scan method using real-time scanner
   Future<void> _scanBarcode() async {
@@ -1414,134 +1443,307 @@ class _AddItemPageState extends State<AddItemPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(
-          widget.isReadOnly ? 'View Item Options' : 'Add Item',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-            letterSpacing: -0.5
-          ),
-        ),
-        backgroundColor: widget.isReadOnly ? disabledColor : primaryColor,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AnimatedContainer(
-              duration: Duration(milliseconds: 300),
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: widget.isReadOnly 
-                    ? [disabledColor, Color(0xFFBDBDBD)] 
-                    : [primaryColor, Color(0xFF5A8BA8)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: (widget.isReadOnly ? disabledColor : primaryColor).withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: Offset(0, 5),
-                  ),
-                ],
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Scaffold(
+        backgroundColor: backgroundColor,
+        body: CustomScrollView(
+          physics: BouncingScrollPhysics(),
+          slivers: [
+            // Enhanced App Bar with better visual hierarchy
+            SliverAppBar(
+              automaticallyImplyLeading: false, // Disable the default back button
+              expandedHeight: 180.0,
+              floating: false,
+              pinned: true,
+              backgroundColor: widget.isReadOnly ? disabledColor : primaryColor,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      widget.isReadOnly ? Icons.visibility : Icons.add, 
-                      color: Colors.white, 
-                      size: 28
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.isReadOnly ? 'View Item Options' : 'Add New Item',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          widget.isReadOnly 
-                            ? 'View item addition options (read-only)' 
-                            : 'Scan barcode or add manually to your database',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                        if (!widget.isReadOnly) SizedBox(height: 4),
-                        if (!widget.isReadOnly)
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: EdgeInsets.only(left: 20, bottom: 16, right: 20),
+                title: Row(
+                  children: [
+                    // Title and subtitle (without the back button)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            'Products are cached for faster future lookups',
+                            widget.isReadOnly ? 'View Item Options' : 'Add New Item',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.3,
                             ),
                           ),
+                          SizedBox(height: 2),
+                          Text(
+                            widget.householdName,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        widget.isReadOnly ? disabledColor : primaryColor,
+                        widget.isReadOnly ? Color(0xFFBDBDBD) : Color(0xFF5A8BA8),
                       ],
                     ),
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
                   ),
-                ],
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        right: -20,
+                        top: -20,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 40,
+                        bottom: -30,
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            SizedBox(height: 24),
-            
-            Expanded(
-              child: Column(
-                children: [
-                  _buildOptionCard(
-                    title: 'Scan Barcode',
-                    icon: Icons.qr_code_scanner,
-                    description: widget.isReadOnly 
-                      ? 'Scan product barcode (read-only)' 
-                      : 'Real-time barcode scanning with camera',
-                    onTap: widget.isReadOnly ? null : _scanBarcode,
-                    isLoading: _isFetchingFromAPI,
-                    isReadOnly: widget.isReadOnly,
-                    showApiStatus: _isFetchingFromAPI,
-                  ),
-                  SizedBox(height: 20),
-                  _buildOptionCard(
-                    title: 'Add Manually',
-                    icon: Icons.edit,
-                    description: widget.isReadOnly 
-                      ? 'View manual entry options (read-only)' 
-                      : 'Add new product to your database manually',
-                    onTap: widget.isReadOnly ? null : _navigateToEditPage,
-                    isReadOnly: widget.isReadOnly,
-                  ),
-                ],
+
+            // Main Content
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Welcome Card with improved design
+                    Container(
+                      width: double.infinity,
+                      margin: EdgeInsets.only(bottom: 24),
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: widget.isReadOnly 
+                            ? [disabledColor.withOpacity(0.9), disabledColor.withOpacity(0.7)] 
+                            : [primaryColor.withOpacity(0.9), Color(0xFF5A8BA8).withOpacity(0.8)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (widget.isReadOnly ? disabledColor : primaryColor).withOpacity(0.3),
+                            blurRadius: 15,
+                            offset: Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              widget.isReadOnly ? Icons.visibility : Icons.add_circle_outline, 
+                              color: Colors.white, 
+                              size: 30
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.isReadOnly ? 'View Inventory Options' : 'Add to Inventory',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  widget.isReadOnly 
+                                    ? 'Browse item addition options in read-only mode' 
+                                    : 'Choose your preferred method to add items to your household inventory',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.white.withOpacity(0.9),
+                                    height: 1.4,
+                                  ),
+                                ),
+                                if (!widget.isReadOnly) SizedBox(height: 6),
+                                if (!widget.isReadOnly)
+                                  Wrap(
+                                    children: [
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          'Smart Caching',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(width: 6),
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          'Fast Lookup',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Options Grid with improved layout
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: 0.60,
+                      children: [
+                        _buildEnhancedOptionCard(
+                          title: 'Scan Barcode',
+                          icon: Icons.qr_code_scanner_rounded,
+                          description: widget.isReadOnly 
+                            ? 'Scan product barcode (read-only)' 
+                            : 'Real-time barcode scanning with camera',
+                          gradientColors: widget.isReadOnly 
+                            ? [disabledColor, Color(0xFFBDBDBD)]
+                            : [Color(0xFF2D5D7C), Color(0xFF4CAF50)],
+                          onTap: widget.isReadOnly ? null : _scanBarcode,
+                          isLoading: _isFetchingFromAPI,
+                          isReadOnly: widget.isReadOnly,
+                          showApiStatus: _isFetchingFromAPI,
+                          badgeText: 'FAST',
+                        ),
+                        _buildEnhancedOptionCard(
+                          title: 'Add Manually',
+                          icon: Icons.edit_note_rounded,
+                          description: widget.isReadOnly 
+                            ? 'View manual entry options (read-only)' 
+                            : 'Add new product manually with custom details',
+                          gradientColors: widget.isReadOnly 
+                            ? [disabledColor, Color(0xFFBDBDBD)]
+                            : [Color(0xFF2D5D7C), Color(0xFFFF9800)],
+                          onTap: widget.isReadOnly ? null : _navigateToEditPage,
+                          isReadOnly: widget.isReadOnly,
+                          badgeText: 'FLEXIBLE',
+                        ),
+                      ],
+                    ),
+
+                    // Additional Information Section
+                    if (!widget.isReadOnly)
+                      Container(
+                        margin: EdgeInsets.only(top: 24),
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline, color: primaryColor, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'How it works',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: textColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            _buildFeatureRow(
+                              'Smart Caching',
+                              'Products are cached for 30 days for faster access',
+                              Icons.cached,
+                            ),
+                            SizedBox(height: 8),
+                            _buildFeatureRow(
+                              'Auto Category Mapping',
+                              'Categories are automatically mapped for consistency',
+                              Icons.category,
+                            ),
+                            SizedBox(height: 8),
+                            _buildFeatureRow(
+                              'Offline Support',
+                              'Works with cached data when offline',
+                              Icons.wifi_off,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -1550,14 +1752,16 @@ class _AddItemPageState extends State<AddItemPage> {
     );
   }
 
-  Widget _buildOptionCard({
+  Widget _buildEnhancedOptionCard({
     required String title,
     required IconData icon,
     required String description,
+    required List<Color> gradientColors,
     required VoidCallback? onTap,
     bool isLoading = false,
     bool isReadOnly = false,
     bool showApiStatus = false,
+    String? badgeText,
   }) {
     return MouseRegion(
       cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
@@ -1571,103 +1775,210 @@ class _AddItemPageState extends State<AddItemPage> {
           );
         },
         child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: isReadOnly ? Colors.grey[100] : cardColor,
-                borderRadius: BorderRadius.circular(16),
+          elevation: 8,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradientColors,
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (isLoading)
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: (isReadOnly ? disabledColor : primaryColor).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: gradientColors.first.withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: EdgeInsets.all(20),
+                  child: Stack(
+                    children: [
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              isReadOnly ? disabledColor : primaryColor
+                          // Icon with background
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
                             ),
-                            strokeWidth: 3,
+                            child: isLoading
+                                ? Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        strokeWidth: 3,
+                                      ),
+                                      Icon(
+                                        icon,
+                                        size: 24,
+                                        color: Colors.white.withOpacity(0.8),
+                                      ),
+                                    ],
+                                  )
+                                : Icon(
+                                    icon,
+                                    size: 30,
+                                    color: Colors.white,
+                                  ),
                           ),
-                          Icon(
-                            icon,
-                            size: 24,
-                            color: (isReadOnly ? disabledColor : primaryColor).withOpacity(0.7),
+                          SizedBox(height: 16),
+                          
+                          // Title
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
+                          SizedBox(height: 8),
+                          
+                          // Description
+                          Text(
+                            description,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withOpacity(0.9),
+                              height: 1.4,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          
+                          // Status indicators
+                          if (showApiStatus) ...[
+                            SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Fetching data...',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white.withOpacity(0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          
+                          if (isReadOnly) ...[
+                            SizedBox(height: 12),
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Read-only',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                    )
-                  else
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: (isReadOnly ? disabledColor : primaryColor).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        icon, 
-                        size: 30, 
-                        color: isReadOnly ? disabledColor : primaryColor
-                      ),
-                    ),
-                  SizedBox(height: 16),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: isReadOnly ? disabledColor : textColor,
-                    ),
+                      
+                      // Badge
+                      if (badgeText != null && !isReadOnly)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.only(
+                                topRight: Radius.circular(20),
+                                bottomLeft: Radius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              badgeText,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    description,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14, 
-                      color: isReadOnly ? disabledColor : lightTextColor,
-                    ),
-                  ),
-                  if (showApiStatus) SizedBox(height: 12),
-                  if (showApiStatus)
-                    Text(
-                      'Fetching from OpenFoodFacts...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  if (isReadOnly) SizedBox(height: 12),
-                  if (isReadOnly)
-                    Text(
-                      'Read-only access',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: disabledColor,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                ],
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildFeatureRow(String title, String description, IconData icon) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: primaryColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 14, color: primaryColor),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: lightTextColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

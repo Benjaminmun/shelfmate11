@@ -64,71 +64,71 @@ class DashboardService {
         });
   }
   
-  Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
-    int totalItems = snapshot.docs.length;
-    int lowStockItems = 0;
-    int expiringSoonItems = 0;
-    int totalCategories = 0;
-    double totalValue = 0.0;
-    Set<String> categories = Set();
+  // In DashboardService - _calculateStats method
+Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
+  int totalItems = snapshot.docs.length;
+  int lowStockItems = 0;
+  int expiringSoonItems = 0;
+  int totalCategories = 0;
+  double totalValue = 0.0;
+  Set<String> categories = Set();
 
-    // Get current date in GMT+8 for comparison
-    final now = DateTime.now().toUtc().add(Duration(hours: 8));
-    final today = DateTime(now.year, now.month, now.day);
-    today.add(Duration(days: 7));
+  // Use device local time instead of GMT+8
+  final now = DateTime.now(); // Remove GMT+8 conversion
+  final today = DateTime(now.year, now.month, now.day);
+  today.add(Duration(days: 7)); // Define next week for expiry check
 
-    for (var doc in snapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final quantity = (data['quantity'] ?? 0).toInt();
-      final price = (data['price'] ?? 0).toDouble();
-      
-      if (quantity < 5) lowStockItems++;
-      if (data['category'] != null) categories.add(data['category'] as String);
-      totalValue += quantity * price;
+  for (var doc in snapshot.docs) {
+    final data = doc.data() as Map<String, dynamic>;
+    final quantity = (data['quantity'] ?? 0).toInt();
+    final price = (data['price'] ?? 0).toDouble();
+    
+    if (quantity < 5) lowStockItems++;
+    if (data['category'] != null) categories.add(data['category'] as String);
+    totalValue += quantity * price;
 
-      // Enhanced expiry date checking
-      if (data['expiryDate'] != null) {
-        try {
-          DateTime? expiry;
-          
-          // Handle different expiry date formats
-          if (data['expiryDate'] is Timestamp) {
-            expiry = (data['expiryDate'] as Timestamp).toDate();
-          } else if (data['expiryDate'] is String) {
-            expiry = DateTime.parse(data['expiryDate'] as String);
-          }
-          
-          if (expiry != null) {
-            // Convert expiry to GMT+8 and normalize to date only
-            final expiryGmtPlus8 = expiry.toUtc().add(Duration(hours: 8));
-            final expiryDate = DateTime(expiryGmtPlus8.year, expiryGmtPlus8.month, expiryGmtPlus8.day);
-            
-            // Check if expiry is within next 7 days (including today)
-            final daysUntilExpiry = expiryDate.difference(today).inDays;
-            
-            if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
-              expiringSoonItems++;
-              print('Expiring soon: ${doc.id} - $expiryDate (${daysUntilExpiry} days)');
-            }
-          }
-        } catch (e) {
-          print('Error parsing expiry date for ${doc.id}: ${data['expiryDate']} - $e');
+    // Enhanced expiry date checking - use local time
+    if (data['expiryDate'] != null) {
+      try {
+        DateTime? expiry;
+        
+        // Handle different expiry date formats
+        if (data['expiryDate'] is Timestamp) {
+          expiry = (data['expiryDate'] as Timestamp).toDate();
+        } else if (data['expiryDate'] is String) {
+          expiry = DateTime.parse(data['expiryDate'] as String);
         }
+        
+        if (expiry != null) {
+          // Use local time directly - remove GMT+8 conversion
+          final expiryDate = DateTime(expiry.year, expiry.month, expiry.day);
+          
+          // Check if expiry is within next 7 days (including today)
+          final daysUntilExpiry = expiryDate.difference(today).inDays;
+          
+          if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
+            expiringSoonItems++;
+            print('Expiring soon: ${doc.id} - $expiryDate (${daysUntilExpiry} days)');
+          }
+        }
+      } catch (e) {
+        print('Error parsing expiry date for ${doc.id}: ${data['expiryDate']} - $e');
       }
     }
-
-    totalCategories = categories.length;
-
-    print('Stats calculated - Total: $totalItems, Expiring: $expiringSoonItems');
-
-    return {
-      'totalItems': totalItems,
-      'lowStockItems': lowStockItems,
-      'expiringSoonItems': expiringSoonItems,
-      'totalCategories': totalCategories,
-      'totalValue': totalValue,
-    };
   }
+
+  totalCategories = categories.length;
+
+  print('Stats calculated - Total: $totalItems, Expiring: $expiringSoonItems');
+
+  return {
+    'totalItems': totalItems,
+    'lowStockItems': lowStockItems,
+    'expiringSoonItems': expiringSoonItems,
+    'totalCategories': totalCategories,
+    'totalValue': totalValue,
+  };
+}
 
   Stream<List<Map<String, dynamic>>> getRecentActivitiesStream(String householdId) {
     if (householdId.isEmpty) {
@@ -619,28 +619,25 @@ class EnhancedActivityItem extends StatelessWidget {
 
   // FIXED: Enhanced time formatting with GMT+8
   String _formatActivityTime(Timestamp timestamp) {
-    final date = _toGmtPlus8(timestamp.toDate());
-    final now = _toGmtPlus8(DateTime.now());
-    final today = DateTime(now.year, now.month, now.day);
-    final activityDate = DateTime(date.year, date.month, date.day);
-    
-    if (activityDate == today) {
-      // Today: show time only
-      final hour = date.hour.toString().padLeft(2, '0');
-      final minute = date.minute.toString().padLeft(2, '0');
-      return '$hour:$minute';
-    } else if (activityDate == today.subtract(Duration(days: 1))) {
-      // Yesterday
-      return 'Yesterday';
-    } else {
-      // Other days: show date
-      return '${date.day}/${date.month}';
-    }
+  // Use device local time directly - remove GMT+8 conversion
+  final date = timestamp.toDate(); // This uses the device's local timezone
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final activityDate = DateTime(date.year, date.month, date.day);
+  
+  if (activityDate == today) {
+    // Today: show time only
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  } else if (activityDate == today.subtract(Duration(days: 1))) {
+    // Yesterday
+    return 'Yesterday';
+  } else {
+    // Other days: show date
+    return '${date.day}/${date.month}';
   }
-
-  DateTime _toGmtPlus8(DateTime dateTime) {
-    return dateTime.add(Duration(hours: 8));
-  }
+}
 
   String _getActivityTypeLabel(String type) {
     switch (type) {
@@ -1648,7 +1645,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  SizedBox(width: 7),
+                  SizedBox(width: 6),
                   Icon(Icons.arrow_forward_rounded, size: 16),
                 ],
               ),

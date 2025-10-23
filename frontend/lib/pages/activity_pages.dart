@@ -2,6 +2,121 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:frontend/pages/dashboard_page.dart';
 
+String convertValueForDisplay(dynamic value) {
+  if (value == null) return 'Not set';
+  
+  try {
+    // Handle String
+    if (value is String) {
+      return value.trim().isEmpty ? 'Empty' : value;
+    }
+    
+    // Handle numeric types
+    else if (value is int) {
+      return value.toString();
+    }
+    else if (value is double) {
+      // Smart formatting for doubles
+      if (value == value.toInt().toDouble()) {
+        return value.toInt().toString(); // Show as integer if no decimal
+      } else {
+        // Show 1-2 decimal places based on value
+        if (value.abs() < 10) {
+          return value.toStringAsFixed(2);
+        } else {
+          return value.toStringAsFixed(1);
+        }
+      }
+    }
+    else if (value is num) {
+      // Generic number handling
+      return value.toString();
+    }
+    
+    // Handle boolean
+    else if (value is bool) {
+      return value ? 'Yes' : 'No';
+    }
+    
+    // Handle DateTime and Timestamp
+    else if (value is Timestamp) {
+      final date = value.toDate();
+      return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    }
+    // Handle collections
+    else if (value is List) {
+      if (value.isEmpty) return 'Empty list';
+      
+      // Convert each element recursively
+      final convertedItems = value.map((item) => convertValueForDisplay(item)).toList();
+      return convertedItems.join(', ');
+    }
+    else if (value is Map) {
+      if (value.isEmpty) return 'Empty object';
+      
+      // Convert key-value pairs
+      final entries = value.entries.map((entry) {
+        return '${entry.key}: ${convertValueForDisplay(entry.value)}';
+      }).toList();
+      
+      return entries.join('; ');
+    }
+    
+    // Handle enums and other objects
+    else {
+      // Try to convert to string, handle any errors gracefully
+      final stringValue = value.toString();
+      
+      // Check if it's an enum-like string (contains the type name)
+      if (stringValue.contains('Instance of') || 
+          RegExp(r'^[A-Z][a-zA-Z]*$').hasMatch(stringValue)) {
+        // It's likely an object instance or enum, extract meaningful part
+        final parts = stringValue.split('.');
+        return parts.last;
+      }
+      
+      return stringValue;
+    }
+  } catch (e) {
+    // Fallback for any conversion errors
+    return 'Unsupported type';
+  }
+}
+
+bool hasMeaningfulChanges(Map<String, dynamic> activity) {
+  final oldValue = activity['oldValue'];
+  final newValue = activity['newValue'];
+  
+  // If both are null, no meaningful change
+  if (oldValue == null && newValue == null) return false;
+  
+  // If one is null and the other isn't, there's a change
+  if (oldValue == null && newValue != null) return true;
+  if (oldValue != null && newValue == null) return true;
+  
+  // If both have values, check if they're meaningfully different
+  // Convert both to display strings and compare
+  final oldDisplay = convertValueForDisplay(oldValue);
+  final newDisplay = convertValueForDisplay(newValue);
+  
+  return oldDisplay != newDisplay;
+}
+
+String getSmartDescription(String baseDescription, String value) {
+  if (RegExp(r'^-?\d*\.?\d+$').hasMatch(value)) {
+    return 'Numeric value';
+  } else if (value == 'Yes' || value == 'No') {
+    return 'Boolean value';
+  } else if (value.contains('/') && (value.contains(':') || value.length <= 10)) {
+    return 'Date & time value';
+  } else if (value == 'Empty') {
+    return 'Empty text value';
+  } else if (value == 'Not set') {
+    return 'No value set';
+  }
+  return baseDescription;
+}
+
 // Enhanced Activity Item Widget with advanced features
 class EnhancedActivityItem extends StatelessWidget {
   final Map<String, dynamic> activity;
@@ -264,6 +379,9 @@ class EnhancedActivityItem extends StatelessWidget {
                           ),
                         ),
                       ],
+
+                      // Value change preview
+                      _buildValueChangePreview(),
                     ],
                   ),
                 ),
@@ -381,6 +499,53 @@ class EnhancedActivityItem extends StatelessWidget {
     );
   }
 
+  Widget _buildValueChangePreview() {
+    if (!hasMeaningfulChanges(activity)) return SizedBox.shrink();
+    
+    final oldValue = activity['oldValue'];
+    final newValue = activity['newValue'];
+    
+    final oldDisplay = convertValueForDisplay(oldValue);
+    final newDisplay = convertValueForDisplay(newValue);
+    
+    return Container(
+      margin: EdgeInsets.only(top: 8),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: primaryColor.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: primaryColor.withOpacity(0.15),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            oldDisplay,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.red,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+          SizedBox(width: 6),
+          Icon(Icons.arrow_forward_rounded, size: 12, color: primaryColor),
+          SizedBox(width: 6),
+          Text(
+            newDisplay,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.green,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatTime(DateTime date) {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
@@ -429,10 +594,6 @@ class ActivityDetailPage extends StatelessWidget {
   final Map<String, dynamic> activity;
 
   const ActivityDetailPage({Key? key, required this.activity}) : super(key: key);
-  
-  Color? get surfaceColor => null;
-  
-  Color? get textSecondary => null;
 
   @override
   Widget build(BuildContext context) {
@@ -450,7 +611,9 @@ class ActivityDetailPage extends StatelessWidget {
     final String itemName = activity['itemName'] ?? 'No item';
     final String profileImage = activity['profileImage'] ?? '';
     final String itemImage = activity['itemImage'] ?? '';
-    final bool hasChanges = activity['oldValue'] != null && activity['newValue'] != null;
+    
+    // ENHANCED: Use the universal value converter for display
+    final bool hasChanges = hasMeaningfulChanges(activity);
 
     return Scaffold(
       backgroundColor: Color(0xFFF8FAFC),
@@ -496,7 +659,7 @@ class ActivityDetailPage extends StatelessWidget {
             SizedBox(height: 24),
             
             // Activity Message Card
-            _buildMessageCard(activity, primaryColor, textPrimary, textSecondary),
+            _buildMessageCard(activity, primaryColor, textPrimary, textSecondary, surfaceColor),
             
             SizedBox(height: 20),
             
@@ -508,10 +671,10 @@ class ActivityDetailPage extends StatelessWidget {
             // Timeline Section
             _buildTimelineSection(time, primaryColor, surfaceColor, textPrimary, textSecondary),
             
-            // Value Changes Section
+            // Value Changes Section - ENHANCED: Now properly shows when there are meaningful changes
             if (hasChanges) ...[
               SizedBox(height: 24),
-              _buildValueChangesSection(activity, primaryColor, surfaceColor, textPrimary),
+              _buildValueChangesSection(activity, primaryColor, surfaceColor, textPrimary, textSecondary),
             ],
             
             SizedBox(height: 40),
@@ -618,7 +781,7 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMessageCard(Map<String, dynamic> activity, Color primaryColor, Color textPrimary, Color textSecondary) {
+  Widget _buildMessageCard(Map<String, dynamic> activity, Color primaryColor, Color textPrimary, Color textSecondary, Color surfaceColor) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -786,7 +949,12 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildValueChangesSection(Map<String, dynamic> activity, Color primaryColor, Color surfaceColor, Color textPrimary) {
+  // ENHANCED: Method to handle any data type for value display
+  Widget _buildValueChangesSection(Map<String, dynamic> activity, Color primaryColor, Color surfaceColor, Color textPrimary, Color textSecondary) {
+    // Use the enhanced value conversion that handles all data types
+    final oldValue = convertValueForDisplay(activity['oldValue']);
+    final newValue = convertValueForDisplay(activity['newValue']);
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -835,7 +1003,7 @@ class ActivityDetailPage extends StatelessWidget {
                   Expanded(
                     child: _buildEnhancedValueChangeCard(
                       'Before',
-                      '${activity['oldValue']}',
+                      oldValue,
                       Colors.red,
                       Icons.arrow_downward_rounded,
                       'Previous value',
@@ -854,7 +1022,7 @@ class ActivityDetailPage extends StatelessWidget {
                   Expanded(
                     child: _buildEnhancedValueChangeCard(
                       'After',
-                      '${activity['newValue']}',
+                      newValue,
                       Colors.green,
                       Icons.arrow_upward_rounded,
                       'Updated value',
@@ -866,6 +1034,131 @@ class ActivityDetailPage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  // ENHANCED: Smart value display card that adapts to content
+  Widget _buildEnhancedValueChangeCard(String title, String value, Color color, IconData icon, String description) {
+    // Smart text sizing based on content type and length
+    final bool isNumeric = RegExp(r'^-?\d*\.?\d+$').hasMatch(value);
+    final bool isBoolean = value == 'Yes' || value == 'No';
+    final bool isDate = value.contains('/') && (value.contains(':') || value.length <= 10);
+    
+    double fontSize;
+    if (isNumeric || isBoolean) {
+      fontSize = 22.0; // Larger for numbers and booleans
+    } else if (isDate) {
+      fontSize = 18.0; // Medium for dates
+    } else {
+      // Text content - adjust based on length
+      fontSize = value.length > 20 ? 14.0 : 
+                 value.length > 15 ? 16.0 : 18.0;
+    }
+    
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            color.withOpacity(0.08),
+            color.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          // Title with type indicator
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, color: color, size: 14),
+                    SizedBox(width: 6),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: 12),
+          
+          // Value with smart display
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isNumeric || isBoolean || isDate)
+                  Container(
+                    padding: EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isNumeric ? Icons.numbers_rounded :
+                      isBoolean ? Icons.toggle_on_rounded :
+                      Icons.calendar_today_rounded,
+                      color: color,
+                      size: 16,
+                    ),
+                  ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          SizedBox(height: 8),
+          
+          // Smart description based on content type
+          Text(
+            getSmartDescription(description, value),
+            style: TextStyle(
+              fontSize: 11,
+              color: color.withOpacity(0.7),
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1002,73 +1295,6 @@ class ActivityDetailPage extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildEnhancedValueChangeCard(String title, String value, Color color, IconData icon, String description) {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.08),
-            color.withOpacity(0.03),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              SizedBox(width: 8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 22,
-                  color: color,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 12,
-              color: color.withOpacity(0.7),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1626,7 +1852,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                 : Container(
                     padding: EdgeInsets.all(16),
                     child: Text(
-                      'You\'ve reached the end',
+                      'End',
                       style: TextStyle(
                         fontSize: 13,
                         color: _textLight,
@@ -1751,5 +1977,5 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
         transitionDuration: Duration(milliseconds: 400),
       ),
     );
-  } 
+  }
 }
