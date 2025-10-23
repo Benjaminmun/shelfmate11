@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:io';
 import 'dart:typed_data';
-import 'household_service.dart'; // Import your household service page
+import 'household_service.dart';
 
 class UserInfoPage extends StatefulWidget {
   const UserInfoPage({super.key});
@@ -28,7 +28,7 @@ class _UserInfoPageState extends State<UserInfoPage>
   bool _isUploadingImage = false;
   File? _selectedImage;
   String? _profilePicUrl;
-  String? _oldProfilePicUrl; // To track old image for deletion
+  String? _oldProfilePicPath; // Store path instead of URL for deletion
 
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
@@ -96,7 +96,8 @@ class _UserInfoPageState extends State<UserInfoPage>
           emailController.text =
               data?['email'] ?? _auth.currentUser!.email ?? '';
           _profilePicUrl = data?['profilePicUrl'];
-          _oldProfilePicUrl = data?['profilePicUrl']; // Store old URL
+          // Extract path from URL or store it separately
+          _oldProfilePicPath = data?['profilePicPath'] ?? _extractPathFromUrl(_profilePicUrl);
           _isDataLoaded = true;
         });
       }
@@ -109,22 +110,37 @@ class _UserInfoPageState extends State<UserInfoPage>
     }
   }
 
+  // Extract path from Firebase Storage URL
+  String? _extractPathFromUrl(String? url) {
+    if (url == null) return null;
+    try {
+      final uri = Uri.parse(url);
+      final path = uri.path;
+      // Firebase Storage URL pattern: /v0/b/{bucket}/o/{path}?alt=media&token={token}
+      final segments = path.split('/o/');
+      if (segments.length > 1) {
+        return Uri.decodeComponent(segments[1]);
+      }
+      return null;
+    } catch (e) {
+      print('Error extracting path from URL: $e');
+      return null;
+    }
+  }
+
   // Phone number validation logic
   String? _validatePhoneNumber(String? value) {
     if (value == null || value.isEmpty) {
       return 'Please enter your phone number';
     }
-    // Remove any spaces or non-digit characters
     String cleanedNumber = value.replaceAll(RegExp(r'\D'), '');
-    // Check if the number starts with "01"
     if (!cleanedNumber.startsWith('01')) {
       return 'Phone number must start with 01';
     }
-    // Check if the number is 10 or 11 digits long
     if (cleanedNumber.length < 10 || cleanedNumber.length > 11) {
       return 'Phone number must be 10 or 11 digits long';
     }
-    return null; // Return null if the value is valid
+    return null;
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -139,7 +155,7 @@ class _UserInfoPageState extends State<UserInfoPage>
       if (pickedFile != null) {
         setState(() {
           _selectedImage = File(pickedFile.path);
-          _isUploadingImage = true; // Start loading
+          _isUploadingImage = true;
         });
         await _uploadImageToFirebase();
       }
@@ -151,101 +167,116 @@ class _UserInfoPageState extends State<UserInfoPage>
     }
   }
 
+  // SIMPLIFIED: Delete by direct path reference
   Future<void> _deleteOldProfilePicture() async {
-  if (_oldProfilePicUrl == null || _oldProfilePicUrl!.isEmpty) return;
+    if (_oldProfilePicPath == null || _oldProfilePicPath!.isEmpty) return;
 
-  try {
-    // Decode the encoded URL
-    final Uri uri = Uri.parse(_oldProfilePicUrl!);
-    final String encodedPath = uri.pathSegments.last; // e.g. profile_pictures%2Fuid_123456.jpg
-    final String decodedPath = Uri.decodeComponent(encodedPath); // -> profile_pictures/uid_123456.jpg
-
-    final Reference oldFileRef = _storage.ref().child(decodedPath);
-    await oldFileRef.delete();
-
-    print('✅ Old profile picture deleted successfully.');
-  } catch (e) {
-    print('⚠️ Failed to delete old profile picture: $e');
+    try {
+      final Reference oldFileRef = _storage.ref().child(_oldProfilePicPath!);
+      
+      // Check if file exists before attempting deletion
+      try {
+        await oldFileRef.getMetadata();
+        await oldFileRef.delete();
+        print('✅ Old profile picture deleted successfully: $_oldProfilePicPath');
+      } on FirebaseException catch (e) {
+        if (e.code == 'object-not-found') {
+          print('ℹ️ Old profile picture already deleted or not found: $_oldProfilePicPath');
+          // This is OK - the file doesn't exist, so we can continue
+        } else {
+          print('⚠️ Firebase error deleting old picture: ${e.code} - ${e.message}');
+          // Don't rethrow - we don't want to block the upload if deletion fails
+        }
+      }
+    } catch (e) {
+      print('⚠️ Non-Firebase error deleting old picture: $e');
+      // Continue with upload even if deletion fails
+    }
   }
-}
-
-
-
 
   Future<void> _uploadImageToFirebase() async {
     if (_selectedImage == null) return;
 
     try {
       final userId = _auth.currentUser!.uid;
-
-      // Read the image file as bytes
       final Uint8List imageBytes = await _selectedImage!.readAsBytes();
 
-      // Get the file extension and determine MIME type
+      // Validate file size
+      if (imageBytes.length > 10 * 1024 * 1024) {
+        throw Exception('Image size exceeds 10MB limit');
+      }
+
       final fileExtension = _selectedImage!.path.split('.').last.toLowerCase();
       final mimeType = _getMimeType(fileExtension);
-
-      // Generate unique file name with timestamp
+      
+      // Generate unique file name
       final String fileName = '${userId}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+      final String filePath = 'profile_pictures/$fileName';
+      
+      final Reference storageRef = _storage.ref().child(filePath);
 
-      // Create a reference to the storage location
-      final Reference storageRef = _storage.ref().child('profile_pictures/$fileName');
-
-      // Upload the bytes with proper metadata
-      final UploadTask uploadTask = storageRef.putData(
-        imageBytes,
-        SettableMetadata(
-          contentType: mimeType,
-          customMetadata: {
-            'uploadedBy': userId,
-            'uploadedAt': DateTime.now().toString(),
-          },
-        ),
+      final metadata = SettableMetadata(
+        contentType: mimeType,
+        customMetadata: {
+          'uploadedBy': userId,
+          'uploadedAt': DateTime.now().toString(),
+        },
       );
 
-      // Listen to upload state changes
+      print('🔄 Starting upload to: $filePath');
+
+      // Delete old profile picture first (but don't block on errors)
+      if (_oldProfilePicPath != null && _oldProfilePicPath!.isNotEmpty) {
+        print('🗑️ Attempting to delete old picture: $_oldProfilePicPath');
+        await _deleteOldProfilePicture().catchError((e) {
+          print('⚠️ Old picture deletion failed, but continuing upload: $e');
+        });
+      }
+
+      // Upload the file
+      final UploadTask uploadTask = storageRef.putData(imageBytes, metadata);
+      
+      // Listen to upload progress
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
         final double progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        print('Upload progress: ${progress.toStringAsFixed(2)}%');
+        print('📤 Upload progress: ${progress.toStringAsFixed(2)}%');
       });
 
       // Wait for upload to complete
       final TaskSnapshot snapshot = await uploadTask;
       final String downloadURL = await snapshot.ref.getDownloadURL();
 
-      // Delete old profile picture if it exists
-      if (_oldProfilePicUrl != null && _oldProfilePicUrl!.isNotEmpty) {
-        await _deleteOldProfilePicture();
-      }
+      print('✅ Upload completed. Download URL: $downloadURL');
 
-      // Update Firestore
+      // Update Firestore with both URL and path
       await _firestore.collection('users').doc(userId).update({
         'profilePicUrl': downloadURL,
+        'profilePicPath': filePath, // Store the path for future deletion
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
       setState(() {
         _profilePicUrl = downloadURL;
-        _oldProfilePicUrl = downloadURL; // Update old URL to current
+        _oldProfilePicPath = filePath; // Store new path for future deletion
         _isUploadingImage = false;
-        _selectedImage = null; // Clear selected image after upload
+        _selectedImage = null;
       });
 
       _showSnackBar('Profile picture updated successfully!', false);
+      
     } on FirebaseException catch (e) {
       setState(() {
         _isUploadingImage = false;
       });
-      // Handle specific Firebase errors
       final errorMessage = _handleFirebaseError(e);
       _showSnackBar('Upload failed: $errorMessage', true);
-      print('Firebase storage error: ${e.code} - ${e.message}');
+      print('❌ Firebase storage error: ${e.code} - ${e.message}');
     } catch (e) {
       setState(() {
         _isUploadingImage = false;
       });
       _showSnackBar('Unexpected error during upload: ${e.toString()}', true);
-      print('Unexpected error: $e');
+      print('❌ Unexpected error: $e');
     }
   }
 
@@ -255,18 +286,21 @@ class _UserInfoPageState extends State<UserInfoPage>
     try {
       final userId = _auth.currentUser!.uid;
 
-      // Delete the current profile picture from storage
-      await _deleteOldProfilePicture();
+      // Delete from storage using the stored path
+      if (_oldProfilePicPath != null && _oldProfilePicPath!.isNotEmpty) {
+        await _deleteOldProfilePicture();
+      }
 
-      // Update Firestore to remove profile picture URL
+      // Update Firestore to remove profile picture data
       await _firestore.collection('users').doc(userId).update({
         'profilePicUrl': FieldValue.delete(),
+        'profilePicPath': FieldValue.delete(),
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
       setState(() {
         _profilePicUrl = null;
-        _oldProfilePicUrl = null;
+        _oldProfilePicPath = null;
       });
 
       _showSnackBar('Profile picture removed successfully!', false);
@@ -275,7 +309,6 @@ class _UserInfoPageState extends State<UserInfoPage>
     }
   }
 
-  // Helper function to determine MIME type
   String _getMimeType(String fileExtension) {
     switch (fileExtension) {
       case 'png':
@@ -289,23 +322,24 @@ class _UserInfoPageState extends State<UserInfoPage>
     }
   }
 
-  // Helper function to handle specific Firebase error codes
   String _handleFirebaseError(FirebaseException e) {
     switch (e.code) {
+      case 'storage/object-not-found':
+        return 'The file was not found. Please try uploading again.';
       case 'storage/unauthorized':
         return 'You don\'t have permission to upload files.';
       case 'storage/canceled':
-        return 'Upload was canceled. Please check your connection and try again.';
+        return 'Upload was canceled.';
       case 'storage/unknown':
         return 'An unknown error occurred. Please try again.';
       case 'storage/quota-exceeded':
         return 'Storage quota exceeded. Please contact support.';
-      case 'storage/object-not-found':
-        return 'File not found. Please try uploading again.';
       case 'storage/invalid-argument':
         return 'Invalid file. Please choose a different image.';
+      case 'storage/unauthenticated':
+        return 'Please sign in again to upload files.';
       default:
-        return 'Upload failed: ${e.message}';
+        return 'Upload failed: ${e.message ?? "Unknown error"}';
     }
   }
 
@@ -336,7 +370,6 @@ class _UserInfoPageState extends State<UserInfoPage>
 
       _showSnackBar('Profile updated successfully!', false);
 
-      // Navigate to household_service.dart after successful save
       await Future.delayed(const Duration(milliseconds: 1500));
       Navigator.pushReplacement(
         context,
@@ -426,7 +459,6 @@ class _UserInfoPageState extends State<UserInfoPage>
               ),
               const SizedBox(height: 24),
               
-              // Choose from Gallery
               _buildImageSourceOption(
                 icon: Icons.photo_library_rounded,
                 title: 'Choose from Gallery',
@@ -436,7 +468,6 @@ class _UserInfoPageState extends State<UserInfoPage>
                 },
               ),
               
-              // Take Photo
               _buildImageSourceOption(
                 icon: Icons.camera_alt_rounded,
                 title: 'Take Photo',
@@ -446,7 +477,6 @@ class _UserInfoPageState extends State<UserInfoPage>
                 },
               ),
               
-              // Remove Photo (only show if there's a current profile picture)
               if (_profilePicUrl != null && _profilePicUrl!.isNotEmpty)
                 _buildImageSourceOption(
                   icon: Icons.delete_rounded,
@@ -587,7 +617,6 @@ class _UserInfoPageState extends State<UserInfoPage>
       onTap: _isEditing && !_isUploadingImage ? _showImageSourceDialog : null,
       child: Stack(
         children: [
-          // Background glow effect
           Container(
             width: 140,
             height: 140,
@@ -603,7 +632,6 @@ class _UserInfoPageState extends State<UserInfoPage>
             ),
           ),
 
-          // Main avatar container
           Container(
             width: 120,
             height: 120,
@@ -624,7 +652,6 @@ class _UserInfoPageState extends State<UserInfoPage>
             child: ClipOval(
               child: Stack(
                 children: [
-                  // Profile image or default avatar
                   if (_profilePicUrl != null && !_isUploadingImage)
                     Image.network(
                       _profilePicUrl!,
@@ -684,7 +711,6 @@ class _UserInfoPageState extends State<UserInfoPage>
             ),
           ),
 
-          // Edit icon overlay
           if (_isEditing && !_isUploadingImage)
             Positioned(
               bottom: 4,
@@ -740,9 +766,6 @@ class _UserInfoPageState extends State<UserInfoPage>
       ),
     );
   }
-
-  // ... Rest of your existing methods (_buildTextField, _buildActionButton, build, etc.)
-  // Keep all the other methods exactly as you have them in your original code
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -970,7 +993,6 @@ class _UserInfoPageState extends State<UserInfoPage>
       body: SafeArea(
         child: Stack(
           children: [
-            // Background Elements
             Positioned(
               top: 0,
               right: 0,
@@ -1006,7 +1028,6 @@ class _UserInfoPageState extends State<UserInfoPage>
               ),
             ),
 
-            // Main Content
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: SingleChildScrollView(
@@ -1016,7 +1037,6 @@ class _UserInfoPageState extends State<UserInfoPage>
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header
                         SizedBox(height: 20 + _slideAnimation.value),
                         FadeTransition(
                           opacity: _fadeAnimation,
@@ -1100,7 +1120,6 @@ class _UserInfoPageState extends State<UserInfoPage>
                           ),
                         ),
 
-                        // Profile Avatar
                         SizedBox(height: 40 + _slideAnimation.value),
                         FadeTransition(
                           opacity: _fadeAnimation,
@@ -1126,7 +1145,6 @@ class _UserInfoPageState extends State<UserInfoPage>
                           ),
                         ),
 
-                        // Form Content
                         SizedBox(height: 40 + _slideAnimation.value),
                         if (_isLoading && !_isDataLoaded)
                           Center(
@@ -1180,7 +1198,7 @@ class _UserInfoPageState extends State<UserInfoPage>
                                       icon: Icons.phone_rounded,
                                       keyboardType: TextInputType.phone,
                                       enabled: _isEditing,
-                                      validator: _validatePhoneNumber, // Added validator
+                                      validator: _validatePhoneNumber,
                                     ),
                                     _buildTextField(
                                       controller: addressController,
@@ -1201,7 +1219,6 @@ class _UserInfoPageState extends State<UserInfoPage>
                             ),
                           ),
 
-                        // Action Buttons
                         SizedBox(height: 40 + _slideAnimation.value),
                         FadeTransition(
                           opacity: _fadeAnimation,

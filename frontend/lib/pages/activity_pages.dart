@@ -28,13 +28,12 @@ class EnhancedActivityItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timestamp = activity['timestamp'] as Timestamp;
-    final time = _toGmtPlus8(timestamp.toDate());
+    final time = timestamp.toDate().toLocal(); // Use local phone time
     final icon = _getActivityIcon(activity['type']);
     final color = _getActivityColor(activity['type']);
     
     // Extract user and item information
     final String fullName = activity['fullName'] ?? 'Unknown User';
-    final String userName = activity['userName'] ?? 'Unknown';
     final String itemName = activity['itemName'] ?? '';
     final String profileImage = activity['profileImage'] ?? '';
     final String itemImage = activity['itemImage'] ?? '';
@@ -198,7 +197,7 @@ class EnhancedActivityItem extends StatelessWidget {
                       ),
                       SizedBox(height: 8),
                       
-                      // User info with enhanced styling
+                      // User info with enhanced styling (username removed)
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -220,15 +219,6 @@ class EnhancedActivityItem extends StatelessWidget {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: primaryColor,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              userName, // Removed '@' prefix
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: primaryColor.withOpacity(0.7),
-                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -391,10 +381,6 @@ class EnhancedActivityItem extends StatelessWidget {
     );
   }
 
-  DateTime _toGmtPlus8(DateTime dateTime) {
-    return dateTime.add(Duration(hours: 8));
-  }
-
   String _formatTime(DateTime date) {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
@@ -451,7 +437,7 @@ class ActivityDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timestamp = activity['timestamp'] as Timestamp;
-    final time = _toGmtPlus8(timestamp.toDate());
+    final time = timestamp.toDate().toLocal(); // Use local phone time
     final icon = _getActivityIcon(activity['type']);
     final color = _getActivityColor(activity['type']);
     final primaryColor = Color(0xFF2D5D7C);
@@ -461,7 +447,6 @@ class ActivityDetailPage extends StatelessWidget {
 
     // Extract user and item information
     final String fullName = activity['fullName'] ?? 'User';
-    final String userName = activity['userName'] ?? 'Unknown';
     final String itemName = activity['itemName'] ?? 'No item';
     final String profileImage = activity['profileImage'] ?? '';
     final String itemImage = activity['itemImage'] ?? '';
@@ -499,7 +484,6 @@ class ActivityDetailPage extends StatelessWidget {
           ),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        // Removed share action button
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(20),
@@ -517,7 +501,7 @@ class ActivityDetailPage extends StatelessWidget {
             SizedBox(height: 20),
             
             // Participants Section
-            _buildParticipantsSection(fullName, userName, profileImage, itemName, itemImage, primaryColor, surfaceColor, textPrimary),
+            _buildParticipantsSection(fullName, profileImage, itemName, itemImage, primaryColor, surfaceColor, textPrimary),
             
             SizedBox(height: 24),
             
@@ -534,7 +518,6 @@ class ActivityDetailPage extends StatelessWidget {
           ],
         ),
       ),
-      // Removed bottom navigation bar with actions
     );
   }
 
@@ -697,7 +680,7 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildParticipantsSection(String fullName, String userName, String profileImage, String itemName, String itemImage, Color primaryColor, Color surfaceColor, Color textPrimary) {
+  Widget _buildParticipantsSection(String fullName, String profileImage, String itemName, String itemImage, Color primaryColor, Color surfaceColor, Color textPrimary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -719,7 +702,6 @@ class ActivityDetailPage extends StatelessWidget {
         _buildEnhancedParticipantCard(
           'User',
           fullName,
-          userName, // Removed '@' prefix
           profileImage,
           Icons.person_rounded,
           primaryColor,
@@ -730,7 +712,6 @@ class ActivityDetailPage extends StatelessWidget {
           _buildEnhancedParticipantCard(
             'Item',
             itemName,
-            'Inventory Item',
             itemImage,
             Icons.inventory_2_rounded,
             primaryColor,
@@ -794,8 +775,8 @@ class ActivityDetailPage extends StatelessWidget {
               _buildEnhancedTimelineItem(
                 Icons.language_rounded,
                 'Timezone',
-                'GMT+8',
-                'Malaysia Time',
+                'Local Time',
+                'Your device timezone',
                 primaryColor,
               ),
             ],
@@ -888,7 +869,7 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEnhancedParticipantCard(String title, String name, String subtitle, String imageUrl, IconData icon, Color color, Color surfaceColor) {
+  Widget _buildEnhancedParticipantCard(String title, String name, String imageUrl, IconData icon, Color color, Color surfaceColor) {
     return Container(
       decoration: BoxDecoration(
         color: surfaceColor,
@@ -961,20 +942,9 @@ class ActivityDetailPage extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF94A3B8),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
                 ],
               ),
             ),
-            
-            // Removed the "View Profile" action button
           ],
         ),
       ),
@@ -1102,10 +1072,6 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  DateTime _toGmtPlus8(DateTime dateTime) {
-    return dateTime.add(Duration(hours: 0));
-  }
-
   String _formatFullDate(DateTime date) {
     return '${_getWeekday(date.weekday)}, ${date.day} ${_getMonth(date.month)} ${date.year}';
   }
@@ -1114,7 +1080,7 @@ class ActivityDetailPage extends StatelessWidget {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
     final second = date.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second ';
+    return '$hour:$minute:$second';
   }
 
   String _getWeekday(int weekday) {

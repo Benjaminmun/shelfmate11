@@ -100,16 +100,23 @@ class _InventoryListPageState extends State<InventoryListPage> {
   bool _showExpiringSoonOnly = false;
   String _sortField = 'name';
   bool _sortAscending = true;
+  DocumentSnapshot? _lastDocument;
+  bool _isLoadingMore = false;
+  final ScrollController _scrollController = ScrollController();
+  List<InventoryItem> _allItems = [];
+  bool _hasMoreItems = true;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _scrollController.addListener(_scrollListener);
     _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _searchController.dispose();
     _debounce?.cancel();
     super.dispose();
@@ -124,6 +131,53 @@ class _InventoryListPageState extends State<InventoryListPage> {
     });
   }
 
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      _loadMoreItems();
+    }
+  }
+
+  Future<void> _loadMoreItems() async {
+    if (_isLoadingMore || !_hasMoreItems) return;
+    
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final result = await _inventoryService.getItemsPaginated(
+        widget.householdId,
+        lastDocument: _lastDocument,
+        limit: 20,
+        sortField: _sortField,
+        sortAscending: _sortAscending,
+      );
+
+      final newItems = result['items'] as List<InventoryItem>;
+      final newLastDocument = result['lastDocument'] as DocumentSnapshot?;
+
+      if (newItems.isEmpty) {
+        setState(() {
+          _hasMoreItems = false;
+          _isLoadingMore = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _allItems.addAll(newItems);
+        _lastDocument = newLastDocument;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingMore = false;
+      });
+      print('Error loading more items: $e');
+    }
+  }
+
   Future<void> _loadCategories() async {
     try {
       final categories = await _inventoryService.getCategories(widget.householdId);
@@ -136,6 +190,12 @@ class _InventoryListPageState extends State<InventoryListPage> {
   }
 
   Future<void> _refreshData() async {
+    setState(() {
+      _lastDocument = null;
+      _allItems = [];
+      _hasMoreItems = true;
+    });
+    await _loadMoreItems();
     await _loadCategories();
   }
 
@@ -176,6 +236,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                           _sortAscending = !_sortAscending;
                         });
                         Navigator.pop(context);
+                        _refreshData();
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: primaryColor,
@@ -225,6 +286,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
           _sortField = field;
         });
         Navigator.pop(context);
+        _refreshData();
       },
     );
   }
@@ -470,18 +532,28 @@ class _InventoryListPageState extends State<InventoryListPage> {
                     return _buildErrorState('Error loading inventory: ${snapshot.error}');
                   }
 
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (snapshot.connectionState == ConnectionState.waiting && _allItems.isEmpty) {
                     return _buildLoadingState();
                   }
 
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  if (!snapshot.hasData || (snapshot.data!.docs.isEmpty && _allItems.isEmpty)) {
                     return _buildEmptyState();
                   }
 
-                  // Process items directly from the stream
-                  List<InventoryItem> items = snapshot.data!.docs.map((doc) {
-                    return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-                  }).toList();
+                  // Process items
+                  List<InventoryItem> items = [];
+                  if (_allItems.isEmpty && snapshot.hasData) {
+                    items = snapshot.data!.docs.map((doc) {
+                      return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+                    }).toList();
+                    _allItems = items;
+                    
+                    if (snapshot.data!.docs.isNotEmpty) {
+                      _lastDocument = snapshot.data!.docs.last;
+                    }
+                  } else {
+                    items = _allItems;
+                  }
 
                   // Filter items based on search query, category, and active filters
                   final filteredItems = items.where((item) {
@@ -501,9 +573,20 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   }
 
                   return ListView.builder(
+                    controller: _scrollController,
                     padding: EdgeInsets.all(16),
-                    itemCount: filteredItems.length,
+                    itemCount: filteredItems.length + (_isLoadingMore ? 1 : 0) + (_hasMoreItems ? 0 : 1),
                     itemBuilder: (context, index) {
+                      if (index == filteredItems.length) {
+                        return _isLoadingMore
+                            ? _buildLoadingMoreIndicator()
+                            : _buildEndOfListIndicator();
+                      }
+                      
+                      if (index > filteredItems.length) {
+                        return SizedBox.shrink();
+                      }
+                      
                       var item = filteredItems[index];
                       return _buildInventoryCard(item, context);
                     },
@@ -543,7 +626,10 @@ class _InventoryListPageState extends State<InventoryListPage> {
           userRole: 'creator',
         ),
       ),
-    );
+    ).then((_) {
+      // Refresh data when returning from edit page
+      _refreshData();
+    });
   }
 
   Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
@@ -901,6 +987,33 @@ class _InventoryListPageState extends State<InventoryListPage> {
     );
   }
 
+  Widget _buildLoadingMoreIndicator() {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEndOfListIndicator() {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Text(
+          'No more items to load',
+          style: TextStyle(
+            fontSize: 14,
+            color: lightTextColor,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildErrorState(String message) {
     return Center(
       child: Padding(
@@ -1077,6 +1190,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                             );
+                            _refreshData();
                           } catch (e) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(

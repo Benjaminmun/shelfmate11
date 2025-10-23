@@ -17,7 +17,7 @@ class AIService {
   static const String _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-  /// 🔹 Chat with HomeBot - Enhanced with smarter response handling
+  /// 🔹 Chat with HomeBot - Enhanced with activities integration
   static Future<String> chat(String householdId, String message) async {
     try {
       _log("Starting chat for householdId=$householdId");
@@ -32,6 +32,9 @@ class AIService {
       // ✅ Step 2: Get data
       final householdContext = await _getHouseholdContext(householdId);
       final inventoryData = await _getHouseholdInventoryData(householdId);
+      
+      // 🆕 Get recent activities
+      final recentActivities = await _getRecentActivities(householdId);
 
       if (inventoryData['items'].isEmpty) {
         return "Your inventory is empty. Add items first by going to the Inventory tab.";
@@ -41,6 +44,34 @@ class AIService {
       final quickResponse = _handleQuickResponses(message, inventoryData);
       if (quickResponse != null) return quickResponse;
 
+      // 🆕 Handle activities queries specifically
+      final lowerMessage = message.toLowerCase();
+      if (_isActivitiesQuery(lowerMessage)) {
+        if (recentActivities.isEmpty) {
+          return "📝 No recent activities found. Activities will appear here when you add, update, or remove items from your inventory.";
+        }
+        
+        // For simple activity queries, return formatted activities immediately
+        if (lowerMessage.contains('recent activity') || 
+            lowerMessage.contains('activity log') ||
+            lowerMessage.contains('show activities') ||
+            lowerMessage.contains('what happened')) {
+          return _formatActivitiesResponse(message, recentActivities, inventoryData);
+        }
+        
+        // For "who" queries, provide specific information
+        if (lowerMessage.contains('who added') || 
+            lowerMessage.contains('who updated') ||
+            lowerMessage.contains('who changed')) {
+          return _formatWhoResponse(message, recentActivities, inventoryData);
+        }
+        
+        // For insights queries
+        if (lowerMessage.contains('insight') || lowerMessage.contains('analyze activity')) {
+          return getActivityInsights(householdId);
+        }
+      }
+
       // ✅ Step 4: Check low stock and expiring items
       final lowStockItems = _filterLowStockItems(inventoryData);
       final expiringSoonItems = _filterExpiringSoonItems(inventoryData);
@@ -48,13 +79,14 @@ class AIService {
       
       String advisoryNote = _buildAdvisoryNote(lowStockItems, expiringSoonItems, expiredItems);
 
-      // ✅ Step 5: Build enhanced prompt with conversation context
-      final prompt = _buildEnhancedPrompt(
+      // ✅ Step 5: Build enhanced prompt with activities context
+      final prompt = await _buildEnhancedPrompt(
         user.displayName ?? "User",
         householdContext,
         inventoryData,
         message,
         advisoryNote,
+        householdId,
       );
 
       // ✅ Step 6: Send request
@@ -82,11 +114,235 @@ class AIService {
           "I wasn't able to generate a proper response. Could you rephrase your question?";
 
       // ✅ Step 8: Smart formatting based on query type
-      return _formatSmartResponse(aiResponse, message, inventoryData);
+      return _formatSmartResponse(aiResponse, message, inventoryData, recentActivities: recentActivities);
     } catch (e) {
       _log("Chat error: $e");
       return "⚠️ Something went wrong while processing your request. Please try again later.";
     }
+  }
+
+  /// 🆕 Get recent activities from Firestore
+  static Future<List<Map<String, dynamic>>> _getRecentActivities(String householdId, {int limit = 20}) async {
+    try {
+      final activitiesSnapshot = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .collection('activities')
+          .orderBy('timestamp', descending: true)
+          .limit(limit)
+          .get();
+
+      return activitiesSnapshot.docs.map((doc) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        
+        return {
+          'id': doc.id,
+          'type': data['type'] ?? 'unknown',
+          'action': data['action'] ?? '',
+          'item_name': data['item_name'] ?? '',
+          'item_id': data['item_id'] ?? '',
+          'user_name': data['user_name'] ?? 'Unknown User',
+          'user_email': data['user_email'] ?? '',
+          'quantity_change': data['quantity_change'] ?? 0,
+          'old_quantity': data['old_quantity'],
+          'new_quantity': data['new_quantity'],
+          'timestamp': timestamp?.toDate() ?? DateTime.now(),
+          'time_ago': _getTimeAgo(timestamp?.toDate() ?? DateTime.now()),
+          'category': data['category'] ?? '',
+          'location': data['location'] ?? '',
+        };
+      }).toList();
+    } catch (e) {
+      _log("Activities fetch error: $e");
+      return [];
+    }
+  }
+
+  /// 🆕 Format time ago for display
+  static String _getTimeAgo(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
+    if (difference.inDays < 30) return '${(difference.inDays / 7).floor()}w ago';
+    return '${(difference.inDays / 30).floor()}mo ago';
+  }
+
+  /// 🆕 Check if query is about activities
+  static bool _isActivitiesQuery(String message) {
+    final activityPhrases = [
+      'recent activity',
+      'what happened',
+      'last actions',
+      'activity log',
+      'who added',
+      'who updated',
+      'who changed',
+      'activity history',
+      'recent changes',
+      'track changes',
+      'what did',
+      'show activities',
+      'view log',
+      'action log',
+      'user activities'
+    ];
+    return activityPhrases.any((phrase) => message.contains(phrase));
+  }
+
+  /// 🆕 Format activities for AI context
+  static String _formatActivitiesForAI(List<Map<String, dynamic>> activities) {
+    if (activities.isEmpty) return 'No recent activities found.';
+    
+    return activities.map((activity) {
+      final action = activity['action'] ?? '';
+      final itemName = activity['item_name'] ?? '';
+      final userName = activity['user_name'] ?? 'Unknown User';
+      final timeAgo = activity['time_ago'] ?? '';
+      final quantityChange = activity['quantity_change'];
+      final oldQty = activity['old_quantity'];
+      final newQty = activity['new_quantity'];
+      
+      String details = '';
+      if (quantityChange != null && quantityChange != 0) {
+        details = ' (${quantityChange > 0 ? '+' : ''}$quantityChange)';
+      } else if (oldQty != null && newQty != null) {
+        details = ' ($oldQty → $newQty)';
+      }
+      
+      return '- $userName $action "$itemName"$details - $timeAgo';
+    }).join('\n');
+  }
+
+  /// 🆕 Format activities for user display
+  static String _formatActivitiesForDisplay(List<Map<String, dynamic>> activities) {
+    if (activities.isEmpty) return '📝 No recent activities found.';
+    
+    final buffer = StringBuffer('📊 Recent Activities:\n\n');
+    
+    for (final activity in activities.take(10)) {
+      final action = activity['action'] ?? '';
+      final itemName = activity['item_name'] ?? '';
+      final userName = activity['user_name'] ?? 'Unknown User';
+      final timeAgo = activity['time_ago'] ?? '';
+      final quantityChange = activity['quantity_change'];
+      final oldQty = activity['old_quantity'];
+      final newQty = activity['new_quantity'];
+      
+      // Choose appropriate emoji based on action type
+      String emoji = '📝';
+      if (action.contains('added')) emoji = '🆕';
+      else if (action.contains('updated') || action.contains('changed')) emoji = '✏️';
+      else if (action.contains('removed') || action.contains('deleted')) emoji = '🗑️';
+      else if (action.contains('used') || action.contains('consumed')) emoji = '📉';
+      
+      buffer.write('$emoji **$userName** $action ');
+      
+      if (itemName.isNotEmpty) {
+        buffer.write('"**$itemName**"');
+      }
+      
+      // Add quantity details if available
+      if (quantityChange != null && quantityChange != 0) {
+        buffer.write(' (${quantityChange > 0 ? '+' : ''}$quantityChange)');
+      } else if (oldQty != null && newQty != null) {
+        buffer.write(' ($oldQty → $newQty)');
+      }
+      
+      buffer.write(' - $timeAgo\n');
+    }
+    
+    return buffer.toString();
+  }
+
+  /// 🆕 Get detailed activity insights
+  static Future<String> getActivityInsights(String householdId) async {
+    try {
+      final activities = await _getRecentActivities(householdId, limit: 50);
+      if (activities.isEmpty) {
+        return "📊 No recent activities to analyze. Start adding items to see insights!";
+      }
+      
+      // Analyze activity patterns
+      final userActivity = <String, int>{};
+      final actionTypes = <String, int>{};
+      final recentItems = <String, int>{};
+      DateTime? firstActivity;
+      
+      for (final activity in activities) {
+        final user = activity['user_name'] ?? 'Unknown';
+        final action = activity['action'] ?? '';
+        final item = activity['item_name'] ?? '';
+        final timestamp = activity['timestamp'] as DateTime;
+        
+        // Track user activity
+        userActivity[user] = (userActivity[user] ?? 0) + 1;
+        
+        // Track action types
+        final actionType = _categorizeAction(action);
+        actionTypes[actionType] = (actionTypes[actionType] ?? 0) + 1;
+        
+        // Track item activity
+        if (item.isNotEmpty) {
+          recentItems[item] = (recentItems[item] ?? 0) + 1;
+        }
+        
+        // Track time range
+        if (firstActivity == null || timestamp.isBefore(firstActivity)) {
+          firstActivity = timestamp;
+        }
+      }
+      
+      // Generate insights
+      final buffer = StringBuffer('📈 Activity Insights\n\n');
+      
+      // Most active user
+      final topUser = userActivity.entries.reduce((a, b) => a.value > b.value ? a : b);
+      buffer.write('👑 **Most Active**: ${topUser.key} (${topUser.value} actions)\n\n');
+      
+      // Activity distribution
+      buffer.write('📊 **Activity Breakdown**:\n');
+      actionTypes.forEach((type, count) {
+        final percentage = ((count / activities.length) * 100).round();
+        buffer.write('• $type: $count (${percentage}%)\n');
+      });
+      
+      // Recent popular items
+      if (recentItems.isNotEmpty) {
+        final topItems = recentItems.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value))
+          ..take(3);
+        
+        buffer.write('\n🔥 **Frequently Updated**:\n');
+        for (final item in topItems) {
+          buffer.write('• ${item.key}: ${item.value} updates\n');
+        }
+      }
+      
+      // Time frame
+      if (firstActivity != null) {
+        final days = DateTime.now().difference(firstActivity).inDays;
+        buffer.write('\n⏰ **Time Frame**: ${activities.length} activities over ${days + 1} days');
+      }
+      
+      return buffer.toString();
+    } catch (e) {
+      _log("Activity insights error: $e");
+      return "⚠️ Unable to generate activity insights right now.";
+    }
+  }
+
+  /// 🆕 Categorize actions for insights
+  static String _categorizeAction(String action) {
+    if (action.contains('added')) return 'Additions';
+    if (action.contains('updated') || action.contains('changed')) return 'Updates';
+    if (action.contains('removed') || action.contains('deleted')) return 'Removals';
+    if (action.contains('used') || action.contains('consumed')) return 'Consumptions';
+    return 'Other Actions';
   }
 
   /// 🆕 Handle common queries with quick, pre-formatted responses
@@ -125,6 +381,12 @@ class AIService {
         lowerMessage.contains('do i have anything')) {
       if (items.isEmpty) return "📭 Your inventory is empty. Add some items to get started!";
       return "✅ Your inventory has ${items.length} items. ${_getInventorySummary(inventoryData)}";
+    }
+
+    // 🆕 Activity insights quick response
+    if (lowerMessage.contains('activity insight') || lowerMessage.contains('analyze activity')) {
+      // This will be handled in the main flow with household ID
+      return null;
     }
 
     return null;
@@ -186,17 +448,22 @@ ${_formatProductListForAI(lowStockItems)}
 • 🚫 Expired: $expiredCount items''';
   }
 
-  /// 🆕 Enhanced prompt for smarter responses
-  static String _buildEnhancedPrompt(
+  /// 🆕 Enhanced prompt for smarter responses with activities
+  static Future<String> _buildEnhancedPrompt(
     String userName,
     String householdContext,
     Map<String, dynamic> inventory,
     String userMessage,
     String advisoryNote,
-  ) {
+    String householdId,
+  ) async {
     final items = inventory['items'] as List;
     final currentDate = DateTime.now();
     final formattedDate = DateFormat('EEEE, MMMM d, y').format(currentDate);
+    
+    // 🆕 Get recent activities for context
+    final recentActivities = await _getRecentActivities(householdId, limit: 15);
+    final activitiesContext = _formatActivitiesForAI(recentActivities);
 
     return '''
 You are **HomeBot**, an intelligent household inventory assistant with expertise in food management, expiry tracking, and smart shopping. Today is $formattedDate.
@@ -205,6 +472,9 @@ USER: $userName
 
 HOUSEHOLD CONTEXT:
 $householdContext
+
+RECENT ACTIVITIES (last 15 actions):
+$activitiesContext
 
 CURRENT INVENTORY STATS:
 - Total items: ${items.length}
@@ -223,6 +493,7 @@ RESPONSE STRATEGY:
 3. **Be Proactive**: Suggest related actions they might find helpful
 4. **Use Data**: Reference specific inventory items when relevant
 5. **Personalize**: Tailor advice to their household context
+6. **Activity Awareness**: Reference recent activities when relevant
 
 EXPIRY & INVENTORY MANAGEMENT EXPERTISE:
 - **First-In-First-Out (FIFO)**: Recommend using older items first
@@ -230,6 +501,7 @@ EXPIRY & INVENTORY MANAGEMENT EXPERTISE:
 - **Shopping Strategy**: Advise on what to buy and when
 - **Storage Tips**: Provide optimal storage advice
 - **Waste Reduction**: Help minimize food waste
+- **Activity Tracking**: Monitor user patterns and suggest improvements
 
 CONVERSATIONAL GUIDELINES:
 - Be friendly, empathetic, and genuinely helpful
@@ -238,6 +510,14 @@ CONVERSATIONAL GUIDELINES:
 - Use emojis tastefully to enhance communication
 - Admit when you don't have enough information
 - Suggest next steps or related questions
+- Reference recent activities when they provide context
+
+ACTIVITY-RELATED RESPONSES:
+When users ask about "who added/updated/changed" items or "recent activity", provide:
+- Summary of recent actions with timestamps
+- User activity patterns
+- Insights about inventory changes
+- Recommendations based on activity patterns
 
 PRODUCT FORMATTING:
 When listing specific items, use this exact format for each product:
@@ -295,7 +575,12 @@ Now, provide a helpful, intelligent response to the user's question:
   }
 
   /// 🆕 Smart response formatting based on query type
-  static String _formatSmartResponse(String aiResponse, String userMessage, Map<String, dynamic> inventoryData) {
+  static String _formatSmartResponse(
+    String aiResponse, 
+    String userMessage, 
+    Map<String, dynamic> inventoryData, {
+    List<Map<String, dynamic>> recentActivities = const [],
+  }) {
     final lowerMessage = userMessage.toLowerCase();
     
     // Determine response type and format accordingly
@@ -305,9 +590,147 @@ Now, provide a helpful, intelligent response to the user's question:
       return _formatAnalysisResponse(aiResponse, inventoryData);
     } else if (_isRecommendationQuery(lowerMessage)) {
       return _formatRecommendationResponse(aiResponse, inventoryData);
+    } else if (_isActivitiesQuery(lowerMessage) && recentActivities.isNotEmpty) {
+      // Add activities context to responses when relevant
+      final activitiesSummary = _formatActivitiesForDisplay(recentActivities.take(5).toList());
+      return '$aiResponse\n\n---\n📝 **Recent Activities**:\n$activitiesSummary';
     } else {
       return _formatConversationalResponse(aiResponse, inventoryData);
     }
+  }
+
+  /// 🆕 Format activities-specific responses
+  static String _formatActivitiesResponse(
+    String userMessage, 
+    List<Map<String, dynamic>> activities, 
+    Map<String, dynamic> inventoryData
+  ) {
+    final lowerMessage = userMessage.toLowerCase();
+    
+    if (activities.isEmpty) {
+      return "📝 No recent activities found. Activities will appear here when you add, update, or remove items.";
+    }
+    
+    // For simple activity display requests
+    if (lowerMessage.contains('show') || lowerMessage.contains('display') || 
+        lowerMessage.contains('view') || lowerMessage.contains('log')) {
+      return _formatActivitiesForDisplay(activities);
+    }
+    
+    // For analysis requests
+    if (lowerMessage.contains('analyze') || lowerMessage.contains('insight') || 
+        lowerMessage.contains('pattern') || lowerMessage.contains('summary')) {
+      return _formatActivityAnalysis(activities, inventoryData);
+    }
+    
+    // Default formatted activities
+    return _formatActivitiesForDisplay(activities);
+  }
+
+  /// 🆕 Format "who" specific responses
+  static String _formatWhoResponse(
+    String userMessage,
+    List<Map<String, dynamic>> activities,
+    Map<String, dynamic> inventoryData
+  ) {
+    final lowerMessage = userMessage.toLowerCase();
+    final filteredActivities = activities.where((activity) {
+      final itemName = (activity['item_name'] ?? '').toLowerCase();
+      final action = (activity['action'] ?? '').toLowerCase();
+      
+      // Extract item name from query if present
+      String searchItem = '';
+      if (lowerMessage.contains('who added')) {
+        searchItem = lowerMessage.replaceAll('who added', '').trim();
+      } else if (lowerMessage.contains('who updated')) {
+        searchItem = lowerMessage.replaceAll('who updated', '').trim();
+      } else if (lowerMessage.contains('who changed')) {
+        searchItem = lowerMessage.replaceAll('who changed', '').trim();
+      }
+      
+      // Filter by action type and item name if specified
+      bool matchesAction = false;
+      if (lowerMessage.contains('added')) matchesAction = action.contains('add');
+      else if (lowerMessage.contains('updated') || lowerMessage.contains('changed')) {
+        matchesAction = action.contains('update') || action.contains('change');
+      }
+      
+      if (searchItem.isNotEmpty) {
+        return matchesAction && itemName.contains(searchItem);
+      }
+      
+      return matchesAction;
+    }).toList();
+    
+    if (filteredActivities.isEmpty) {
+      final actionType = lowerMessage.contains('added') ? 'added' : 
+                        lowerMessage.contains('updated') ? 'updated' : 'changed';
+      return "🤔 I couldn't find any recent $actionType items. Try asking about 'recent activity' to see all actions.";
+    }
+    
+    final buffer = StringBuffer();
+    
+    if (lowerMessage.contains('added')) {
+      buffer.write('🆕 Recently Added Items:\n\n');
+    } else if (lowerMessage.contains('updated') || lowerMessage.contains('changed')) {
+      buffer.write('✏️ Recently Updated Items:\n\n');
+    }
+    
+    for (final activity in filteredActivities.take(10)) {
+      final itemName = activity['item_name'] ?? 'Unknown Item';
+      final userName = activity['user_name'] ?? 'Unknown User';
+      final timeAgo = activity['time_ago'] ?? '';
+      final action = activity['action'] ?? '';
+      
+      buffer.write('• **$userName** $action "$itemName" - $timeAgo\n');
+    }
+    
+    return buffer.toString();
+  }
+
+  /// 🆕 Format activity analysis
+  static String _formatActivityAnalysis(List<Map<String, dynamic>> activities, Map<String, dynamic> inventoryData) {
+    if (activities.isEmpty) return "No activities to analyze.";
+    
+    final userStats = <String, int>{};
+    final actionStats = <String, int>{};
+    DateTime? firstActivity;
+    
+    for (final activity in activities) {
+      final user = activity['user_name'] ?? 'Unknown';
+      final action = activity['action'] ?? '';
+      final timestamp = activity['timestamp'] as DateTime;
+      
+      userStats[user] = (userStats[user] ?? 0) + 1;
+      actionStats[action] = (actionStats[action] ?? 0) + 1;
+      
+      if (firstActivity == null || timestamp.isBefore(firstActivity)) {
+        firstActivity = timestamp;
+      }
+    }
+    
+    final buffer = StringBuffer('📈 Activity Analysis\n\n');
+    
+    // Most active user
+    if (userStats.isNotEmpty) {
+      final topUser = userStats.entries.reduce((a, b) => a.value > b.value ? a : b);
+      buffer.write('👑 **Most Active**: ${topUser.key} (${topUser.value} actions)\n\n');
+    }
+    
+    // Activity breakdown
+    buffer.write('📊 **Activity Breakdown**:\n');
+    actionStats.forEach((action, count) {
+      final percentage = ((count / activities.length) * 100).round();
+      buffer.write('• $action: $count (${percentage}%)\n');
+    });
+    
+    // Time frame
+    if (firstActivity != null) {
+      final days = DateTime.now().difference(firstActivity).inDays;
+      buffer.write('\n⏰ **Time Frame**: ${activities.length} activities over ${days + 1} days');
+    }
+    
+    return buffer.toString();
   }
 
   /// 🆕 Check if query is asking for a list
@@ -454,6 +877,16 @@ id: ${product['id']}
     }).join('\n');
   }
 
+  /// 🆕 Format product list for AI context
+  static String _formatProductListForAI(List<Map<String, dynamic>> products) {
+    return products.map((product) {
+      final expiryInfo = product['expiryDate'] != 'No expiry date' 
+          ? ' (expires: ${_formatExpiryDateForDisplay(product['expiryDate'])})'
+          : '';
+      return "- ${product['name']} (qty: ${product['quantity']}$expiryInfo)";
+    }).join("\n");
+  }
+
   /// 🆕 Enhanced item relevance detection
   static List<Map<String, dynamic>> _getRelevantItemsForQuery(String query, Map<String, dynamic> inventoryData) {
     final lowerQuery = query.toLowerCase();
@@ -566,16 +999,6 @@ id: ${product['id']}
     }
     
     return mentionedItems;
-  }
-
-  /// 🆕 Format product list for AI context
-  static String _formatProductListForAI(List<Map<String, dynamic>> products) {
-    return products.map((product) {
-      final expiryInfo = product['expiryDate'] != 'No expiry date' 
-          ? ' (expires: ${_formatExpiryDateForDisplay(product['expiryDate'])})'
-          : '';
-      return "- ${product['name']} (qty: ${product['quantity']}$expiryInfo)";
-    }).join("\n");
   }
 
   /// 🔹 Get expiring soon items specifically

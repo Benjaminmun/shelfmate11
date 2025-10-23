@@ -11,6 +11,7 @@ import 'expense_tracker_page.dart';
 import 'profile_page.dart';
 import 'dart:async';
 import 'activity_pages.dart';
+import 'recommendation_section.dart';
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -71,6 +72,11 @@ class DashboardService {
     double totalValue = 0.0;
     Set<String> categories = Set();
 
+    // Get current date in GMT+8 for comparison
+    final now = DateTime.now().toUtc().add(Duration(hours: 8));
+    final today = DateTime(now.year, now.month, now.day);
+    today.add(Duration(days: 7));
+
     for (var doc in snapshot.docs) {
       final data = doc.data() as Map<String, dynamic>;
       final quantity = (data['quantity'] ?? 0).toInt();
@@ -80,21 +86,40 @@ class DashboardService {
       if (data['category'] != null) categories.add(data['category'] as String);
       totalValue += quantity * price;
 
-      // Check for expiring items (within 7 days)
+      // Enhanced expiry date checking
       if (data['expiryDate'] != null) {
         try {
-          final expiry = DateTime.parse(data['expiryDate']);
-          final daysUntilExpiry = expiry.difference(DateTime.now()).inDays;
-          if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
-            expiringSoonItems++;
+          DateTime? expiry;
+          
+          // Handle different expiry date formats
+          if (data['expiryDate'] is Timestamp) {
+            expiry = (data['expiryDate'] as Timestamp).toDate();
+          } else if (data['expiryDate'] is String) {
+            expiry = DateTime.parse(data['expiryDate'] as String);
+          }
+          
+          if (expiry != null) {
+            // Convert expiry to GMT+8 and normalize to date only
+            final expiryGmtPlus8 = expiry.toUtc().add(Duration(hours: 8));
+            final expiryDate = DateTime(expiryGmtPlus8.year, expiryGmtPlus8.month, expiryGmtPlus8.day);
+            
+            // Check if expiry is within next 7 days (including today)
+            final daysUntilExpiry = expiryDate.difference(today).inDays;
+            
+            if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
+              expiringSoonItems++;
+              print('Expiring soon: ${doc.id} - $expiryDate (${daysUntilExpiry} days)');
+            }
           }
         } catch (e) {
-          // Invalid date format, skip
+          print('Error parsing expiry date for ${doc.id}: ${data['expiryDate']} - $e');
         }
       }
     }
 
     totalCategories = categories.length;
+
+    print('Stats calculated - Total: $totalItems, Expiring: $expiringSoonItems');
 
     return {
       'totalItems': totalItems,
@@ -127,7 +152,7 @@ class DashboardService {
                 'timestamp': data['timestamp'] ?? Timestamp.now(),
                 'type': data['type'] ?? 'info',
                 'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User', // Add fullName support
+                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
                 'oldValue': data['oldValue'],
@@ -173,7 +198,7 @@ class DashboardService {
           'timestamp': data['timestamp'] ?? Timestamp.now(),
           'type': data['type'] ?? 'info',
           'userName': data['userName'] ?? 'Unknown User',
-          'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User', // Add fullName support
+          'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
           'userId': data['userId'] ?? '',
           'itemName': data['itemName'],
           'oldValue': data['oldValue'],
@@ -195,48 +220,6 @@ class DashboardService {
     }
   }
 
-  // Get activities by date range (for filtering)
-  Stream<List<Map<String, dynamic>>> getActivitiesByDateRange(
-    String householdId,
-    DateTime startDate,
-    DateTime endDate,
-  ) {
-    if (householdId.isEmpty) {
-      return Stream.value([]);
-    }
-
-    try {
-      return _firestore
-          .collection('households')
-          .doc(householdId)
-          .collection('activities')
-          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-          .orderBy('timestamp', descending: true)
-          .snapshots()
-          .map((snapshot) {
-            return snapshot.docs.map((doc) {
-              final data = doc.data();
-              return {
-                'id': doc.id,
-                'message': data['description'] ?? data['message'] ?? 'No message',
-                'timestamp': data['timestamp'] ?? Timestamp.now(),
-                'type': data['type'] ?? 'info',
-                'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User', // Add fullName support
-                'userId': data['userId'] ?? '',
-                'itemName': data['itemName'],
-                'oldValue': data['oldValue'],
-                'newValue': data['newValue'],
-              };
-            }).toList();
-          });
-    } catch (e) {
-      print('Error getting activities by date range: $e');
-      return Stream.value([]);
-    }
-  }
-
   // Enhanced logActivity method with fullName support
   Future<void> logActivity(
     String householdId, 
@@ -244,7 +227,7 @@ class DashboardService {
     String type, {
     String? userId,
     String? userName,
-    String? fullName, // Add fullName parameter
+    String? fullName,
     String? itemName,
     dynamic oldValue,
     dynamic newValue,
@@ -272,7 +255,7 @@ class DashboardService {
             'timestamp': FieldValue.serverTimestamp(),
             'userId': userId ?? _auth.currentUser?.uid,
             'userName': finalUserName ?? _auth.currentUser?.displayName ?? 'User',
-            'fullName': finalFullName ?? finalUserName ?? 'User', // Store fullName
+            'fullName': finalFullName ?? finalUserName ?? 'User',
             'itemName': itemName,
             'oldValue': oldValue,
             'newValue': newValue,
@@ -320,63 +303,6 @@ class DashboardService {
       print('Error getting activity stats: $e');
       return {};
     }
-  }
-}
-
-// Enhanced Pulse Indicator with glow effect
-class PulseIndicator extends StatefulWidget {
-  final Color color;
-  final double size;
-  
-  const PulseIndicator({Key? key, required this.color, this.size = 8}) : super(key: key);
-  
-  @override
-  _PulseIndicatorState createState() => _PulseIndicatorState();
-}
-
-class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-  
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-    
-    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
-  }
-  
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-  
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          width: widget.size,
-          height: widget.size,
-          decoration: BoxDecoration(
-            color: widget.color.withOpacity(_animation.value * 0.8),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: widget.color.withOpacity(_animation.value * 0.4),
-                blurRadius: 8,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 }
 
@@ -925,7 +851,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   void _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      // Use the enhanced method to get user info
       final userInfo = await _dashboardService._getUserDisplayInfo();
       
       setState(() {
@@ -1254,6 +1179,27 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           SizedBox(height: 24),
           _buildQuickStats(),
           SizedBox(height: 24),
+          
+          // 🔮 ENHANCED: Smart Recommendations Section
+          RecommendationSection(
+            householdId: _currentHouseholdId,
+            householdName: _currentHousehold,
+            primaryColor: _primaryColor,
+            secondaryColor: _secondaryColor,
+            accentColor: _accentColor,
+            successColor: _successColor,
+            warningColor: _warningColor,
+            errorColor: _errorColor,
+            backgroundColor: _backgroundColor,
+            surfaceColor: _surfaceColor,
+            textPrimary: _textPrimary,
+            textSecondary: _textSecondary,
+            textLight: _textLight,
+            onAddToShoppingList: _addToShoppingList,
+            onNavigateToItem: _navigateToItem,
+          ),
+          SizedBox(height: 24),
+          
           _buildActivitySection(),
           SizedBox(height: 24),
           _buildQuickActions(),
@@ -1439,7 +1385,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               'Total inventory worth',
               isCurrency: true,
             )
-              
           ],
         ),
       ],
@@ -1447,102 +1392,117 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   }
 
   Widget _buildEnhancedStatCard(String title, int value, IconData icon, Color color, String subtitle, {bool isCurrency = false}) {
-  return Container(
-    decoration: BoxDecoration(
-      color: _surfaceColor,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.08),
-          blurRadius: 15,
-          offset: Offset(0, 5),
-        ),
-      ],
-    ),
-    child: Padding(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              if (value > 0 && title == 'Low Stock')
-                PulseIndicator(color: _warningColor, size: 8),
-              if (value > 0 && title == 'Expiring Soon')
-                PulseIndicator(color: _errorColor, size: 8),
-            ],
-          ),
-          SizedBox(height: 16),
-          // Modified this part to include RM symbol for currency
-          if (isCurrency)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'RM ',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: _textPrimary,
-                    letterSpacing: 0,
-                  ),
-                ),
-                AnimatedStatNumber(
-                  value: value,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: _textPrimary,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            )
-          else
-            AnimatedStatNumber(
-              value: value,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w900,
-                color: _textPrimary,
-                letterSpacing: -1.0,
-              ),
-            ),
-          SizedBox(height: 4),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              color: _textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 11,
-              color: _textLight,
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: Offset(0, 5),
           ),
         ],
       ),
-    ),
-  );
-}
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
+                ),
+                if (value > 0 && title == 'Low Stock')
+                  PulseIndicator(color: _warningColor, size: 8),
+                if (value > 0 && title == 'Expiring Soon')
+                  PulseIndicator(color: _errorColor, size: 8),
+              ],
+            ),
+            SizedBox(height: 16),
+            if (isCurrency)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'RM ',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  AnimatedStatNumber(
+                    value: value,
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: _textPrimary,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              )
+            else
+              AnimatedStatNumber(
+                value: value,
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: _textPrimary,
+                  letterSpacing: -1.0,
+                ),
+              ),
+            SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                color: _textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: _textLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Callback methods for RecommendationSection
+  void _addToShoppingList(String itemName, int quantity, String itemId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Added $quantity $itemName to shopping list'),
+        backgroundColor: _successColor,
+      ),
+    );
+  }
+
+  void _navigateToItem(String itemId) {
+    setState(() {
+      _currentIndex = 1; // Navigate to inventory page
+    });
+  }
 
   Widget _buildActivitySection() {
     return Column(
@@ -1962,7 +1922,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ChatPage(householdId: _currentHouseholdId),
+                    builder: (context) => ChatPage(householdId: _currentHouseholdId ),
                   ),
                 );
               },
@@ -2331,5 +2291,62 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   // Utility methods
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
+// Pulse Indicator with glow effect
+class PulseIndicator extends StatefulWidget {
+  final Color color;
+  final double size;
+  
+  const PulseIndicator({Key? key, required this.color, this.size = 8}) : super(key: key);
+  
+  @override
+  _PulseIndicatorState createState() => _PulseIndicatorState();
+}
+
+class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
+  }
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(_animation.value * 0.8),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: widget.color.withOpacity(_animation.value * 0.4),
+                blurRadius: 8,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
