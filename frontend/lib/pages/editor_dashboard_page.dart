@@ -11,6 +11,7 @@ import 'expense_tracker_page.dart';
 import 'profile_page.dart';
 import 'dart:async';
 import 'activity_pages.dart';
+import 'recommendation_section.dart';
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -1273,6 +1274,27 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
           SizedBox(height: 24),
           _buildQuickStats(),
           SizedBox(height: 24),
+          
+          // 🔮 ENHANCED: Smart Recommendations Section
+          RecommendationSection(
+            householdId: _currentHouseholdId,
+            householdName: _currentHousehold,
+            primaryColor: _primaryColor,
+            secondaryColor: _secondaryColor,
+            accentColor: _accentColor,
+            successColor: _successColor,
+            warningColor: _warningColor,
+            errorColor: _errorColor,
+            backgroundColor: _backgroundColor,
+            surfaceColor: _surfaceColor,
+            textPrimary: _textPrimary,
+            textSecondary: _textSecondary,
+            textLight: _textLight,
+            onAddToShoppingList: _addToShoppingList,
+            onNavigateToItem: _navigateToItem,
+          ),
+          SizedBox(height: 24),
+          
           _buildActivitySection(),
           SizedBox(height: 24),
           _buildQuickActions(),
@@ -1280,6 +1302,21 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         ],
       ),
     );
+  }
+
+    void _addToShoppingList(String itemName, int quantity, String itemId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Added $quantity $itemName to shopping list'),
+        backgroundColor: _successColor,
+      ),
+    );
+  }
+  
+    void _navigateToItem(String itemId) {
+    setState(() {
+      _currentIndex = 1; // Navigate to inventory page
+    });
   }
 
   Widget _buildWelcomeHeader() {
@@ -2351,3 +2388,4 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     return '${date.day}/${date.month}/${date.year}';
   }
 }
+

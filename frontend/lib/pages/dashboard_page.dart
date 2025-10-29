@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
-import 'package:frontend/pages/shopping_list_page.dart';
 import 'household_service.dart';
 import 'inventory_list_page.dart';
 import 'chat_page.dart';
@@ -1024,50 +1023,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     ),
     centerTitle: true,
     actions: [
-      // 🆕 Shopping List Button with Badge
-      StreamBuilder<int>(
-        stream: _createShoppingListCountStream(),
-        builder: (context, snapshot) {
-          final itemCount = snapshot.data ?? 0;
-          return Stack(
-            children: [
-              IconButton(
-                icon: Icon(Icons.shopping_cart_rounded, size: 24),
-                onPressed: _currentHouseholdId.isNotEmpty ? _navigateToShoppingList : null,
-                tooltip: itemCount > 0 
-                    ? 'Shopping List ($itemCount items)' 
-                    : 'Shopping List',
-              ),
-              if (itemCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: _errorColor,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      itemCount > 9 ? '9+' : itemCount.toString(),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-      
 
       
       IconButton(
@@ -2297,49 +2252,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  // 🆕 Create shopping list count stream
-  Stream<int> _createShoppingListCountStream() {
-    if (_currentHouseholdId.isEmpty) {
-      return Stream.value(0);
-    }
-    
-    // Create a periodic stream that checks shopping list count every 30 seconds
-    return Stream.periodic(Duration(seconds: 30), (_) => _currentHouseholdId)
-        .asyncMap((householdId) async {
-          try {
-            // Mock implementation - replace with your actual shopping list service
-            await Future.delayed(Duration(milliseconds: 100));
-            return 3; // Replace with actual count from your service
-          } catch (e) {
-            return 0;
-          }
-        });
-  }
-
-  // 🆕 Navigate to shopping list page
-  void _navigateToShoppingList() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ShoppingListPage(
-          householdId: _currentHouseholdId,
-          householdName: _currentHousehold,
-          primaryColor: _primaryColor,
-          secondaryColor: _secondaryColor,
-          accentColor: _accentColor,
-          successColor: _successColor,
-          warningColor: _warningColor,
-          errorColor: _errorColor,
-          backgroundColor: _backgroundColor,
-          surfaceColor: _surfaceColor,
-          textPrimary: _textPrimary,
-          textSecondary: _textSecondary,
-          textLight: _textLight,
         ),
       ),
     );
