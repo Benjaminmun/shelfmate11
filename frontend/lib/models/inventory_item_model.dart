@@ -6,43 +6,45 @@ class InventoryItem {
   final String name;
   final String category;
   final int quantity;
+  final double price;
   final String? description;
   final DateTime? purchaseDate;
   final DateTime? expiryDate;
   final String? location;
+  final String? supplier;
   final String? barcode;
   final int? minStockLevel;
   final String? imageUrl;
-  final String? localImagePath; // ✅ Only stored in household inventory
+  final String? localImagePath; // ✅ Added for locally stored image support
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String? addedByUserId;
   final String? addedByUserName;
-  final String householdId;
-  final String householdName;
+  final String? updatedByUserId;
+  final String? updatedByUserName;
 
   InventoryItem({
     this.id,
     required this.name,
     required this.category,
     required this.quantity,
+    required this.price,
     this.description,
     this.purchaseDate,
     this.expiryDate,
     this.location,
+    this.supplier,
     this.barcode,
     this.minStockLevel,
     this.imageUrl,
-    this.localImagePath, // ✅ Only for household inventory
+    this.localImagePath,
     required this.createdAt,
     this.updatedAt,
     this.addedByUserId,
     this.addedByUserName,
-    required this.householdId,
-    required this.householdName,
+    this.updatedByUserId,
+    this.updatedByUserName,
   });
-
-  get price => null;
 
   /// Converts object to Firestore-compatible map
   Map<String, dynamic> toMap() {
@@ -50,20 +52,22 @@ class InventoryItem {
       'name': name,
       'category': category,
       'quantity': quantity,
+      'price': price,
       'description': description,
       'purchaseDate': _dateToTimestamp(purchaseDate),
       'expiryDate': _dateToTimestamp(expiryDate),
       'location': location,
+      'supplier': supplier,
       'barcode': barcode,
       'minStockLevel': minStockLevel,
       'imageUrl': imageUrl,
-      'localImagePath': localImagePath, // ✅ Only in household inventory
+      'localImagePath': localImagePath,
       'createdAt': _dateToTimestamp(createdAt) ?? FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'addedByUserId': addedByUserId,
       'addedByUserName': addedByUserName,
-      'householdId': householdId,
-      'householdName': householdName,
+      'updatedByUserId': updatedByUserId,
+      'updatedByUserName': updatedByUserName,
     };
   }
 
@@ -79,20 +83,22 @@ class InventoryItem {
       name: map['name'] ?? '',
       category: map['category'] ?? 'Other',
       quantity: (map['quantity'] ?? 0).toInt(),
+      price: (map['price'] ?? 0.0).toDouble(),
       description: map['description'],
       purchaseDate: _timestampToDate(map['purchaseDate']),
       expiryDate: _timestampToDate(map['expiryDate']),
       location: map['location'],
+      supplier: map['supplier'],
       barcode: map['barcode'],
       minStockLevel: map['minStockLevel']?.toInt(),
       imageUrl: map['imageUrl'],
-      localImagePath: map['localImagePath'], // ✅ Load from household inventory
+      localImagePath: map['localImagePath'],
       createdAt: _timestampToDate(map['createdAt']) ?? DateTime.now(),
       updatedAt: _timestampToDate(map['updatedAt']),
       addedByUserId: map['addedByUserId'],
       addedByUserName: map['addedByUserName'],
-      householdId: map['householdId'] ?? '',
-      householdName: map['householdName'] ?? '',
+      updatedByUserId: map['updatedByUserId'],
+      updatedByUserName: map['updatedByUserName'],
     );
   }
 
@@ -111,10 +117,12 @@ class InventoryItem {
     String? name,
     String? category,
     int? quantity,
+    double? price,
     String? description,
     DateTime? purchaseDate,
     DateTime? expiryDate,
     String? location,
+    String? supplier,
     String? barcode,
     int? minStockLevel,
     String? imageUrl,
@@ -123,18 +131,20 @@ class InventoryItem {
     DateTime? updatedAt,
     String? addedByUserId,
     String? addedByUserName,
-    String? householdId,
-    String? householdName,
+    String? updatedByUserId,
+    String? updatedByUserName,
   }) {
     return InventoryItem(
       id: id ?? this.id,
       name: name ?? this.name,
       category: category ?? this.category,
       quantity: quantity ?? this.quantity,
+      price: price ?? this.price,
       description: description ?? this.description,
       purchaseDate: purchaseDate ?? this.purchaseDate,
       expiryDate: expiryDate ?? this.expiryDate,
       location: location ?? this.location,
+      supplier: supplier ?? this.supplier,
       barcode: barcode ?? this.barcode,
       minStockLevel: minStockLevel ?? this.minStockLevel,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -143,8 +153,8 @@ class InventoryItem {
       updatedAt: updatedAt ?? this.updatedAt,
       addedByUserId: addedByUserId ?? this.addedByUserId,
       addedByUserName: addedByUserName ?? this.addedByUserName,
-      householdId: householdId ?? this.householdId,
-      householdName: householdName ?? this.householdName,
+      updatedByUserId: updatedByUserId ?? this.updatedByUserId,
+      updatedByUserName: updatedByUserName ?? this.updatedByUserName,
     );
   }
 
@@ -153,10 +163,12 @@ class InventoryItem {
     String? name,
     String? category,
     int? quantity,
+    double? price,
     String? description,
     DateTime? purchaseDate,
     DateTime? expiryDate,
     String? location,
+    String? supplier,
     String? barcode,
     int? minStockLevel,
     String? imageUrl,
@@ -167,10 +179,12 @@ class InventoryItem {
     if (name != null) map['name'] = name;
     if (category != null) map['category'] = category;
     if (quantity != null) map['quantity'] = quantity;
+    if (price != null) map['price'] = price;
     if (description != null) map['description'] = description;
     if (purchaseDate != null) map['purchaseDate'] = _dateToTimestamp(purchaseDate);
     if (expiryDate != null) map['expiryDate'] = _dateToTimestamp(expiryDate);
     if (location != null) map['location'] = location;
+    if (supplier != null) map['supplier'] = supplier;
     if (barcode != null) map['barcode'] = barcode;
     if (minStockLevel != null) map['minStockLevel'] = minStockLevel;
     if (imageUrl != null) map['imageUrl'] = imageUrl;
@@ -182,6 +196,7 @@ class InventoryItem {
     return map;
   }
 }
+
 
 /// Represents a product in the global products collection (without localImagePath)
 class Product {

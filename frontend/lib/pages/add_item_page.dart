@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
-import 'add_item_manually.dart'; // Import the separate file
+import 'add_item_manually.dart'; 
 
 // Initialize cameras list
 List<CameraDescription> cameras = [];
@@ -636,12 +636,36 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     ));
     
     _animationController.forward();
+    _checkFirestorePermissions(); // Check Firestore permissions on init
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  // Check Firestore permissions
+  Future<void> _checkFirestorePermissions() async {
+    try {
+      print('🔐 Checking Firestore permissions...');
+      
+      // Test write permission
+      final testDoc = _firestore.collection('test_permissions').doc('test');
+      await testDoc.set({
+        'test': true,
+        'timestamp': FieldValue.serverTimestamp()
+      });
+      await testDoc.delete();
+      print('✅ Firestore write permission: GRANTED');
+      
+      // Test read permission
+      await _firestore.collection('products').limit(1).get();
+      print('✅ Firestore read permission: GRANTED');
+      
+    } catch (e) {
+      print('❌ Firestore permission error: $e');
+    }
   }
 
   // Updated scan method using real-time scanner
@@ -682,6 +706,76 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error during scanning: $e'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  }
+
+  // Enhanced caching with timestamp checking and debugging
+  Future<void> _checkBarcodeInFirestore(String barcode) async {
+    if (widget.isReadOnly) return;
+    
+    // Debug: Log the barcode being scanned
+    print('🔍 Scanning barcode: $barcode');
+    
+    try {
+      final productDoc = await _firestore
+          .collection('products')
+          .doc(barcode)
+          .get();
+
+      // Debug: Log Firestore query result
+      print('📊 Firestore document exists: ${productDoc.exists}');
+      
+      if (productDoc.exists) {
+        final productData = productDoc.data()!;
+        
+        // Debug: Log the structure of retrieved data
+        print('📦 Product data retrieved from Firestore:');
+        print('   - Name: ${productData['name']}');
+        print('   - Category: ${productData['category']}');
+        print('   - Brand: ${productData['brand']}');
+        print('   - Full data: $productData');
+        
+        final Timestamp? lastUpdated = productData['lastUpdated'] as Timestamp?;
+        final DateTime now = DateTime.now();
+        
+        // Check if cache is fresh (less than 30 days old)
+        if (lastUpdated != null) {
+          final DateTime updateTime = lastUpdated.toDate();
+          final Duration difference = now.difference(updateTime);
+          
+          if (difference.inDays < 30) {
+            // Use cached data (fresh)
+            print('🔄 Using cached product data for barcode: $barcode');
+            _showProductDetails(productData, barcode);
+            return;
+          } else {
+            // Cache is stale, fetch fresh data
+            print('🔄 Cached data is stale, fetching fresh data for: $barcode');
+            await _fetchFromOpenFoodFacts(barcode);
+            return;
+          }
+        }
+        
+        // No timestamp, use cached data but mark as potentially stale
+        print('🔄 Using cached product data (no timestamp) for barcode: $barcode');
+        _showProductDetails(productData, barcode);
+      } else {
+        // Product not found in Firestore, try OpenFoodFacts API
+        print('❌ Product not found in Firestore for barcode: $barcode');
+        await _fetchFromOpenFoodFacts(barcode);
+      }
+    } catch (e) {
+      print('❌ Error checking product cache: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error checking product: $e'),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -756,79 +850,30 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     return 'Other';
   }
 
-  // Enhanced caching with timestamp checking
-  Future<void> _checkBarcodeInFirestore(String barcode) async {
-    if (widget.isReadOnly) return;
-    
-    try {
-      final productDoc = await _firestore
-          .collection('products')
-          .doc(barcode)
-          .get();
-
-      if (productDoc.exists) {
-        final productData = productDoc.data()!;
-        final Timestamp? lastUpdated = productData['lastUpdated'] as Timestamp?;
-        final DateTime now = DateTime.now();
-        
-        // Check if cache is fresh (less than 30 days old)
-        if (lastUpdated != null) {
-          final DateTime updateTime = lastUpdated.toDate();
-          final Duration difference = now.difference(updateTime);
-          
-          if (difference.inDays < 30) {
-            // Use cached data (fresh)
-            print('🔄 Using cached product data for barcode: $barcode');
-            _showProductDetails(productData, barcode);
-            return;
-          } else {
-            // Cache is stale, fetch fresh data
-            print('🔄 Cached data is stale, fetching fresh data for: $barcode');
-            await _fetchFromOpenFoodFacts(barcode);
-            return;
-          }
-        }
-        
-        // No timestamp, use cached data but mark as potentially stale
-        print('🔄 Using cached product data (no timestamp) for barcode: $barcode');
-        _showProductDetails(productData, barcode);
-      } else {
-        // Product not found in Firestore, try OpenFoodFacts API
-        print('🔍 Product not in cache, fetching from API: $barcode');
-        await _fetchFromOpenFoodFacts(barcode);
-      }
-    } catch (e) {
-      print('❌ Error checking product cache: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error checking product: $e'),
-          backgroundColor: Colors.red.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-    }
-  }
-
-  // Enhanced API fetching with automatic navigation
+  // Enhanced API fetching with automatic navigation and debugging
   Future<void> _fetchFromOpenFoodFacts(String barcode) async {
     if (widget.isReadOnly) return;
     
     setState(() => _isFetchingFromAPI = true);
 
     try {
+      print('🌐 Making API request for barcode: $barcode');
       final response = await http.get(
         Uri.parse('https://world.openfoodfacts.org/api/v0/product/$barcode.json'),
         headers: {'User-Agent': 'HouseholdInventoryApp/1.0'},
       ).timeout(Duration(seconds: 10));
 
+      // Debug: Log API response status
+      print('📡 API request status: ${response.statusCode}');
+      print('📡 API response body length: ${response.body.length}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        print('📡 Fetched API data: ${data.toString()}');
         
         if (data['status'] == 1) {
           // Product found in OpenFoodFacts
+          print('✅ Product found in OpenFoodFacts');
           final productData = _parseOpenFoodFactsData(data['product'], barcode);
           await _saveProductToFirestore(barcode, productData);
           _showProductDetails(productData, barcode);
@@ -842,15 +887,16 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
           );
         } else {
           // Product not found in OpenFoodFacts - AUTO NAVIGATE TO EDIT PAGE
-          print('🔍 Product not found in OpenFoodFacts, navigating to edit page');
+          print('❌ Product not found in OpenFoodFacts API');
           _autoNavigateToEditPageWithBarcode(barcode);
         }
       } else {
+        print('❌ API request failed with status: ${response.statusCode}');
         throw Exception('API request failed with status: ${response.statusCode}');
       }
     } on http.ClientException catch (e) {
       // Network error - try to use cached data if available
-      print('🌐 Network error: $e');
+      print('🌐 Network error during API call: $e');
       await _tryUseCachedDataOrNavigate(barcode);
     } on TimeoutException catch (e) {
       // Timeout - try to use cached data if available
@@ -864,8 +910,95 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     }
   }
 
-  // Updated fallback method that navigates to edit page when no cached data
+  // Enhanced data parsing with validation
+  Map<String, dynamic> _parseOpenFoodFactsData(Map<String, dynamic> product, String barcode) {
+    String openFoodFactsCategory = _getCategory(product['categories'] ?? 'Uncategorized');
+    String mappedCategory = _mapToFixedCategory(openFoodFactsCategory);
+
+    // Debug: Log raw data from API
+    print('📊 Raw API product data:');
+    print('   - product_name: ${product['product_name']}');
+    print('   - brands: ${product['brands']}');
+    print('   - categories: ${product['categories']}');
+    print('   - Mapped category: $mappedCategory');
+
+    final parsedData = {
+      'name': product['product_name']?.toString().trim() ?? 'Unknown Product',
+      'brand': product['brands']?.toString().trim() ?? 'Unknown Brand',
+      'category': mappedCategory,
+      'originalCategory': openFoodFactsCategory,
+      'quantity': product['quantity']?.toString() ?? 'N/A',
+      'imageUrl': product['image_url']?.toString() ?? product['image_front_url']?.toString() ?? '',
+      'description': product['generic_name']?.toString() ?? product['product_name']?.toString() ?? '',
+      'ingredients': product['ingredients_text']?.toString() ?? '',
+      'nutritionGrade': product['nutriscore_grade']?.toString() ?? '',
+      'allergens': product['allergens']?.toString() ?? '',
+      'countries': product['countries']?.toString() ?? '',
+      'source': 'openfoodfacts',
+      'barcode': barcode,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'lastUpdated': FieldValue.serverTimestamp(),
+      'fetchCount': FieldValue.increment(1),
+    };
+
+    // Debug: Validate parsed data
+    print('✅ Parsed product data validation:');
+    print('   - Has name: ${parsedData['name'] != 'Unknown Product'}');
+    print('   - Has brand: ${parsedData['brand'] != 'Unknown Brand'}');
+    
+
+    return parsedData;
+  }
+
+  String _getCategory(String categories) {
+    // Take the first category if multiple are provided
+    if (categories.contains(',')) {
+      return categories.split(',').first.trim();
+    }
+    return categories.trim();
+  }
+
+  // Enhanced product saving with debugging
+  Future<void> _saveProductToFirestore(String barcode, Map<String, dynamic> productData) async {
+    try {
+      print('💾 Attempting to save product to Firestore: $barcode');
+      
+      // Add timestamp and ensure all required fields
+      final dataToSave = {
+        ...productData,
+        'lastUpdated': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
+      await _firestore
+          .collection('products')
+          .doc(barcode)
+          .set(dataToSave, SetOptions(merge: true));
+      
+      // Debug: Verify the save was successful
+      final savedDoc = await _firestore
+          .collection('products')
+          .doc(barcode)
+          .get();
+      
+      if (savedDoc.exists) {
+        print('✅ Product successfully saved to Firestore with barcode: $barcode');
+        print('📦 Saved product data: ${savedDoc.data()}');
+      } else {
+        print('❌ Failed to save product to Firestore - document does not exist after save');
+      }
+      
+    } catch (e) {
+      print('❌ Error saving product to Firestore: $e');
+      throw e;
+    }
+  }
+
+  // Enhanced fallback method with debugging
   Future<void> _tryUseCachedDataOrNavigate(String barcode) async {
+    print('🔄 Attempting fallback to cached data for barcode: $barcode');
+    
     try {
       final productDoc = await _firestore
           .collection('products')
@@ -874,6 +1007,9 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
 
       if (productDoc.exists) {
         final productData = productDoc.data()!;
+        print('✅ Using cached data (API unavailable)');
+        print('📦 Cached product data: $productData');
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('📡 Using cached data (API unavailable)'),
@@ -883,13 +1019,11 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
         );
         _showProductDetails(productData, barcode);
       } else {
-        // No cached data available - AUTO NAVIGATE TO EDIT PAGE
-        print('🔍 No cached data found, navigating to edit page');
+        print('❌ No cached data found for barcode: $barcode');
         _autoNavigateToEditPageWithBarcode(barcode);
       }
     } catch (e) {
-      // Any error - AUTO NAVIGATE TO EDIT PAGE
-      print('❌ Error accessing cache, navigating to edit page: $e');
+      print('❌ Error accessing cache: $e');
       _autoNavigateToEditPageWithBarcode(barcode);
     }
   }
@@ -915,57 +1049,6 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     Future.delayed(Duration(milliseconds: 500), () {
       _navigateToEditPageWithBarcode(barcode);
     });
-  }
-
-  // Category mapping applied with enhanced data
-  Map<String, dynamic> _parseOpenFoodFactsData(Map<String, dynamic> product, String barcode) {
-    String openFoodFactsCategory = _getCategory(product['categories'] ?? 'Uncategorized');
-    String mappedCategory = _mapToFixedCategory(openFoodFactsCategory);
-
-    return {
-      'name': product['product_name'] ?? 'Unknown Product',
-      'brand': product['brands'] ?? 'Unknown Brand',
-      'category': mappedCategory, // fixed category
-      'originalCategory': openFoodFactsCategory, // keep raw for reference
-      'quantity': product['quantity'] ?? 'N/A',
-      'imageUrl': product['image_url'] ?? product['image_front_url'] ?? '',
-      'description': product['generic_name'] ?? product['product_name'] ?? '',
-      'ingredients': product['ingredients_text'] ?? '',
-      'nutritionGrade': product['nutriscore_grade'] ?? '',
-      'allergens': product['allergens'] ?? '',
-      'countries': product['countries'] ?? '',
-      'source': 'openfoodfacts',
-      'barcode': barcode,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'lastUpdated': FieldValue.serverTimestamp(), // Cache timestamp
-      'fetchCount': FieldValue.increment(1), // Track how many times fetched
-    };
-  }
-
-  String _getCategory(String categories) {
-    // Take the first category if multiple are provided
-    if (categories.contains(',')) {
-      return categories.split(',').first.trim();
-    }
-    return categories.trim();
-  }
-
-  // Enhanced product saving with merge
-  Future<void> _saveProductToFirestore(String barcode, Map<String, dynamic> productData) async {
-    try {
-      // Merge data to preserve existing fields while updating new ones
-      await _firestore
-          .collection('products')
-          .doc(barcode)
-          .set(productData, SetOptions(merge: true));
-      
-      print('💾 Product saved/cached to Firestore: $barcode');
-      print('📦 Product data: ${productData['name']} - ${productData['category']}');
-    } catch (e) {
-      print('❌ Error saving product to Firestore: $e');
-      throw e;
-    }
   }
 
   void _showProductDetails(Map<String, dynamic> product, String barcode) {
@@ -1235,7 +1318,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     }
   }
 
-  // Category validation before saving
+  // Category validation before saving with enhanced debugging
   Future<void> _addToHousehold(Map<String, dynamic> product, String barcode) async {
     if (_isAddingToHousehold) return;
     
@@ -1290,6 +1373,16 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
         'originalCategory': product['originalCategory'] ?? 'Unknown', // Keep original for reference
         'hasExpiryDate': false, // Default to no expiry date
       };
+
+      // Debug logging before saving to household
+      print('🏠 Adding product to household inventory:');
+      print('   - Household ID: ${widget.householdId}');
+      print('   - Product: ${product['name']}');
+      print('   - Barcode: $barcode');
+      print('📝 Inventory data to save:');
+      print('   - Name: ${inventoryData['name']}');
+      print('   - Category: ${inventoryData['category']}');
+      print('   - Barcode: ${inventoryData['barcode']}');
 
       final docRef = await _firestore
           .collection('households')

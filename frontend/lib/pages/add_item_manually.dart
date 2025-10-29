@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:frontend/pages/inventory_item_model.dart';
+import 'package:frontend/models/inventory_item_model.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +15,7 @@ class AddItemManually extends StatefulWidget {
   final String userRole;
   final String? barcode;
   final InventoryItem? existingItem;
+  final Map<String, dynamic>? productData; // New parameter for product data
 
   const AddItemManually({
     Key? key,
@@ -23,6 +24,7 @@ class AddItemManually extends StatefulWidget {
     required this.userRole,
     this.barcode,
     this.existingItem,
+    this.productData, // Accept product data
   }) : super(key: key);
 
   @override
@@ -146,40 +148,34 @@ class _AddItemManuallyState extends State<AddItemManually> with SingleTickerProv
       } else {
         _purchaseDate = DateTime.now();
       }
+    } else if (widget.productData != null) {
+      // New item with product data from barcode scan
+      _nameController.text = widget.productData!['name'] ?? '';
+      _selectedCategory = widget.productData!['category'] ?? 'Other';
+      _descriptionController.text = widget.productData!['description'] ?? '';
+      _imageUrlController.text = widget.productData!['imageUrl'] ?? '';
+      _supplierController.text = widget.productData!['brand'] ?? '';
+      _purchaseDate = DateTime.now();
+      _minStockController.text = '1';
+      _quantityController.text = '1';
+      _priceController.text = '0.0';
+      
+      // Set uploaded image URL if available
+      if (widget.productData!['imageUrl'] != null && widget.productData!['imageUrl'].isNotEmpty) {
+        _uploadedImageUrl = widget.productData!['imageUrl'];
+      }
     } else if (widget.barcode != null) {
-      // New item with barcode - prefill with barcode info if available
-      _loadProductInfo(widget.barcode!);
+      // New item with barcode but no product data
+      _purchaseDate = DateTime.now();
+      _minStockController.text = '1';
+      _quantityController.text = '1';
+      _priceController.text = '0.0';
     } else {
       // New manual item - set default purchase date to today
       _purchaseDate = DateTime.now();
       _minStockController.text = '1';
       _quantityController.text = '1';
       _priceController.text = '0.0';
-    }
-  }
-
-  Future<void> _loadProductInfo(String barcode) async {
-    try {
-      final productDoc = await FirebaseFirestore.instance
-          .collection('products')
-          .doc(barcode)
-          .get();
-
-      if (productDoc.exists) {
-        final productData = productDoc.data()!;
-        setState(() {
-          _nameController.text = productData['name'] ?? '';
-          _selectedCategory = productData['category'] ?? 'Other';
-          _descriptionController.text = productData['description'] ?? '';
-          _imageUrlController.text = productData['imageUrl'] ?? '';
-          _purchaseDate = DateTime.now();
-          _minStockController.text = '1';
-          _quantityController.text = '1';
-          _priceController.text = '0.0';
-        });
-      }
-    } catch (e) {
-      print('❌ Error loading product info: $e');
     }
   }
 
@@ -613,6 +609,7 @@ class _AddItemManuallyState extends State<AddItemManually> with SingleTickerProv
 
   Widget _buildHeader() {
     final isEditMode = widget.existingItem != null;
+    final hasProductData = widget.productData != null;
     
     return Container(
       width: double.infinity,
@@ -646,6 +643,25 @@ class _AddItemManuallyState extends State<AddItemManually> with SingleTickerProv
                   ),
                 ),
                 Spacer(),
+                if (hasProductData)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.qr_code_scanner, size: 16, color: Colors.white),
+                        SizedBox(width: 6),
+                        Text(
+                          'Scanned',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (isEditMode && !_isReadOnly)
                   Container(
                     decoration: BoxDecoration(
@@ -677,6 +693,16 @@ class _AddItemManuallyState extends State<AddItemManually> with SingleTickerProv
                 color: Colors.white.withOpacity(0.9),
               ),
             ),
+            if (hasProductData) ...[
+              SizedBox(height: 8),
+              Text(
+                'Product details pre-filled from barcode scan',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.8),
+                ),
+              ),
+            ],
             if (isEditMode && widget.existingItem != null) ...[
               SizedBox(height: 12),
               Container(

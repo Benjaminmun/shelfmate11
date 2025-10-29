@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:frontend/pages/inventory_edit_page.dart';
-import 'package:frontend/pages/inventory_item_model.dart';
+import 'package:frontend/models/inventory_item_model.dart';
 import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:permission_handler/permission_handler.dart';

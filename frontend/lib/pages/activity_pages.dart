@@ -2,122 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:frontend/pages/dashboard_page.dart';
 
-String convertValueForDisplay(dynamic value) {
-  if (value == null) return 'Not set';
-  
-  try {
-    // Handle String
-    if (value is String) {
-      return value.trim().isEmpty ? 'Empty' : value;
-    }
-    
-    // Handle numeric types
-    else if (value is int) {
-      return value.toString();
-    }
-    else if (value is double) {
-      // Smart formatting for doubles
-      if (value == value.toInt().toDouble()) {
-        return value.toInt().toString(); // Show as integer if no decimal
-      } else {
-        // Show 1-2 decimal places based on value
-        if (value.abs() < 10) {
-          return value.toStringAsFixed(2);
-        } else {
-          return value.toStringAsFixed(1);
-        }
-      }
-    }
-    else if (value is num) {
-      // Generic number handling
-      return value.toString();
-    }
-    
-    // Handle boolean
-    else if (value is bool) {
-      return value ? 'Yes' : 'No';
-    }
-    
-    // Handle DateTime and Timestamp
-    else if (value is Timestamp) {
-      final date = value.toDate();
-      return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    }
-    // Handle collections
-    else if (value is List) {
-      if (value.isEmpty) return 'Empty list';
-      
-      // Convert each element recursively
-      final convertedItems = value.map((item) => convertValueForDisplay(item)).toList();
-      return convertedItems.join(', ');
-    }
-    else if (value is Map) {
-      if (value.isEmpty) return 'Empty object';
-      
-      // Convert key-value pairs
-      final entries = value.entries.map((entry) {
-        return '${entry.key}: ${convertValueForDisplay(entry.value)}';
-      }).toList();
-      
-      return entries.join('; ');
-    }
-    
-    // Handle enums and other objects
-    else {
-      // Try to convert to string, handle any errors gracefully
-      final stringValue = value.toString();
-      
-      // Check if it's an enum-like string (contains the type name)
-      if (stringValue.contains('Instance of') || 
-          RegExp(r'^[A-Z][a-zA-Z]*$').hasMatch(stringValue)) {
-        // It's likely an object instance or enum, extract meaningful part
-        final parts = stringValue.split('.');
-        return parts.last;
-      }
-      
-      return stringValue;
-    }
-  } catch (e) {
-    // Fallback for any conversion errors
-    return 'Unsupported type';
-  }
-}
-
-bool hasMeaningfulChanges(Map<String, dynamic> activity) {
-  final oldValue = activity['oldValue'];
-  final newValue = activity['newValue'];
-  
-  // If both are null, no meaningful change
-  if (oldValue == null && newValue == null) return false;
-  
-  // If one is null and the other isn't, there's a change
-  if (oldValue == null && newValue != null) return true;
-  if (oldValue != null && newValue == null) return true;
-  
-  // If both have values, check if they're meaningfully different
-  // Convert both to display strings and compare
-  final oldDisplay = convertValueForDisplay(oldValue);
-  final newDisplay = convertValueForDisplay(newValue);
-  
-  return oldDisplay != newDisplay;
-}
-
-String getSmartDescription(String baseDescription, String value) {
-  if (RegExp(r'^-?\d*\.?\d+$').hasMatch(value)) {
-    return 'Numeric value';
-  } else if (value == 'Yes' || value == 'No') {
-    return 'Boolean value';
-  } else if (value.contains('/') && (value.contains(':') || value.length <= 10)) {
-    return 'Date & time value';
-  } else if (value == 'Empty') {
-    return 'Empty text value';
-  } else if (value == 'Not set') {
-    return 'No value set';
-  }
-  return baseDescription;
-}
-
-// Enhanced Activity Item Widget with advanced features
+// Enhanced Activity Item Widget
 class EnhancedActivityItem extends StatelessWidget {
   final Map<String, dynamic> activity;
   final VoidCallback onTap;
@@ -143,7 +28,7 @@ class EnhancedActivityItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timestamp = activity['timestamp'] as Timestamp;
-    final time = timestamp.toDate().toLocal(); // Use local phone time
+    final time = timestamp.toDate().toLocal();
     final icon = _getActivityIcon(activity['type']);
     final color = _getActivityColor(activity['type']);
     
@@ -184,7 +69,7 @@ class EnhancedActivityItem extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Activity Type Icon with enhanced gradient
+                // Activity Type Icon
                 Container(
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -210,7 +95,7 @@ class EnhancedActivityItem extends StatelessWidget {
                 
                 SizedBox(width: 16),
                 
-                // User Avatar with enhanced online indicator
+                // User Avatar
                 Stack(
                   children: [
                     if (profileImage.isNotEmpty)
@@ -276,12 +161,12 @@ class EnhancedActivityItem extends StatelessWidget {
                 
                 SizedBox(width: 16),
                 
-                // Enhanced Content Area
+                // Content Area
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Activity Message with priority indicator
+                      // Activity Message
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -312,7 +197,7 @@ class EnhancedActivityItem extends StatelessWidget {
                       ),
                       SizedBox(height: 8),
                       
-                      // User info with enhanced styling (username removed)
+                      // User info
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -379,19 +264,16 @@ class EnhancedActivityItem extends StatelessWidget {
                           ),
                         ),
                       ],
-
-                      // Value change preview
-                      _buildValueChangePreview(),
                     ],
                   ),
                 ),
                 
-                // Enhanced Time and Action Section
+                // Time and Action Section
                 Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    // Enhanced Time with context
+                    // Time with context
                     Container(
                       padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -432,7 +314,7 @@ class EnhancedActivityItem extends StatelessWidget {
                     
                     SizedBox(height: 8),
                     
-                    // Enhanced Item Image with fallback
+                    // Item Image
                     if (itemImage.isNotEmpty || itemName.isNotEmpty)
                       Stack(
                         children: [
@@ -499,53 +381,6 @@ class EnhancedActivityItem extends StatelessWidget {
     );
   }
 
-  Widget _buildValueChangePreview() {
-    if (!hasMeaningfulChanges(activity)) return SizedBox.shrink();
-    
-    final oldValue = activity['oldValue'];
-    final newValue = activity['newValue'];
-    
-    final oldDisplay = convertValueForDisplay(oldValue);
-    final newDisplay = convertValueForDisplay(newValue);
-    
-    return Container(
-      margin: EdgeInsets.only(top: 8),
-      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: primaryColor.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: primaryColor.withOpacity(0.15),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            oldDisplay,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.red,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.lineThrough,
-            ),
-          ),
-          SizedBox(width: 6),
-          Icon(Icons.arrow_forward_rounded, size: 12, color: primaryColor),
-          SizedBox(width: 6),
-          Text(
-            newDisplay,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.green,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _formatTime(DateTime date) {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
@@ -598,7 +433,7 @@ class ActivityDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timestamp = activity['timestamp'] as Timestamp;
-    final time = timestamp.toDate().toLocal(); // Use local phone time
+    final time = timestamp.toDate().toLocal();
     final icon = _getActivityIcon(activity['type']);
     final color = _getActivityColor(activity['type']);
     final primaryColor = Color(0xFF2D5D7C);
@@ -611,9 +446,6 @@ class ActivityDetailPage extends StatelessWidget {
     final String itemName = activity['itemName'] ?? 'No item';
     final String profileImage = activity['profileImage'] ?? '';
     final String itemImage = activity['itemImage'] ?? '';
-    
-    // ENHANCED: Use the universal value converter for display
-    final bool hasChanges = hasMeaningfulChanges(activity);
 
     return Scaffold(
       backgroundColor: Color(0xFFF8FAFC),
@@ -653,7 +485,7 @@ class ActivityDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Enhanced Header Card
+            // Header Card
             _buildHeaderCard(icon, color, textPrimary, textSecondary, time),
             
             SizedBox(height: 24),
@@ -670,12 +502,6 @@ class ActivityDetailPage extends StatelessWidget {
             
             // Timeline Section
             _buildTimelineSection(time, primaryColor, surfaceColor, textPrimary, textSecondary),
-            
-            // Value Changes Section - ENHANCED: Now properly shows when there are meaningful changes
-            if (hasChanges) ...[
-              SizedBox(height: 24),
-              _buildValueChangesSection(activity, primaryColor, surfaceColor, textPrimary, textSecondary),
-            ],
             
             SizedBox(height: 40),
           ],
@@ -949,219 +775,6 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  // ENHANCED: Method to handle any data type for value display
-  Widget _buildValueChangesSection(Map<String, dynamic> activity, Color primaryColor, Color surfaceColor, Color textPrimary, Color textSecondary) {
-    // Use the enhanced value conversion that handles all data types
-    final oldValue = convertValueForDisplay(activity['oldValue']);
-    final newValue = convertValueForDisplay(activity['newValue']);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.compare_arrows_rounded, color: primaryColor, size: 22),
-            SizedBox(width: 8),
-            Text(
-              'Value Changes',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: textPrimary,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 16),
-        Container(
-          padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 25,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'This activity involved the following changes:',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildEnhancedValueChangeCard(
-                      'Before',
-                      oldValue,
-                      Colors.red,
-                      Icons.arrow_downward_rounded,
-                      'Previous value',
-                    ),
-                  ),
-                  SizedBox(width: 20),
-                  Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.arrow_forward_rounded, color: primaryColor, size: 24),
-                  ),
-                  SizedBox(width: 20),
-                  Expanded(
-                    child: _buildEnhancedValueChangeCard(
-                      'After',
-                      newValue,
-                      Colors.green,
-                      Icons.arrow_upward_rounded,
-                      'Updated value',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ENHANCED: Smart value display card that adapts to content
-  Widget _buildEnhancedValueChangeCard(String title, String value, Color color, IconData icon, String description) {
-    // Smart text sizing based on content type and length
-    final bool isNumeric = RegExp(r'^-?\d*\.?\d+$').hasMatch(value);
-    final bool isBoolean = value == 'Yes' || value == 'No';
-    final bool isDate = value.contains('/') && (value.contains(':') || value.length <= 10);
-    
-    double fontSize;
-    if (isNumeric || isBoolean) {
-      fontSize = 22.0; // Larger for numbers and booleans
-    } else if (isDate) {
-      fontSize = 18.0; // Medium for dates
-    } else {
-      // Text content - adjust based on length
-      fontSize = value.length > 20 ? 14.0 : 
-                 value.length > 15 ? 16.0 : 18.0;
-    }
-    
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.08),
-            color.withOpacity(0.03),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        children: [
-          // Title with type indicator
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, color: color, size: 14),
-                    SizedBox(width: 6),
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: color,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          
-          SizedBox(height: 12),
-          
-          // Value with smart display
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withOpacity(0.1)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (isNumeric || isBoolean || isDate)
-                  Container(
-                    padding: EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      isNumeric ? Icons.numbers_rounded :
-                      isBoolean ? Icons.toggle_on_rounded :
-                      Icons.calendar_today_rounded,
-                      color: color,
-                      size: 16,
-                    ),
-                  ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: fontSize,
-                      color: color,
-                      fontWeight: FontWeight.w800,
-                      height: 1.2,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          SizedBox(height: 8),
-          
-          // Smart description based on content type
-          Text(
-            getSmartDescription(description, value),
-            style: TextStyle(
-              fontSize: 11,
-              color: color.withOpacity(0.7),
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildEnhancedParticipantCard(String title, String name, String imageUrl, IconData icon, Color color, Color surfaceColor) {
     return Container(
       decoration: BoxDecoration(
@@ -1374,7 +987,7 @@ class ActivityDetailPage extends StatelessWidget {
   }
 }
 
-// Enhanced Activity Log Page with advanced features
+// Main Activity Log Page
 class ActivityLogPage extends StatefulWidget {
   final String householdId;
   final String householdName;
@@ -1613,7 +1226,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
       ),
       body: Column(
         children: [
-          // Enhanced Search and Filter Header
+          // Search and Filter Header
           Container(
             padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1956,7 +1569,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
       ),
     );
   }
-
+  
   void _showActivityDetails(Map<String, dynamic> activity) {
     Navigator.push(
       context,

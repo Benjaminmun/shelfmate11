@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'household_service.dart';
 import 'signup_page.dart';
 import 'home_page.dart';
@@ -17,131 +18,289 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  
   bool _isLoading = false;
   bool _obscurePassword = true;
-  bool _passwordError = false; // Track password errors for visual feedback
+  bool _passwordError = false;
   final _formKey = GlobalKey<FormState>();
+  
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Security enhancements
+  int _failedAttempts = 0;
+  DateTime? _lastFailedAttempt;
+  bool _isAccountLocked = false;
+  DateTime? _accountLockedUntil;
 
   @override
   void initState() {
     super.initState();
-    
+    _initializeAnimations();
+    _checkAccountLockStatus();
+  }
+
+  void _initializeAnimations() {
     _animationController = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 1000),
     );
     
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     
     _slideAnimation = Tween<Offset>(
       begin: Offset(0, 0.5),
       end: Offset.zero,
     ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
     
     _animationController.forward();
   }
 
-  @override
-  void dispose() {
-    emailController.dispose();
-    passwordController.dispose();
-    _animationController.dispose();
-    super.dispose();
+  Future<void> _checkAccountLockStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lockedUntil = prefs.getInt('account_locked_until');
+    
+    if (lockedUntil != null) {
+      final lockTime = DateTime.fromMillisecondsSinceEpoch(lockedUntil);
+      if (lockTime.isAfter(DateTime.now())) {
+        setState(() {
+          _isAccountLocked = true;
+          _accountLockedUntil = lockTime;
+        });
+        
+        // Auto-unlock when time expires
+        Future.delayed(lockTime.difference(DateTime.now()), () {
+          if (mounted) {
+            setState(() {
+              _isAccountLocked = false;
+              _accountLockedUntil = null;
+            });
+            _clearLockStatus();
+          }
+        });
+      } else {
+        _clearLockStatus();
+      }
+    }
+  }
+
+  Future<void> _clearLockStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('account_locked_until');
+    await prefs.remove('failed_attempts');
+  }
+
+  bool _isRateLimited() {
+    if (_isAccountLocked) return true;
+    
+    if (_lastFailedAttempt == null) return false;
+    
+    final now = DateTime.now();
+    final difference = now.difference(_lastFailedAttempt!);
+    
+    // Progressive rate limiting
+    if (_failedAttempts >= 5 && difference.inMinutes < 5) return true;
+    if (_failedAttempts >= 10 && difference.inMinutes < 30) return true;
+    
+    return false;
+  }
+
+  Future<void> _lockAccount() async {
+    final lockDuration = _failedAttempts >= 10 ? 30 : 5; // minutes
+    final lockedUntil = DateTime.now().add(Duration(minutes: lockDuration));
+    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('account_locked_until', lockedUntil.millisecondsSinceEpoch);
+    await prefs.setInt('failed_attempts', _failedAttempts);
+    
+    setState(() {
+      _isAccountLocked = true;
+      _accountLockedUntil = lockedUntil;
+    });
   }
 
   Future<void> _loginWithEmailPassword() async {
-    // Prevent double-tap and ensure form is valid
     if (_isLoading || !_formKey.currentState!.validate()) return;
+    
+    if (_isRateLimited()) {
+      final remaining = _accountLockedUntil?.difference(DateTime.now());
+      _showDialog('Account Temporarily Locked', 
+          'Too many failed attempts. Please try again in ${remaining?.inMinutes} minutes.');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
-      _passwordError = false; // Reset password error state
+      _passwordError = false;
     });
 
     try {
-      final email = emailController.text.trim();
-      final password = passwordController.text.trim();
+      final email = emailController.text.trim().toLowerCase();
+      final password = passwordController.text;
 
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
+      // Reset failed attempts on successful login
+      _failedAttempts = 0;
+      await _clearLockStatus();
+
       if (!userCredential.user!.emailVerified) {
-        _showDialog('Error', 'Please verify your email before logging in.');
+        _showEmailVerificationDialog(userCredential.user!);
         return;
       }
 
-      // Check if user info exists in Firestore
+      // Check if user info exists
       final userInfoExists = await _checkUserInfoExists(userCredential.user!.uid);
       
       if (!mounted) return;
       
-      if (userInfoExists) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => HouseholdService(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: child,
-              );
-            },
-            transitionDuration: Duration(milliseconds: 500),
-          ),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => UserInfoPage(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              var curve = Curves.easeInOut;
-              var curveTween = CurveTween(curve: curve);
-              var begin = Offset(1.0, 0.0);
-              var end = Offset.zero;
-              var tween = Tween(begin: begin, end: end).chain(curveTween);
-              var offsetAnimation = animation.drive(tween);
-
-              return SlideTransition(
-                position: offsetAnimation,
-                child: child,
-              );
-            },
-            transitionDuration: Duration(milliseconds: 600),
-          ),
-        );
-      }
+      // Clear sensitive data
+      passwordController.clear();
+      
+      _navigateAfterLogin(userInfoExists);
 
     } on FirebaseAuthException catch (e) {
-      _handleFirebaseAuthError(e);
+      await _handleFirebaseAuthError(e);
     } catch (e) {
       if (!mounted) return;
-      _showDialog('Error', 'An unexpected error occurred. Please try again.');
+      _showGenericError();
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _handleFirebaseAuthError(FirebaseAuthException e) async {
+    // Increment failed attempts for rate limiting
+    _failedAttempts++;
+    _lastFailedAttempt = DateTime.now();
+    
+    // Lock account if too many failures
+    if (_failedAttempts >= 5) {
+      await _lockAccount();
+    }
+
+    // Generic error messages to prevent user enumeration
+    String message;
+    switch (e.code) {
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        message = 'Invalid email or password. Please try again.';
+        setState(() => _passwordError = true);
+        break;
+      case 'user-disabled':
+        message = 'This account has been disabled. Please contact support.';
+        break;
+      case 'too-many-requests':
+        message = 'Too many login attempts. Please try again later.';
+        await _lockAccount();
+        break;
+      case 'network-request-failed':
+        message = 'Network error. Please check your connection.';
+        break;
+      default:
+        message = 'An error occurred during login. Please try again.';
+    }
+    
+    _showDialog('Login Failed', message);
+  }
+
+  void _showEmailVerificationDialog(User user) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.email_outlined, color: Colors.orange, size: 60),
+                  SizedBox(height: 16),
+                  Text('Verify Your Email', 
+                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2D5D7C))),
+                  SizedBox(height: 16),
+                  Text('Please verify your email address before logging in. Check your inbox for the verification link.', 
+                       textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+                  SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => _resendVerificationEmail(user),
+                    child: Text('Resend Verification Email'),
+                  ),
+                  SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text('Cancel'),
+                        ),
+                      ),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _auth.signOut(); // Sign out unverified user
+                          },
+                          child: Text('OK'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _resendVerificationEmail(User user) async {
+    try {
+      await user.sendEmailVerification();
+      _showDialog('Email Sent', 'Verification email has been sent to ${user.email}');
+    } catch (e) {
+      _showDialog('Error', 'Failed to send verification email. Please try again.');
+    }
+  }
+
+  void _showGenericError() {
+    _showDialog('Error', 'An unexpected error occurred. Please try again.');
+  }
+
+  void _navigateAfterLogin(bool userInfoExists) {
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => 
+            userInfoExists ? HouseholdService() : UserInfoPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+        transitionDuration: Duration(milliseconds: 500),
+      ),
+    );
   }
 
   Future<void> _resetPassword() async {
@@ -180,23 +339,6 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       return false;
     } catch (e) {
       return false;
-    }
-  }
-
-  void _handleFirebaseAuthError(FirebaseAuthException e) {
-    if (e.code == 'user-not-found') {
-      _showDialog('Error', 'No user found for that email.');
-    } else if (e.code == 'wrong-password') {
-      setState(() => _passwordError = true); // Set visual error state
-      _showDialog('Error', 'Incorrect password. Please try again.');
-    } else if (e.code == 'invalid-email') {
-      _showDialog('Error', 'Invalid email address format.');
-    } else if (e.code == 'too-many-requests') {
-      _showDialog('Error', 'Too many login attempts. Please try again later.');
-    } else if (e.code == 'user-disabled') {
-      _showDialog('Error', 'This account has been disabled.');
-    } else {
-      _showDialog('Error', e.message ?? 'An authentication error occurred.');
     }
   }
 
@@ -280,7 +422,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                         transitionsBuilder: (context, animation, secondaryAnimation, child) {
                           var begin = Offset(-1.0, 0.0);
                           var end = Offset.zero;
-                          var tween = Tween(begin: begin, end: end);
+                          var tween = Tween<Offset>(begin: begin, end: end);
                           var offsetAnimation = animation.drive(tween);
                           
                           return SlideTransition(
@@ -293,6 +435,39 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                   ),
                 ),
                 SizedBox(height: 20),
+                
+                // Account lock warning
+                if (_isAccountLocked && _accountLockedUntil != null) ...[
+                  FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: Container(
+                        width: double.infinity,
+                        margin: EdgeInsets.only(bottom: 16),
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.lock_clock, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Account temporarily locked. Try again in ${_accountLockedUntil!.difference(DateTime.now()).inMinutes} minutes.',
+                                style: TextStyle(color: Colors.orange[800]),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                
                 FadeTransition(
                   opacity: _fadeAnimation,
                   child: SlideTransition(
@@ -381,7 +556,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                             label: 'Password', 
                             obscureText: _obscurePassword, 
                             onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
-                            hasError: _passwordError, // Pass error state to field
+                            hasError: _passwordError,
                           ),
                         ),
                       ),
@@ -469,8 +644,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                                 var curve = Curves.easeInOut;
                                 var curveTween = CurveTween(curve: curve);
                                 var begin = Offset(1.0, 0.0);
-                                var end = Offset.zero;
-                                var tween = Tween(begin: begin, end: end).chain(curveTween);
+                                var end = Offset.zero; // Fixed: Removed incorrect type annotation
+                                var tween = Tween<Offset>(begin: begin, end: end).chain(curveTween);
                                 var offsetAnimation = animation.drive(tween);
 
                                 return SlideTransition(
@@ -554,7 +729,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     required String label, 
     required bool obscureText, 
     required VoidCallback onToggle,
-    bool hasError = false, // New parameter for error state
+    bool hasError = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -567,7 +742,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             offset: Offset(0, 4)
           )
         ],
-        border: hasError ? Border.all(color: Colors.red, width: 1.5) : null, // Visual error indicator
+        border: hasError ? Border.all(color: Colors.red, width: 1.5) : null,
       ),
       child: TextFormField(
         controller: controller,
@@ -580,12 +755,11 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             setState(() => _passwordError = false);
           }
         },
-        onFieldSubmitted: (_) => _loginWithEmailPassword(), // Submit on enter key
+        onFieldSubmitted: (_) => _loginWithEmailPassword(),
         validator: (value) {
           if (value == null || value.isEmpty) {
             return 'Please enter your password';
           }
-          // Removed the 6-character validation - users already have established passwords
           return null;
         },
         decoration: InputDecoration(
@@ -625,7 +799,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
       width: double.infinity,
       height: 58,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : onPressed, // Disable when loading
+        onPressed: _isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color, 
           elevation: 0, 
@@ -635,5 +809,13 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         child: Text(text, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
   }
 }

@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'household_service.dart';
 import 'user_info_page.dart';
-import 'dart:io';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -18,6 +15,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color secondaryColor = Color(0xFF4CAF50);
+  final Color accentColor = Color(0xFFFF6B35);
   final Color backgroundColor = Color(0xFFF8FAFC);
   final Color cardColor = Colors.white;
   final Color textColor = Color(0xFF1E293B);
@@ -28,13 +26,12 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
   Map<String, dynamic>? userData;
   bool isLoading = true;
-  bool _isUploadingImage = false;
-  final ImagePicker _picker = ImagePicker();
 
   // Animations
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _slideAnimation;
+  late Animation<Color?> _colorAnimation;
 
   @override
   void initState() {
@@ -46,22 +43,27 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   void _initializeAnimations() {
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 800),
+      duration: Duration(milliseconds: 1000),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeOut,
+        curve: Curves.easeOutCubic,
       ),
     );
 
-    _slideAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
+    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeOut,
+        curve: Curves.easeOutCubic,
       ),
     );
+
+    _colorAnimation = ColorTween(
+      begin: primaryColor.withOpacity(0.5),
+      end: primaryColor,
+    ).animate(_animationController);
 
     _animationController.forward();
   }
@@ -102,8 +104,20 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   void _navigateToUserInfoPage() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => UserInfoPage(),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => UserInfoPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: Offset(1.0, 0.0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOutCubic,
+            )),
+            child: child,
+          );
+        },
       ),
     ).then((_) {
       _loadUserData();
@@ -113,339 +127,209 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   void _navigateToHouseholdService() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => HouseholdService(),
-      ),
-    );
-  }
-
-  Future<void> _updateProfilePicture() async {
-    try {
-      final pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 800,
-        maxHeight: 800,
-      );
-
-      if (pickedFile != null) {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user == null) throw Exception("User not authenticated");
-
-        setState(() => _isUploadingImage = true);
-
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('profile_pics/${user.uid}.jpg');
-        
-        await ref.putFile(File(pickedFile.path));
-        final downloadUrl = await ref.getDownloadURL();
-
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .update({
-              'profilePicUrl': downloadUrl,
-              'lastUpdated': FieldValue.serverTimestamp(),
-            });
-
-        setState(() {
-          userData!['profilePicUrl'] = downloadUrl;
-          _isUploadingImage = false;
-        });
-
-        _showSuccessSnackBar('Profile picture updated successfully');
-      }
-    } catch (e) {
-      setState(() => _isUploadingImage = false);
-      _showErrorSnackBar('Error updating profile picture: ${e.toString()}');
-    }
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: successColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: errorColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => HouseholdService(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
       ),
     );
   }
 
   Widget _buildAvatar() {
-    final profilePicUrl = userData?['profilePicUrl'];
-    
-    return GestureDetector(
-      onTap: _isUploadingImage ? null : _updateProfilePicture,
-      child: Stack(
-        children: [
-          // Background glow effect
-          Container(
-            width: 130,
-            height: 130,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: primaryColor.withOpacity(0.15),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-          ),
-          
-          // Main avatar container
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: primaryColor.withOpacity(0.1),
-                width: 3,
-              ),
-            ),
-            child: ClipOval(
-              child: Stack(
-                children: [
-                  // Profile image or default avatar
-                  if (profilePicUrl != null)
-                    Image.network(
-                      profilePicUrl,
-                      width: 120,
-                      height: 120,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded / 
-                                  loadingProgress.expectedTotalBytes!
-                                : null,
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                          ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildDefaultAvatar();
-                      },
-                    )
-                  else
-                    _buildDefaultAvatar(),
-                  
-                  // Uploading overlay
-                  if (_isUploadingImage)
-                    Container(
-                      color: Colors.black.withOpacity(0.7),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 25,
-                              height: 25,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Uploading...',
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Camera icon overlay
-          if (!_isUploadingImage)
-            Positioned(
-              bottom: 4,
-              right: 4,
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: primaryColor,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: primaryColor.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.camera_alt_rounded,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDefaultAvatar() {
     return Container(
+      width: 140,
+      height: 140,
       decoration: BoxDecoration(
+        shape: BoxShape.circle,
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
             primaryColor.withOpacity(0.8),
-            secondaryColor.withOpacity(0.6),
+            secondaryColor.withOpacity(0.7),
+            accentColor.withOpacity(0.6),
           ],
         ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
-      child: Center(
-        child: Icon(
-          Icons.person_rounded,
-          size: 40,
-          color: Colors.white,
-        ),
+      child: Stack(
+        children: [
+          // Animated background pattern
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _AvatarPatternPainter(primaryColor.withOpacity(0.1)),
+            ),
+          ),
+          
+          // Main content
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.person_rounded,
+                  size: 50,
+                  color: Colors.white,
+                ),
+                SizedBox(height: 4),
+                Text(
+                  _getInitials(),
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Animated ring
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) {
+                return CustomPaint(
+                  painter: _AvatarRingPainter(
+                    _colorAnimation.value!,
+                    _animationController.value,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  String _getInitials() {
+    if (userData?['fullName'] != null) {
+      final name = userData!['fullName'] as String;
+      final parts = name.split(' ');
+      if (parts.length >= 2) {
+        return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+      }
+      return parts[0].length >= 2 ? parts[0].substring(0, 2).toUpperCase() : parts[0].toUpperCase();
+    }
+    return 'U';
   }
 
   void _showLogoutConfirmation(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
+        return AnimatedDialog(
           child: Container(
             decoration: BoxDecoration(
               color: cardColor,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.2),
-                  blurRadius: 20,
-                  offset: Offset(0, 10),
+                  blurRadius: 30,
+                  offset: Offset(0, 15),
                 ),
               ],
             ),
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 70,
+                  height: 70,
                   decoration: BoxDecoration(
                     color: errorColor.withOpacity(0.1),
                     shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        errorColor.withOpacity(0.15),
+                        errorColor.withOpacity(0.05),
+                      ],
+                    ),
                   ),
                   child: Icon(
                     Icons.logout_rounded,
-                    size: 30,
+                    size: 32,
                     color: errorColor,
                   ),
                 ),
-                SizedBox(height: 16),
+                SizedBox(height: 20),
                 Text(
                   'Confirm Logout',
                   style: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                     color: textColor,
                   ),
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 12),
                 Text(
-                  'Are you sure you want to logout?',
+                  'Are you sure you want to logout from your account?',
                   style: GoogleFonts.poppins(
                     color: lightTextColor,
-                    fontSize: 14,
+                    fontSize: 15,
+                    height: 1.4,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 24),
+                SizedBox(height: 28),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 12),
+                          padding: EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          side: BorderSide(color: lightTextColor),
+                          side: BorderSide(color: lightTextColor.withOpacity(0.3)),
                         ),
                         child: Text(
                           'Cancel',
                           style: GoogleFonts.poppins(
                             color: lightTextColor,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
                         ),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 16),
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () async {
                           Navigator.of(context).pop();
-                          await FirebaseAuth.instance.signOut();
-                          Navigator.of(context).pushNamedAndRemoveUntil(
-                            '/login', 
-                            (Route<dynamic> route) => false
-                          );
+                          await _performLogout();
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: errorColor,
                           foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 12),
+                          padding: EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          elevation: 2,
+                          elevation: 3,
+                          shadowColor: errorColor.withOpacity(0.4),
                         ),
                         child: Text(
                           'Logout',
                           style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
                         ),
                       ),
@@ -457,6 +341,78 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
           ),
         );
       },
+    );
+  }
+
+  Future<void> _performLogout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/login', 
+        (Route<dynamic> route) => false
+      );
+    } catch (e) {
+      _showErrorSnackBar('Logout failed. Please try again.');
+    }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.check_rounded, color: successColor, size: 18),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: successColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: errorColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: EdgeInsets.all(16),
+      ),
     );
   }
 
@@ -476,7 +432,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                   ? _buildLoadingIndicator()
                   : userData == null
                       ? _buildNoDataMessage()
-                      : _buildProfilePage(userData!, context),
+                      : _buildProfileContent(),
             ),
           );
         },
@@ -486,37 +442,49 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
 
   AppBar _buildAppBar() {
     return AppBar(
-      automaticallyImplyLeading: false, // Remove back button
-      title: Text(
-        'Profile',
-        style: GoogleFonts.poppins(
-          fontSize: 24, 
-          fontWeight: FontWeight.w700, 
-          color: Colors.white,
-          letterSpacing: -0.5
-        ),
+      automaticallyImplyLeading: false,
+      title: AnimatedBuilder(
+        animation: _animationController,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: Offset(0, 10 * (1 - _animationController.value)),
+            child: Opacity(
+              opacity: _fadeAnimation.value,
+              child: Text(
+                'Profile',
+                style: GoogleFonts.poppins(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+          );
+        },
       ),
       backgroundColor: primaryColor,
       elevation: 0,
       iconTheme: IconThemeData(color: Colors.white),
       shape: ContinuousRectangleBorder(
         borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
         ),
       ),
-      centerTitle: true, // Center the title for better balance
+      centerTitle: true,
       actions: [
         IconButton(
           icon: Container(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.settings_rounded, size: 20, color: Colors.white),
+            child: Icon(Icons.edit_rounded, size: 22, color: Colors.white),
           ),
           onPressed: _navigateToUserInfoPage,
+          tooltip: 'Edit Profile',
         ),
       ],
     );
@@ -528,20 +496,28 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
-            width: 50,
-            height: 50,
+            width: 60,
+            height: 60,
             child: CircularProgressIndicator(
               strokeWidth: 4,
               valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
             ),
           ),
-          SizedBox(height: 16),
+          SizedBox(height: 20),
           Text(
-            "Loading Profile...",
+            "Loading Your Profile...",
             style: GoogleFonts.poppins(
               fontSize: 16,
               color: lightTextColor,
               fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "Getting everything ready for you",
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: lightTextColor.withOpacity(0.7),
             ),
           ),
         ],
@@ -552,52 +528,62 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   Widget _buildNoDataMessage() {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 100,
-              height: 100,
+              width: 120,
+              height: 120,
               decoration: BoxDecoration(
                 color: lightTextColor.withOpacity(0.1),
                 shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    lightTextColor.withOpacity(0.15),
+                    lightTextColor.withOpacity(0.05),
+                  ],
+                ),
               ),
-              child: Icon(Icons.error_outline_rounded, size: 50, color: lightTextColor),
+              child: Icon(Icons.person_off_rounded, size: 50, color: lightTextColor),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 24),
             Text(
-              "No Profile Data", 
+              "Profile Not Found", 
               style: GoogleFonts.poppins(
-                fontSize: 18, 
+                fontSize: 22, 
                 color: textColor,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 12),
             Text(
-              "Complete your profile setup to get started",
+              "We couldn't find your profile data. Please complete your profile setup to continue.",
               style: GoogleFonts.poppins(
                 color: lightTextColor,
+                fontSize: 15,
+                height: 1.5,
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadUserData,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                elevation: 2,
+                elevation: 3,
+                shadowColor: primaryColor.withOpacity(0.4),
               ),
               child: Text(
                 'Try Again',
                 style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
                 ),
               ),
             ),
@@ -607,53 +593,94 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildProfilePage(Map<String, dynamic> userData, BuildContext context) {
+  Widget _buildProfileContent() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
+      physics: BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildAvatar(),
-          SizedBox(height: 24),
-          _buildUserName(userData),
-          SizedBox(height: 8),
-          _buildUserEmail(userData),
-          if (userData['phone'] != null && userData['phone'].toString().isNotEmpty) ...[
-            SizedBox(height: 8),
-            _buildUserPhone(userData),
-          ],
-          if (userData['address'] != null && userData['address'].toString().isNotEmpty) ...[
-            SizedBox(height: 8),
-            _buildUserAddress(userData),
-          ],
+          SizedBox(height: 28),
+          _buildUserInfo(),
+          SizedBox(height: 36),
+          _buildStatsCards(),
+          SizedBox(height: 36),
+          _buildProfileActions(),
           SizedBox(height: 32),
-          _buildStatsCards(userData),
-          SizedBox(height: 32),
-          _buildProfileOptions(context),
-          SizedBox(height: 24),
         ],
       ),
     );
   }
 
-  Widget _buildStatsCards(Map<String, dynamic> userData) {
+  Widget _buildUserInfo() {
+    return Column(
+      children: [
+        Text(
+          userData!['fullName'] ?? "No Name",
+          style: GoogleFonts.poppins(
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+            color: textColor,
+            letterSpacing: -0.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: 12),
+        _buildInfoRow(Icons.email_rounded, userData!['email'] ?? "No Email"),
+        if (userData!['phone'] != null && userData!['phone'].toString().isNotEmpty) 
+          _buildInfoRow(Icons.phone_rounded, userData!['phone']),
+        if (userData!['address'] != null && userData!['address'].toString().isNotEmpty)
+          _buildInfoRow(Icons.location_on_rounded, userData!['address']),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: lightTextColor.withOpacity(0.7)),
+          SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              text,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                color: lightTextColor,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsCards() {
     return Row(
       children: [
         Expanded(
           child: _buildStatCard(
-            icon: Icons.calendar_today_rounded,
-            value: 'Member since',
-            label: _getMemberSince(userData),
+            icon: Icons.calendar_month_rounded,
+            value: 'Member Since',
+            label: _getMemberSince(),
             color: primaryColor,
+            index: 0,
           ),
         ),
-        SizedBox(width: 12),
+        SizedBox(width: 16),
         Expanded(
           child: _buildStatCard(
-            icon: Icons.verified_user_rounded,
+            icon: Icons.verified_rounded,
             value: 'Status',
             label: 'Active',
             color: successColor,
+            index: 1,
           ),
         ),
       ],
@@ -665,35 +692,44 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     required String value,
     required String label,
     required Color color,
+    required int index,
   }) {
-    return Container(
-      padding: EdgeInsets.all(16),
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 400 + (index * 200)),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: Offset(0, 2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
         ],
         border: Border.all(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withOpacity(0.03),
           width: 1,
         ),
       ),
       child: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(8),
+            padding: EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: [
+                  color.withOpacity(0.15),
+                  color.withOpacity(0.05),
+                ],
+              ),
             ),
-            child: Icon(icon, size: 20, color: color),
+            child: Icon(icon, size: 22, color: color),
           ),
-          SizedBox(height: 8),
+          SizedBox(height: 12),
           Text(
             value,
             style: GoogleFonts.poppins(
@@ -706,7 +742,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
           Text(
             label,
             style: GoogleFonts.poppins(
-              fontSize: 14,
+              fontSize: 15,
               color: textColor,
               fontWeight: FontWeight.w600,
             ),
@@ -716,201 +752,146 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
-  String _getMemberSince(Map<String, dynamic> userData) {
-    final timestamp = userData['createdAt'];
+  String _getMemberSince() {
+    final timestamp = userData!['createdAt'];
     if (timestamp is Timestamp) {
       final date = timestamp.toDate();
-      return '${date.month}/${date.year}';
+      return '${_getMonthName(date.month)} ${date.year}';
     }
     return 'Recently';
   }
 
-  Widget _buildUserName(Map<String, dynamic> userData) {
-    return Text(
-      userData['fullName'] ?? "No Name",
-      style: GoogleFonts.poppins(
-        fontSize: 24,
-        fontWeight: FontWeight.w600,
-        color: textColor,
+  String _getMonthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
+  Widget _buildProfileActions() {
+    final actions = [
+      _ProfileAction(
+        icon: Icons.edit_rounded,
+        title: "Edit Profile",
+        subtitle: "Update personal information",
+        color: primaryColor,
+        onTap: _navigateToUserInfoPage,
       ),
-      textAlign: TextAlign.center,
-    );
-  }
+      _ProfileAction(
+        icon: Icons.home_work_rounded,
+        title: "Household Service",
+        subtitle: "Manage services & bookings",
+        color: secondaryColor,
+        onTap: _navigateToHouseholdService,
+      ),
+      _ProfileAction(
+        icon: Icons.lock_reset_rounded,
+        title: "Change Password",
+        subtitle: "Update security settings",
+        color: accentColor,
+        onTap: () => _showChangePasswordDialog(context),
+      ),
+      _ProfileAction(
+        icon: Icons.logout_rounded,
+        title: "Logout",
+        subtitle: "Sign out from account",
+        color: errorColor,
+        isDestructive: true,
+        onTap: () => _showLogoutConfirmation(context),
+      ),
+    ];
 
-  Widget _buildUserEmail(Map<String, dynamic> userData) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.email_rounded, size: 18, color: lightTextColor),
-        SizedBox(width: 8),
-        Text(
-          userData['email'] ?? "No Email",
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            color: lightTextColor,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUserPhone(Map<String, dynamic> userData) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.phone_rounded, size: 18, color: lightTextColor),
-        SizedBox(width: 8),
-        Text(
-          userData['phone'] ?? "",
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            color: lightTextColor,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUserAddress(Map<String, dynamic> userData) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.location_on_rounded, size: 18, color: lightTextColor),
-        SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            userData['address'] ?? "",
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              color: lightTextColor,
-              fontWeight: FontWeight.w400,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProfileOptions(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 15,
+            offset: Offset(0, 6),
           ),
         ],
         border: Border.all(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withOpacity(0.04),
           width: 1,
         ),
       ),
       child: Column(
-        children: [
-          _buildProfileOption(
-            icon: Icons.edit_rounded,
-            title: "Edit Profile",
-            subtitle: "Update your personal information",
-            onTap: _navigateToUserInfoPage,
-          ),
-          Divider(height: 1, indent: 20, endIndent: 20),
-          _buildProfileOption(
-            icon: Icons.home_work_rounded,
-            title: "Household Service",
-            subtitle: "Manage household services",
-            onTap: _navigateToHouseholdService,
-          ),
-          Divider(height: 1, indent: 20, endIndent: 20),
-          _buildProfileOption(
-            icon: Icons.lock_rounded,
-            title: "Change Password",
-            subtitle: "Update your security password",
-            onTap: () {
-              _showChangePasswordDialog(context);
-            },
-          ),
-          Divider(height: 1, indent: 20, endIndent: 20),
-          _buildProfileOption(
-            icon: Icons.logout_rounded,
-            title: "Logout",
-            subtitle: "Sign out from your account",
-            onTap: () => _showLogoutConfirmation(context),
-            isDestructive: true,
-          ),
-        ],
+        children: List.generate(actions.length, (index) {
+          final action = actions[index];
+          return Column(
+            children: [
+              if (index > 0) Divider(height: 1, indent: 20, endIndent: 20),
+              _buildProfileActionItem(action, index),
+            ],
+          );
+        }),
       ),
     );
   }
 
-  Widget _buildProfileOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    bool isDestructive = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Row(
-            children: [
-              Container(
-                width: 45,
-                height: 45,
-                decoration: BoxDecoration(
-                  color: isDestructive
-                      ? errorColor.withOpacity(0.1)
-                      : primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+  Widget _buildProfileActionItem(_ProfileAction action, int index) {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 500 + (index * 100)),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: action.onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: action.color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      colors: [
+                        action.color.withOpacity(0.15),
+                        action.color.withOpacity(0.05),
+                      ],
+                    ),
+                  ),
+                  child: Icon(
+                    action.icon,
+                    color: action.color,
+                    size: 24,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  color: isDestructive ? errorColor : primaryColor,
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        action.title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: action.isDestructive ? errorColor : textColor,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        action.subtitle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: lightTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: action.isDestructive ? errorColor : lightTextColor.withOpacity(0.6),
                   size: 22,
                 ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: isDestructive ? errorColor : textColor,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: lightTextColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: isDestructive ? errorColor : lightTextColor,
-                size: 20,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -925,212 +906,127 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
+        return AnimatedDialog(
           child: Container(
             decoration: BoxDecoration(
               color: cardColor,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.2),
-                  blurRadius: 20,
-                  offset: Offset(0, 10),
+                  blurRadius: 30,
+                  offset: Offset(0, 15),
                 ),
               ],
             ),
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 70,
+                  height: 70,
                   decoration: BoxDecoration(
                     color: primaryColor.withOpacity(0.1),
                     shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        primaryColor.withOpacity(0.15),
+                        primaryColor.withOpacity(0.05),
+                      ],
+                    ),
                   ),
                   child: Icon(
                     Icons.lock_reset_rounded,
-                    size: 30,
+                    size: 32,
                     color: primaryColor,
                   ),
                 ),
-                SizedBox(height: 16),
+                SizedBox(height: 20),
                 Text(
                   'Change Password',
                   style: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                     color: textColor,
                   ),
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 12),
                 Text(
-                  'Update your account password',
+                  'Update your account password securely',
                   style: GoogleFonts.poppins(
                     color: lightTextColor,
-                    fontSize: 14,
+                    fontSize: 15,
+                    height: 1.4,
                   ),
-                ),
-                SizedBox(height: 20),
-                TextField(
-                  controller: currentPasswordController,
-                  style: GoogleFonts.poppins(),
-                  decoration: InputDecoration(
-                    labelText: 'Current Password',
-                    labelStyle: GoogleFonts.poppins(color: lightTextColor),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: lightTextColor.withOpacity(0.3)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: primaryColor),
-                    ),
-                    prefixIcon: Icon(Icons.lock, color: primaryColor),
-                  ),
-                  obscureText: true,
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: newPasswordController,
-                  style: GoogleFonts.poppins(),
-                  decoration: InputDecoration(
-                    labelText: 'New Password',
-                    labelStyle: GoogleFonts.poppins(color: lightTextColor),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: lightTextColor.withOpacity(0.3)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: primaryColor),
-                    ),
-                    prefixIcon: Icon(Icons.lock_outline, color: primaryColor),
-                  ),
-                  obscureText: true,
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: confirmPasswordController,
-                  style: GoogleFonts.poppins(),
-                  decoration: InputDecoration(
-                    labelText: 'Confirm New Password',
-                    labelStyle: GoogleFonts.poppins(color: lightTextColor),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: lightTextColor.withOpacity(0.3)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: primaryColor),
-                    ),
-                    prefixIcon: Icon(Icons.lock_reset, color: primaryColor),
-                  ),
-                  obscureText: true,
+                  textAlign: TextAlign.center,
                 ),
                 SizedBox(height: 24),
+                _buildPasswordField(
+                  controller: currentPasswordController,
+                  label: 'Current Password',
+                  icon: Icons.lock_rounded,
+                ),
+                SizedBox(height: 16),
+                _buildPasswordField(
+                  controller: newPasswordController,
+                  label: 'New Password',
+                  icon: Icons.lock_outline_rounded,
+                ),
+                SizedBox(height: 16),
+                _buildPasswordField(
+                  controller: confirmPasswordController,
+                  label: 'Confirm New Password',
+                  icon: Icons.lock_reset_rounded,
+                ),
+                SizedBox(height: 28),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 12),
+                          padding: EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          side: BorderSide(color: lightTextColor),
+                          side: BorderSide(color: lightTextColor.withOpacity(0.3)),
                         ),
                         child: Text(
                           'Cancel',
                           style: GoogleFonts.poppins(
                             color: lightTextColor,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
                         ),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    SizedBox(width: 16),
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () async {
-                          if (newPasswordController.text != confirmPasswordController.text) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('New passwords do not match'),
-                                backgroundColor: errorColor,
-                              )
-                            );
-                            return;
-                          }
-                          
-                          if (newPasswordController.text.length < 6) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Password must be at least 6 characters'),
-                                backgroundColor: errorColor,
-                              )
-                            );
-                            return;
-                          }
-                          
-                          final user = FirebaseAuth.instance.currentUser;
-                          if (user != null && user.email != null) {
-                            try {
-                              final cred = EmailAuthProvider.credential(
-                                email: user.email!,
-                                password: currentPasswordController.text
-                              );
-                              
-                              await user.reauthenticateWithCredential(cred);
-                              await user.updatePassword(newPasswordController.text);
-                              
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Password updated successfully'),
-                                  backgroundColor: successColor,
-                                )
-                              );
-                            } on FirebaseAuthException catch (e) {
-                              String message = 'Error updating password';
-                              if (e.code == 'wrong-password') {
-                                message = 'Current password is incorrect';
-                              } else if (e.code == 'requires-recent-login') {
-                                message = 'This operation requires recent authentication. Please log out and log in again.';
-                              }
-                              
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(message),
-                                  backgroundColor: errorColor,
-                                )
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error updating password: $e'),
-                                  backgroundColor: errorColor,
-                                )
-                              );
-                            }
-                          }
+                          await _updatePassword(
+                            currentPasswordController.text,
+                            newPasswordController.text,
+                            confirmPasswordController.text,
+                          );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryColor,
                           foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 12),
+                          padding: EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          elevation: 2,
+                          elevation: 3,
+                          shadowColor: primaryColor.withOpacity(0.4),
                         ),
                         child: Text(
-                          'Update Password',
+                          'Update',
                           style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
                           ),
                         ),
                       ),
@@ -1145,9 +1041,186 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
   }
 
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+  }) {
+    return TextField(
+      controller: controller,
+      style: GoogleFonts.poppins(),
+      obscureText: true,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.poppins(color: lightTextColor),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: lightTextColor.withOpacity(0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: primaryColor, width: 2),
+        ),
+        prefixIcon: Icon(icon, color: primaryColor),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+    );
+  }
+
+  Future<void> _updatePassword(
+    String currentPassword,
+    String newPassword,
+    String confirmPassword,
+  ) async {
+    if (newPassword != confirmPassword) {
+      _showErrorSnackBar('New passwords do not match');
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      _showErrorSnackBar('Password must be at least 6 characters');
+      return;
+    }
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.email != null) {
+      try {
+        final cred = EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentPassword
+        );
+        
+        await user.reauthenticateWithCredential(cred);
+        await user.updatePassword(newPassword);
+        
+        Navigator.of(context).pop();
+        _showSuccessSnackBar('Password updated successfully');
+      } on FirebaseAuthException catch (e) {
+        String message = 'Error updating password';
+        if (e.code == 'wrong-password') {
+          message = 'Current password is incorrect';
+        } else if (e.code == 'requires-recent-login') {
+          message = 'Please log out and log in again to change password';
+        }
+        
+        _showErrorSnackBar(message);
+      } catch (e) {
+        _showErrorSnackBar('Error updating password: $e');
+      }
+    }
+  }
+
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
   }
+}
+
+class _ProfileAction {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  _ProfileAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+}
+
+class AnimatedDialog extends StatelessWidget {
+  final Widget child;
+
+  const AnimatedDialog({Key? key, required this.child}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ScaleTransition(
+        scale: CurvedAnimation(
+          parent: ModalRoute.of(context)!.animation!,
+          curve: Curves.easeOutBack,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _AvatarPatternPainter extends CustomPainter {
+  final Color color;
+
+  _AvatarPatternPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw concentric circles
+    for (double i = 1; i <= 3; i++) {
+      canvas.drawCircle(center, radius * 0.3 * i, paint);
+    }
+
+    // Draw cross lines
+    canvas.drawLine(
+      Offset(center.dx, center.dy - radius),
+      Offset(center.dx, center.dy + radius),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx - radius, center.dy),
+      Offset(center.dx + radius, center.dy),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _AvatarRingPainter extends CustomPainter {
+  final Color color;
+  final double progress;
+
+  _AvatarRingPainter(this.color, this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 1;
+
+    // Draw animated ring
+    final sweepAngle = 2 * 3.14159 * progress;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -3.14159 / 2,
+      sweepAngle,
+      false,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

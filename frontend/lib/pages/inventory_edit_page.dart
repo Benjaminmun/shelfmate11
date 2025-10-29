@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
-import 'inventory_item_model.dart';
+import '../models/inventory_item_model.dart';
 import '../services/inventory_service.dart';
 
 class InventoryEditPage extends StatefulWidget {
@@ -360,14 +360,6 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     });
   }
 
-  void _incrementQuantity() {
-    if (_isReadOnly) return;
-    
-    int current = int.tryParse(_quantityController.text) ?? 1;
-    setState(() {
-      _quantityController.text = (current + 1).toString();
-    });
-  }
 
   void _decrementQuantity() {
     if (_isReadOnly) return;
@@ -1107,21 +1099,27 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
       ),
       child: Row(
         children: [
-          if (!_isReadOnly)
-            Container(
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-              child: IconButton(
-                icon: Icon(Icons.remove, size: 20, color: primaryColor),
-                onPressed: _decrementQuantity,
+          // Decrement button - ALWAYS ENABLED (as per your requirement)
+          Container(
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
               ),
             ),
+            child: IconButton(
+              icon: Icon(Icons.remove, size: 20, color: primaryColor),
+              onPressed: _decrementQuantity, // Always enabled
+              padding: EdgeInsets.all(8),
+              constraints: BoxConstraints(
+                minWidth: 48,
+                minHeight: 48,
+              ),
+            ),
+          ),
           
+          // Quantity input field
           Expanded(
             child: TextFormField(
               controller: _quantityController,
@@ -1155,20 +1153,25 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
             ),
           ),
           
-          if (!_isReadOnly)
-            Container(
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
-                borderRadius: BorderRadius.only(
-                  topRight: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
-                ),
-              ),
-              child: IconButton(
-                icon: Icon(Icons.add, size: 20, color: primaryColor),
-                onPressed: _incrementQuantity,
+          // Increment button - DISABLED (as per your requirement)
+          Container(
+            decoration: BoxDecoration(
+              color: disabledColor.withOpacity(0.3), // Use disabled color
+              borderRadius: BorderRadius.only(
+                topRight: Radius.circular(12),
+                bottomRight: Radius.circular(12),
               ),
             ),
+            child: IconButton(
+              icon: Icon(Icons.add, size: 20, color: disabledColor), // Use disabled color
+              onPressed: null, // Disabled - user cannot click
+              padding: EdgeInsets.all(8),
+              constraints: BoxConstraints(
+                minWidth: 48,
+                minHeight: 48,
+              ),
+            ),
+          ),
         ],
       ),
     );

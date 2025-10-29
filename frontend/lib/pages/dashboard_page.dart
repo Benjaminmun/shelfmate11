@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
+import 'package:frontend/pages/shopping_list_page.dart';
 import 'household_service.dart';
 import 'inventory_list_page.dart';
 import 'chat_page.dart';
@@ -155,8 +156,6 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
                 'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
-                'oldValue': data['oldValue'],
-                'newValue': data['newValue'],
               };
             }).toList();
           });
@@ -201,8 +200,6 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
           'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
           'userId': data['userId'] ?? '',
           'itemName': data['itemName'],
-          'oldValue': data['oldValue'],
-          'newValue': data['newValue'],
         };
       }).toList();
 
@@ -229,8 +226,6 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
     String? userName,
     String? fullName,
     String? itemName,
-    dynamic oldValue,
-    dynamic newValue,
   }) async {
     if (householdId.isEmpty) return;
     
@@ -257,8 +252,6 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
             'userName': finalUserName ?? _auth.currentUser?.displayName ?? 'User',
             'fullName': finalFullName ?? finalUserName ?? 'User',
             'itemName': itemName,
-            'oldValue': oldValue,
-            'newValue': newValue,
           });
       print('Activity logged: $description');
     } catch (e) {
@@ -542,49 +535,6 @@ class EnhancedActivityItem extends StatelessWidget {
                         ),
                       ],
                     ),
-                    
-                    // Value Changes (for updates)
-                    if (activity['type'] == 'update' && activity['oldValue'] != null && activity['newValue'] != null)
-                      Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${activity['oldValue']}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded, size: 12, color: textLight),
-                            SizedBox(width: 8),
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${activity['newValue']}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -955,8 +905,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           'userName': _userFullName,
           'fullName': _userFullName,
           'itemName': 'Eggs',
-          'oldValue': 3,
-          'newValue': 12,
         },
         {
           'message': 'Bread is running low',
@@ -1050,62 +998,131 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   }
 
   AppBar _buildAppBar() {
-    return AppBar(
-      automaticallyImplyLeading: false,
-      title: AnimatedSwitcher(
-        duration: Duration(milliseconds: 300),
-        child: Text(
-          _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
-          key: ValueKey(_currentHousehold),
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-            letterSpacing: -0.5,
-          ),
+  return AppBar(
+    automaticallyImplyLeading: false,
+    title: AnimatedSwitcher(
+      duration: Duration(milliseconds: 300),
+      child: Text(
+        _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
+        key: ValueKey(_currentHousehold),
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: -0.5,
         ),
       ),
-      backgroundColor: _primaryColor,
-      elevation: 0,
-      iconTheme: IconThemeData(color: Colors.white),
-      shape: ContinuousRectangleBorder(
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(40),
-          bottomRight: Radius.circular(40),
-        ),
+    ),
+    backgroundColor: _primaryColor,
+    elevation: 0,
+    iconTheme: IconThemeData(color: Colors.white),
+    shape: ContinuousRectangleBorder(
+      borderRadius: BorderRadius.only(
+        bottomLeft: Radius.circular(40),
+        bottomRight: Radius.circular(40),
       ),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.refresh_rounded, size: 24),
-          onPressed: _manualRefresh,
-          tooltip: 'Refresh Data',
-        ),
-        IconButton(
-          icon: Icon(Icons.chat_rounded, size: 24),
-          onPressed: _currentHouseholdId.isNotEmpty ? () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatPage(householdId: _currentHouseholdId),
+    ),
+    centerTitle: true,
+    actions: [
+      // 🆕 Shopping List Button with Badge
+      StreamBuilder<int>(
+        stream: _createShoppingListCountStream(),
+        builder: (context, snapshot) {
+          final itemCount = snapshot.data ?? 0;
+          return Stack(
+            children: [
+              IconButton(
+                icon: Icon(Icons.shopping_cart_rounded, size: 24),
+                onPressed: _currentHouseholdId.isNotEmpty ? _navigateToShoppingList : null,
+                tooltip: itemCount > 0 
+                    ? 'Shopping List ($itemCount items)' 
+                    : 'Shopping List',
               ),
+              if (itemCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: _errorColor,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      itemCount > 9 ? '9+' : itemCount.toString(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+      
+
+      
+      IconButton(
+        icon: Icon(Icons.chat_rounded, size: 24),
+        onPressed: _currentHouseholdId.isNotEmpty ? () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatPage(householdId: _currentHouseholdId),
+            ),
+          );
+        } : null,
+        tooltip: 'AI Assistant',
+      ),
+      
+      // 🆕 Settings Button (replaces refresh and switch household)
+      PopupMenuButton<String>(
+        icon: Icon(Icons.settings_rounded, size: 24),
+        tooltip: 'Settings',
+        onSelected: (value) {
+          if (value == 'refresh') {
+            _manualRefresh();
+          } else if (value == 'switch_household') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HouseholdService()),
             );
-          } : null,
-          tooltip: 'AI Assistant',
-        ),
-        if (_currentHousehold.isNotEmpty)
-          IconButton(
-            icon: Icon(Icons.swap_horiz_rounded, size: 24),
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => HouseholdService()),
-              );
-            },
-            tooltip: 'Switch Household',
+          }
+        },
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            value: 'refresh',
+            child: Row(
+              children: [
+                Icon(Icons.refresh_rounded, color: _textPrimary),
+                SizedBox(width: 12),
+                Text('Refresh Data'),
+              ],
+            ),
           ),
-      ],
-    );
-  }
+          PopupMenuItem<String>(
+            value: 'switch_household',
+            child: Row(
+              children: [
+                Icon(Icons.swap_horiz_rounded, color: _textPrimary),
+                SizedBox(width: 12),
+                Text('Switch Household'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+}
 
   Widget _buildBottomNavigationBar() {
     return Container(
@@ -2284,6 +2301,50 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
       ),
     );
   }
+
+  // 🆕 Create shopping list count stream
+  Stream<int> _createShoppingListCountStream() {
+    if (_currentHouseholdId.isEmpty) {
+      return Stream.value(0);
+    }
+    
+    // Create a periodic stream that checks shopping list count every 30 seconds
+    return Stream.periodic(Duration(seconds: 30), (_) => _currentHouseholdId)
+        .asyncMap((householdId) async {
+          try {
+            // Mock implementation - replace with your actual shopping list service
+            await Future.delayed(Duration(milliseconds: 100));
+            return 3; // Replace with actual count from your service
+          } catch (e) {
+            return 0;
+          }
+        });
+  }
+
+  // 🆕 Navigate to shopping list page
+  void _navigateToShoppingList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ShoppingListPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+          primaryColor: _primaryColor,
+          secondaryColor: _secondaryColor,
+          accentColor: _accentColor,
+          successColor: _successColor,
+          warningColor: _warningColor,
+          errorColor: _errorColor,
+          backgroundColor: _backgroundColor,
+          surfaceColor: _surfaceColor,
+          textPrimary: _textPrimary,
+          textSecondary: _textSecondary,
+          textLight: _textLight,
+        ),
+      ),
+    );
+  }
+
 
   // Utility methods
   String _formatDate(DateTime date) {

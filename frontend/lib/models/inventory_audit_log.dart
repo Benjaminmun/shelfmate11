@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
+import 'package:frontend/models/inventory_item_model.dart';
 class InventoryAuditLog {
   final String itemId;
   final String itemName;
@@ -25,6 +25,7 @@ class InventoryAuditLog {
     required this.updatedByFullName,
   });
 
+  // Convert to Firestore Map
   Map<String, dynamic> toMap() {
     return {
       'itemId': itemId,
@@ -40,6 +41,7 @@ class InventoryAuditLog {
     };
   }
 
+  // Convert from Firestore Map
   factory InventoryAuditLog.fromMap(Map<String, dynamic> map, String id) {
     try {
       return InventoryAuditLog(
@@ -60,7 +62,7 @@ class InventoryAuditLog {
     }
   }
 
-  // Helper method to convert values for Firestore storage
+  // Helper methods for conversion
   static dynamic _convertValueForFirestore(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return Timestamp.fromDate(value);
@@ -69,14 +71,12 @@ class InventoryAuditLog {
     return value.toString();
   }
 
-  // Helper method to parse values from Firestore
   static dynamic _parseValueFromFirestore(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) return value.toDate();
     return value;
   }
 
-  // Helper method to safely parse timestamp
   static DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
     if (timestamp is Timestamp) return timestamp.toDate();
@@ -84,7 +84,7 @@ class InventoryAuditLog {
     return DateTime.now();
   }
 
-  // Utility method to get display string for values
+  // Displaying values for UI
   String getOldValueDisplay() {
     return _valueToString(oldValue);
   }
@@ -103,64 +103,6 @@ class InventoryAuditLog {
     return value.toString();
   }
 
-  // Method to convert to activity map for UI display
-  Map<String, dynamic> toActivityMap() {
-    return {
-      'type': _getActivityType(),
-      'message': _generateActivityMessage(),
-      'timestamp': Timestamp.fromDate(timestamp),
-      'itemId': itemId,
-      'itemName': itemName,
-      'itemImage': itemImageUrl,
-      'fullName': updatedByFullName,
-      'profileImage': '', // You might want to add this field
-      'oldValue': oldValue,
-      'newValue': newValue,
-      'fieldName': fieldName,
-    };
-  }
-
-  String _getActivityType() {
-    if (oldValue == null && newValue != null) return 'add';
-    if (oldValue != null && newValue == null) return 'delete';
-    return 'update';
-  }
-
-  String _generateActivityMessage() {
-    final user = updatedByFullName.isNotEmpty ? updatedByFullName : 'A user';
-    final item = itemName.isNotEmpty ? itemName : 'an item';
-    
-    switch (_getActivityType()) {
-      case 'add':
-        return '$user added $item';
-      case 'delete':
-        return '$user deleted $item';
-      case 'update':
-        return '$user updated ${_getFieldDisplayName(fieldName)} for $item';
-      default:
-        return '$user modified $item';
-    }
-  }
-
-  String _getFieldDisplayName(String fieldName) {
-    switch (fieldName) {
-      case 'quantity':
-        return 'quantity';
-      case 'name':
-        return 'name';
-      case 'description':
-        return 'description';
-      case 'category':
-        return 'category';
-      case 'expiryDate':
-        return 'expiry date';
-      case 'price':
-        return 'price';
-      default:
-        return fieldName;
-    }
-  }
-
   @override
   String toString() {
     return 'InventoryAuditLog{\n'
@@ -172,5 +114,102 @@ class InventoryAuditLog {
         '  timestamp: $timestamp,\n'
         '  updatedBy: $updatedByFullName\n'
         '}';
+  }
+}
+
+// 📈 CONSUMPTION AND USAGE MODELS
+class CategoryConsumptionProfile {
+  final String category;
+  final double typicalDailyUsage;
+  final double seasonality;
+  final double urgencyMultiplier;
+  final double minStockLevelMultiplier;
+  final double expirySensitivity;
+  final ConsumptionPattern consumptionPattern;
+  final double priceSensitivity;
+  final double bulkPurchaseScore;
+  final double emergencyPriority;
+  final int lowStockThreshold;
+  final int expiryWarningThreshold;
+
+  const CategoryConsumptionProfile({
+    required this.category,
+    required this.typicalDailyUsage,
+    required this.seasonality,
+    required this.urgencyMultiplier,
+    required this.minStockLevelMultiplier,
+    required this.expirySensitivity,
+    required this.consumptionPattern,
+    required this.priceSensitivity,
+    required this.bulkPurchaseScore,
+    required this.emergencyPriority,
+    required this.lowStockThreshold,
+    required this.expiryWarningThreshold,
+  });
+}
+
+class CategoryConsumptionPattern {
+  final String category;
+  final double averageConsumptionRate;
+  final double consistencyScore;
+  final int dataPoints;
+  final double adjustmentFactor;
+
+  CategoryConsumptionPattern({
+    required this.category,
+    required this.averageConsumptionRate,
+    required this.consistencyScore,
+    required this.dataPoints,
+    required this.adjustmentFactor,
+  });
+}
+
+enum ConsumptionPattern {
+  daily,
+  regular,
+  steady,
+  irregular,
+  variable,
+}
+
+class UsageAnalysis {
+  final InventoryItem item;
+  final double consumptionRate;
+  final double daysOfSupply;
+  final double stockoutProbability;
+  final double expiryRisk;
+  final CategoryConsumptionProfile categoryProfile;
+  final DateTime? lastRestockDate;
+  final double usageConsistency;
+  final int minStockLevel;
+  final bool isBelowMinStock;
+  final double minStockCompliance;
+
+  UsageAnalysis({
+    required this.item,
+    required this.consumptionRate,
+    required this.daysOfSupply,
+    required this.stockoutProbability,
+    required this.expiryRisk,
+    required this.categoryProfile,
+    required this.lastRestockDate,
+    required this.usageConsistency,
+    required this.minStockLevel,
+    required this.isBelowMinStock,
+    required this.minStockCompliance,
+  });
+
+  Map<String, dynamic> toSummaryMap() {
+    return {
+      'consumptionRate': consumptionRate,
+      'daysOfSupply': daysOfSupply,
+      'stockoutProbability': stockoutProbability,
+      'expiryRisk': expiryRisk,
+      'usageConsistency': usageConsistency,
+      'lastRestockDate': lastRestockDate?.toIso8601String(),
+      'minStockLevel': minStockLevel,
+      'isBelowMinStock': isBelowMinStock,
+      'minStockCompliance': minStockCompliance,
+    };
   }
 }
