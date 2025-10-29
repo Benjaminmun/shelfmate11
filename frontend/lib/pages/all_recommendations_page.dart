@@ -59,6 +59,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   String _searchQuery = '';
   List<String> _selectedCategories = [];
   List<String> _selectedPriorities = [];
+  bool _showNotificationAlert = true; // Add this flag for notification alert
 
   @override
   void initState() {
@@ -140,6 +141,12 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   void _toggleCategoryView() {
     setState(() {
       _showCategoryView = !_showCategoryView;
+    });
+  }
+
+  void _dismissNotificationAlert() {
+    setState(() {
+      _showNotificationAlert = false;
     });
   }
 
@@ -387,6 +394,10 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
       ),
       body: Column(
         children: [
+          // Notification Alert Banner (NEW)
+          if (_showNotificationAlert && filteredRecommendations.isNotEmpty)
+            _buildNotificationAlert(),
+
           // Search and Filter Bar
           _buildSearchFilterBar(),
           
@@ -397,6 +408,79 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
           // Main Content
           Expanded(
             child: _buildContent(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Notification Alert Banner
+  Widget _buildNotificationAlert() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            widget.warningColor.withOpacity(0.9),
+            widget.accentColor.withOpacity(0.8),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: widget.warningColor.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.notifications_active_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Smart Recommendations Available',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Based on your inventory analysis and consumption patterns',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 12,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close_rounded, color: Colors.white, size: 18),
+            onPressed: _dismissNotificationAlert,
+            padding: EdgeInsets.zero,
+            constraints: BoxConstraints.tight(Size(32, 32)),
           ),
         ],
       ),
@@ -1299,6 +1383,9 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
     );
   }
 }
+
+// ... rest of the code remains the same (_AdvancedCategorySection, _AdvancedRecommendationItem, _DetailChip)
+
 
 class _AdvancedCategorySection extends StatefulWidget {
   final String category;

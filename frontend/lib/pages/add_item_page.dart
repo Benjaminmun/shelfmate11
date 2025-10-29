@@ -6,7 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
-import 'add_item_manually.dart'; 
+import 'add_item_manually.dart';
+import 'item_info_page.dart';
 
 // Initialize cameras list
 List<CameraDescription> cameras = [];
@@ -437,10 +438,9 @@ class ScannerCornersPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..strokeWidth = 4
-      ..style; PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke;
 
     final cornerLength = 25.0;
-
 
     // Top-left corner
     canvas.drawLine(Offset(0, 0), Offset(cornerLength, 0), paint);
@@ -569,7 +569,7 @@ class InventoryListItem extends StatelessWidget {
 }
 
 // =============================================
-// MAIN ADD ITEM PAGE WITH SIMPLE FADE IN ANIMATION
+// MAIN ADD ITEM PAGE WITH ITEM INFO PAGE INTEGRATION
 // =============================================
 
 class AddItemPage extends StatefulWidget {
@@ -589,22 +589,11 @@ class AddItemPage extends StatefulWidget {
 }
 
 class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStateMixin {
-  bool _isAddingToHousehold = false;
   bool _isFetchingFromAPI = false;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-
-  // Fixed categories
-  final List<String> _fixedCategories = [
-    'Food',
-    'Beverages',
-    'Cleaning Supplies',
-    'Personal Care',
-    'Medication',
-    'Other'
-  ];
 
   // Color scheme
   final Color primaryColor = Color(0xFF2D5D7C);
@@ -624,7 +613,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     // Initialize simple fade animation
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 500), // Shorter duration for fade
+      duration: Duration(milliseconds: 500),
     );
     
     _fadeAnimation = Tween<double>(
@@ -636,7 +625,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     ));
     
     _animationController.forward();
-    _checkFirestorePermissions(); // Check Firestore permissions on init
+    _checkFirestorePermissions();
   }
 
   @override
@@ -645,34 +634,83 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     super.dispose();
   }
 
-  // Check Firestore permissions
+  // Enhanced Firestore permissions check
   Future<void> _checkFirestorePermissions() async {
     try {
       print('🔐 Checking Firestore permissions...');
       
+      final user = _auth.currentUser;
+      if (user == null) {
+        print('❌ No user logged in');
+        return;
+      }
+      
       // Test write permission
-      final testDoc = _firestore.collection('test_permissions').doc('test');
+      final testDoc = _firestore.collection('test_permissions').doc(user.uid);
       await testDoc.set({
         'test': true,
-        'timestamp': FieldValue.serverTimestamp()
+        'timestamp': FieldValue.serverTimestamp(),
+        'userId': user.uid
       });
-      await testDoc.delete();
       print('✅ Firestore write permission: GRANTED');
       
-      // Test read permission
-      await _firestore.collection('products').limit(1).get();
-      print('✅ Firestore read permission: GRANTED');
+      // Test read permission with products collection
+      final testRead = await _firestore.collection('products').limit(1).get();
+      print('✅ Firestore read permission: GRANTED (${testRead.docs.length} documents accessible)');
       
+      // Clean up test document
+      await testDoc.delete();
+      print('✅ Test cleanup completed');
+      
+    } on FirebaseException catch (e) {
+      print('❌ Firebase permission error: ${e.code} - ${e.message}');
+      if (e.code == 'permission-denied') {
+        print('🔒 Firestore security rules are blocking access');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Database access denied. Please check security rules.'),
+            backgroundColor: Colors.red.shade600,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
-      print('❌ Firestore permission error: $e');
+      print('❌ Firestore permission check error: $e');
     }
   }
 
-  // Updated scan method using real-time scanner
+  // Check internet connectivity
+  Future<bool> _checkInternetConnection() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://www.google.com'),
+        headers: {'User-Agent': 'HouseholdInventoryApp/1.0'},
+      ).timeout(Duration(seconds: 5));
+      
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ No internet connection: $e');
+      return false;
+    }
+  }
+
+  // Updated scan method with connection check
   Future<void> _scanBarcode() async {
     if (widget.isReadOnly) return;
     
     try {
+      // Check internet connection first
+      final hasConnection = await _checkInternetConnection();
+      if (!hasConnection) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No internet connection. Some features may not work.'),
+            backgroundColor: Colors.orange.shade600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      
       // Show real-time barcode scanner
       final String? barcode = await Navigator.push(
         context,
@@ -689,8 +727,10 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
       );
 
       if (barcode != null && barcode.isNotEmpty) {
+        print('🎯 Barcode detected: $barcode');
         await _checkBarcodeInFirestore(barcode);
       } else if (barcode == null) {
+        print('❌ Barcode scanning cancelled by user');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Barcode scanning cancelled'),
@@ -703,9 +743,10 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
         );
       }
     } catch (e) {
+      print('❌ Error during scanning process: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error during scanning: $e'),
+          content: Text('Scanning error: ${e.toString()}'),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -716,7 +757,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     }
   }
 
-  // Enhanced caching with timestamp checking and debugging
+  // Enhanced barcode checking with better error handling
   Future<void> _checkBarcodeInFirestore(String barcode) async {
     if (widget.isReadOnly) return;
     
@@ -724,10 +765,12 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     print('🔍 Scanning barcode: $barcode');
     
     try {
+      // Add timeout for Firestore query
       final productDoc = await _firestore
           .collection('products')
           .doc(barcode)
-          .get();
+          .get()
+          .timeout(Duration(seconds: 10));
 
       // Debug: Log Firestore query result
       print('📊 Firestore document exists: ${productDoc.exists}');
@@ -740,7 +783,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
         print('   - Name: ${productData['name']}');
         print('   - Category: ${productData['category']}');
         print('   - Brand: ${productData['brand']}');
-        print('   - Full data: $productData');
+        print('   - Has lastUpdated: ${productData.containsKey('lastUpdated')}');
         
         final Timestamp? lastUpdated = productData['lastUpdated'] as Timestamp?;
         final DateTime now = DateTime.now();
@@ -750,10 +793,12 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
           final DateTime updateTime = lastUpdated.toDate();
           final Duration difference = now.difference(updateTime);
           
+          print('🕒 Cache age: ${difference.inDays} days');
+          
           if (difference.inDays < 30) {
             // Use cached data (fresh)
-            print('🔄 Using cached product data for barcode: $barcode');
-            _showProductDetails(productData, barcode);
+            print('✅ Using cached product data for barcode: $barcode');
+            _navigateToItemInfoPage(barcode, productData, 'cached');
             return;
           } else {
             // Cache is stale, fetch fresh data
@@ -765,17 +810,49 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
         
         // No timestamp, use cached data but mark as potentially stale
         print('🔄 Using cached product data (no timestamp) for barcode: $barcode');
-        _showProductDetails(productData, barcode);
+        _navigateToItemInfoPage(barcode, productData, 'cached');
       } else {
         // Product not found in Firestore, try OpenFoodFacts API
         print('❌ Product not found in Firestore for barcode: $barcode');
         await _fetchFromOpenFoodFacts(barcode);
       }
-    } catch (e) {
-      print('❌ Error checking product cache: $e');
+    } on TimeoutException catch (e) {
+      print('⏰ Firestore query timeout: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error checking product: $e'),
+          content: Text('Network timeout. Please try again.'),
+          backgroundColor: Colors.orange.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    } on FirebaseException catch (e) {
+      print('🔥 Firebase error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Database error: ${e.message}'),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    } catch (e) {
+      print('❌ Error checking product cache: $e');
+      // Provide more specific error message
+      String errorMessage = 'Error checking product database';
+      if (e.toString().contains('permission') || e.toString().contains('PERMISSION_DENIED')) {
+        errorMessage = 'Database permission denied. Please check your connection.';
+      } else if (e.toString().contains('network') || e.toString().contains('socket')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -872,27 +949,21 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
         print('📡 Fetched API data: ${data.toString()}');
         
         if (data['status'] == 1) {
-          // Product found in OpenFoodFacts
+          // Product found in OpenFoodFacts - NAVIGATE TO ITEM INFO PAGE
           print('✅ Product found in OpenFoodFacts');
           final productData = _parseOpenFoodFactsData(data['product'], barcode);
-          await _saveProductToFirestore(barcode, productData);
-          _showProductDetails(productData, barcode);
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Product data fetched and cached'),
-              backgroundColor: secondaryColor,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          // Navigate directly to ItemInfoPage with pre-filled data
+          _navigateToItemInfoPage(barcode, productData, 'openfoodfacts');
+          
         } else {
-          // Product not found in OpenFoodFacts - AUTO NAVIGATE TO EDIT PAGE
+          // Product not found - NAVIGATE TO ITEM INFO PAGE WITH BARCODE ONLY
           print('❌ Product not found in OpenFoodFacts API');
-          _autoNavigateToEditPageWithBarcode(barcode);
+          _navigateToItemInfoPage(barcode, null, 'scanned');
         }
       } else {
         print('❌ API request failed with status: ${response.statusCode}');
-        throw Exception('API request failed with status: ${response.statusCode}');
+        _navigateToItemInfoPage(barcode, null, 'scanned');
       }
     } on http.ClientException catch (e) {
       // Network error - try to use cached data if available
@@ -904,7 +975,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
       await _tryUseCachedDataOrNavigate(barcode);
     } catch (e) {
       print('❌ Error fetching from OpenFoodFacts: $e');
-      await _tryUseCachedDataOrNavigate(barcode);
+      _navigateToItemInfoPage(barcode, null, 'scanned');
     } finally {
       setState(() => _isFetchingFromAPI = false);
     }
@@ -959,42 +1030,6 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
     return categories.trim();
   }
 
-  // Enhanced product saving with debugging
-  Future<void> _saveProductToFirestore(String barcode, Map<String, dynamic> productData) async {
-    try {
-      print('💾 Attempting to save product to Firestore: $barcode');
-      
-      // Add timestamp and ensure all required fields
-      final dataToSave = {
-        ...productData,
-        'lastUpdated': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      
-      await _firestore
-          .collection('products')
-          .doc(barcode)
-          .set(dataToSave, SetOptions(merge: true));
-      
-      // Debug: Verify the save was successful
-      final savedDoc = await _firestore
-          .collection('products')
-          .doc(barcode)
-          .get();
-      
-      if (savedDoc.exists) {
-        print('✅ Product successfully saved to Firestore with barcode: $barcode');
-        print('📦 Saved product data: ${savedDoc.data()}');
-      } else {
-        print('❌ Failed to save product to Firestore - document does not exist after save');
-      }
-      
-    } catch (e) {
-      print('❌ Error saving product to Firestore: $e');
-      throw e;
-    }
-  }
-
   // Enhanced fallback method with debugging
   Future<void> _tryUseCachedDataOrNavigate(String barcode) async {
     print('🔄 Attempting fallback to cached data for barcode: $barcode');
@@ -1017,488 +1052,40 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
             behavior: SnackBarBehavior.floating,
           ),
         );
-        _showProductDetails(productData, barcode);
+        // Navigate to ItemInfoPage with cached data
+        _navigateToItemInfoPage(barcode, productData, 'cached');
       } else {
         print('❌ No cached data found for barcode: $barcode');
-        _autoNavigateToEditPageWithBarcode(barcode);
+        _navigateToItemInfoPage(barcode, null, 'scanned');
       }
     } catch (e) {
       print('❌ Error accessing cache: $e');
-      _autoNavigateToEditPageWithBarcode(barcode);
+      _navigateToItemInfoPage(barcode, null, 'scanned');
     }
   }
 
-  // New method for automatic navigation to edit page
-  void _autoNavigateToEditPageWithBarcode(String barcode) {
+  // Add new navigation method:
+  void _navigateToItemInfoPage(String barcode, Map<String, dynamic>? preFilledData, String source) {
     if (widget.isReadOnly) return;
     
-    // Close any open dialogs first
-    Navigator.popUntil(context, (route) => route is! PopupRoute);
+    // Add source to preFilledData if it exists
+    if (preFilledData != null) {
+      preFilledData['source'] = source;
+    } else {
+      preFilledData = {'source': source};
+    }
     
-    // Show a brief snackbar message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('📝 Product not found. Please enter details manually.'),
-        backgroundColor: accentColor,
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
-    
-    // Navigate to edit page after a short delay
-    Future.delayed(Duration(milliseconds: 500), () {
-      _navigateToEditPageWithBarcode(barcode);
-    });
-  }
-
-  void _showProductDetails(Map<String, dynamic> product, String barcode) {
-    if (widget.isReadOnly) return;
-    
-    // Show cache indicator
-    final bool isCached = product['source'] != 'openfoodfacts' || 
-                         product['lastUpdated'] != null;
-    
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.all(20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 20,
-                offset: Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                children: [
-                  Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                      image: product['imageUrl'] != null && product['imageUrl'].isNotEmpty
-                          ? DecorationImage(
-                              image: NetworkImage(product['imageUrl'].toString()),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                    ),
-                    child: product['imageUrl'] == null || product['imageUrl'].isEmpty
-                        ? Center(
-                            child: Icon(
-                              Icons.inventory_2,
-                              size: 50,
-                              color: lightTextColor,
-                            ),
-                          )
-                        : null,
-                  ),
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.5),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 16,
-                    left: 16,
-                    right: 16,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          product['name']?.toString() ?? 'Unknown Product',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 4),
-                        Row(
-                          children: [
-                            if (product['nutritionGrade'] != null && product['nutritionGrade'].isNotEmpty)
-                              Container(
-                                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _getNutritionGradeColor(product['nutritionGrade']),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'Nutri-Score: ${product['nutritionGrade'].toUpperCase()}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Barcode: $barcode',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (isCached)
-                          Container(
-                            margin: EdgeInsets.only(top: 4),
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.8),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.cached, size: 10, color: Colors.white),
-                                SizedBox(width: 4),
-                                Text(
-                                  'From Cache',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else if (product['source'] == 'openfoodfacts')
-                          Container(
-                            margin: EdgeInsets.only(top: 4),
-                            padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withOpacity(0.8),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'From OpenFoodFacts',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDetailRow(
-                      'Brand',
-                      product['brand']?.toString() ?? 'Not specified',
-                      Icons.business,
-                    ),
-                    SizedBox(height: 12),
-                    _buildDetailRow(
-                      'Category',
-                      product['category']?.toString() ?? 'Uncategorized',
-                      Icons.category,
-                    ),
-                    SizedBox(height: 12),
-                    _buildDetailRow(
-                      'Quantity',
-                      product['quantity']?.toString() ?? 'N/A',
-                      Icons.scale,
-                    ),
-                    SizedBox(height: 12),
-                    if (product['description'] != null && product['description'].isNotEmpty)
-                      _buildDetailRow(
-                        'Description',
-                        product['description'].toString(),
-                        Icons.description,
-                      ),
-                    SizedBox(height: 12),
-                    if (product['ingredients'] != null && product['ingredients'].isNotEmpty)
-                      _buildDetailRow(
-                        'Ingredients',
-                        product['ingredients'].toString().length > 100 
-                            ? '${product['ingredients'].toString().substring(0, 100)}...' 
-                            : product['ingredients'].toString(),
-                        Icons.eco,
-                      ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _isAddingToHousehold ? null : () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: primaryColor,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          side: BorderSide(color: primaryColor),
-                        ),
-                        child: Text('Cancel'),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isAddingToHousehold ? null : () {
-                          _addToHousehold(product, barcode);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: _isAddingToHousehold
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : Text('Add to Household'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ItemInfoPage(
+          householdId: widget.householdId,
+          householdName: widget.householdName,
+          barcode: barcode,
+          preFilledData: preFilledData,
+          isEditing: false,
         ),
       ),
-    );
-  }
-
-  Color _getNutritionGradeColor(String grade) {
-    switch (grade.toLowerCase()) {
-      case 'a': return Colors.green;
-      case 'b': return Colors.lightGreen;
-      case 'c': return Colors.yellow;
-      case 'd': return Colors.orange;
-      case 'e': return Colors.red;
-      default: return Colors.grey;
-    }
-  }
-
-  // Category validation before saving with enhanced debugging
-  Future<void> _addToHousehold(Map<String, dynamic> product, String barcode) async {
-    if (_isAddingToHousehold) return;
-    
-    setState(() {
-      _isAddingToHousehold = true;
-    });
-
-    try {
-      // Get current user ID
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) {
-        throw Exception('User not authenticated');
-      }
-
-      // Verify household exists
-      final householdDoc = await _firestore
-          .collection('households')
-          .doc(widget.householdId)
-          .get();
-
-      if (!householdDoc.exists) {
-        throw Exception('Household does not exist');
-      }
-
-      // VALIDATE CATEGORY: Ensure it's one of the fixed categories
-      String finalCategory = product['category'] ?? 'Other';
-      if (!_fixedCategories.contains(finalCategory)) {
-        finalCategory = 'Other';
-      }
-
-      // Create inventory item with product reference
-      final inventoryData = {
-        'barcode': barcode,
-        'productRef': _firestore.collection('products').doc(barcode),
-        'name': product['name'] ?? 'Unknown Product',
-        'category': finalCategory, // guaranteed safe category
-        'brand': product['brand'] ?? 'Unknown Brand',
-        'quantity': 1, // Default quantity
-        'minStockLevel': 1,
-        'location': '', // User can set this later
-        'expiryDate': null,
-        'purchaseDate': FieldValue.serverTimestamp(),
-        'imageUrl': product['imageUrl'] ?? '',
-        'description': product['description'] ?? '',
-        'addedAt': FieldValue.serverTimestamp(),
-        'addedByUserId': userId,
-        'addedByUserName': _auth.currentUser?.displayName ?? 'Unknown User',
-        'householdId': widget.householdId,
-        'householdName': widget.householdName,
-        'source': product['source'] ?? 'manual',
-        'lastUpdated': FieldValue.serverTimestamp(),
-        'originalCategory': product['originalCategory'] ?? 'Unknown', // Keep original for reference
-        'hasExpiryDate': false, // Default to no expiry date
-      };
-
-      // Debug logging before saving to household
-      print('🏠 Adding product to household inventory:');
-      print('   - Household ID: ${widget.householdId}');
-      print('   - Product: ${product['name']}');
-      print('   - Barcode: $barcode');
-      print('📝 Inventory data to save:');
-      print('   - Name: ${inventoryData['name']}');
-      print('   - Category: ${inventoryData['category']}');
-      print('   - Barcode: ${inventoryData['barcode']}');
-
-      final docRef = await _firestore
-          .collection('households')
-          .doc(widget.householdId)
-          .collection('inventory')
-          .add(inventoryData);
-
-      // Verify the document was created
-      final createdDoc = await docRef.get();
-      if (!createdDoc.exists) {
-        throw Exception('Failed to create inventory item');
-      }
-
-      // Close the product details dialog
-      Navigator.pop(context);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Item successfully added to ${widget.householdName}'),
-          backgroundColor: secondaryColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          duration: Duration(seconds: 3),
-        ),
-      );
-
-      print('✅ Item added successfully with ID: ${docRef.id}');
-      print('📊 Inventory data: $inventoryData');
-
-    } on FirebaseException catch (e) {
-      String errorMessage;
-      switch (e.code) {
-        case 'permission-denied':
-          errorMessage = '❌ Permission denied. Check Firestore security rules.';
-          break;
-        case 'not-found':
-          errorMessage = '❌ Household document not found.';
-          break;
-        case 'unavailable':
-          errorMessage = '❌ Network unavailable. Please check your connection.';
-          break;
-        default:
-          errorMessage = '❌ Firestore error: ${e.message}';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          duration: Duration(seconds: 5),
-        ),
-      );
-      print('🔥 Firestore Error: ${e.code} - ${e.message}');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Unexpected error: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          duration: Duration(seconds: 5),
-        ),
-      );
-      print('💥 Unexpected Error: $e');
-    } finally {
-      setState(() {
-        _isAddingToHousehold = false;
-      });
-    }
-  }
-
-  Widget _buildDetailRow(String label, String value, IconData icon) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 20,
-          color: primaryColor,
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: lightTextColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: textColor,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -1512,23 +1099,7 @@ class _AddItemPageState extends State<AddItemPage> with SingleTickerProviderStat
           householdId: widget.householdId,
           householdName: widget.householdName,
           userRole: widget.isReadOnly ? 'member' : 'creator',
-          barcode: null,
-        ),
-      ),
-    );
-  }
-
-  void _navigateToEditPageWithBarcode(String barcode) {
-    if (widget.isReadOnly) return;
-    
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddItemManually(
-          householdId: widget.householdId,
-          householdName: widget.householdName,
-          userRole: widget.isReadOnly ? 'member' : 'creator',
-          barcode: barcode,
+          barcode: null, // No barcode for manual entry
         ),
       ),
     );

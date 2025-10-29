@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dashboard_page.dart';
 import 'member_dashboard_page.dart';
-import 'editor_dashboard_page.dart'; // ADD THIS IMPORT
+import 'editor_dashboard_page.dart';
 
 class HouseholdService extends StatefulWidget {
   @override
@@ -372,24 +372,6 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         'action': () {
           Navigator.pop(context);
           _showFamilyMembersDialog(context);
-        },
-      },
-      {
-        'icon': Icons.notifications_none,
-        'title': 'Notifications',
-        'subtitle': 'Configure alert preferences',
-        'action': () {
-          Navigator.pop(context);
-          // Navigate to notification settings
-        },
-      },
-      {
-        'icon': Icons.help_outline,
-        'title': 'Help & Support',
-        'subtitle': 'Get assistance with the app',
-        'action': () {
-          Navigator.pop(context);
-          // Navigate to help section
         },
       },
     ];
@@ -971,6 +953,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: Duration(seconds: 3),
       ),
     );
   }
@@ -988,6 +971,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: Duration(seconds: 4),
       ),
     );
   }
@@ -1162,6 +1146,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         ),
         centerTitle: false,
         iconTheme: const IconThemeData(color: Colors.white),
+        // UPDATED: Removed notification and help & support buttons
         actions: _showSearchBar 
             ? []
             : [
@@ -1169,11 +1154,6 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                   icon: const Icon(FeatherIcons.search, size: 20),
                   onPressed: _toggleSearchBar,
                   tooltip: 'Search',
-                ),
-                IconButton(
-                  icon: const Icon(FeatherIcons.bell, size: 20),
-                  onPressed: () {},
-                  tooltip: 'Notifications',
                 ),
                 IconButton(
                   icon: const Icon(FeatherIcons.plusCircle, size: 20),
@@ -1524,7 +1504,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     );
   }
 
-  // NEW: Helper method to get role display name
+  // Helper method to get role display name
   String _getRoleDisplayName(String userRole) {
     switch (userRole) {
       case 'creator':
@@ -1537,7 +1517,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     }
   }
 
-  // NEW: Helper method to get role color
+  // Helper method to get role color
   Color _getRoleColor(String userRole) {
     switch (userRole) {
       case 'creator':

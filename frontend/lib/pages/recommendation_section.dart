@@ -4,6 +4,119 @@ import '../services/shopping_list_service.dart';
 import 'shopping_list_page.dart';
 import 'all_recommendations_page.dart';
 
+// Notification Service for managing notifications
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final List<InventoryNotification> _notifications = [];
+  final List<VoidCallback> _listeners = [];
+
+  void addListener(VoidCallback listener) {
+    _listeners.add(listener);
+  }
+
+  void removeListener(VoidCallback listener) {
+    _listeners.remove(listener);
+  }
+
+  void _notifyListeners() {
+    for (final listener in _listeners) {
+      listener();
+    }
+  }
+
+  void addNotification(InventoryNotification notification) {
+    // Avoid duplicates
+    if (!_notifications.any((n) => 
+        n.itemId == notification.itemId && 
+        n.type == notification.type &&
+        n.timestamp.difference(notification.timestamp).inHours < 1)) {
+      
+      _notifications.add(notification);
+      _notifyListeners();
+      
+      print('🔔 Added notification: ${notification.title}');
+    }
+  }
+
+  void dismissNotification(String notificationId) {
+    _notifications.removeWhere((n) => n.id == notificationId);
+    _notifyListeners();
+  }
+
+  void dismissAllNotifications() {
+    _notifications.clear();
+    _notifyListeners();
+  }
+
+  List<InventoryNotification> get notifications => List.unmodifiable(_notifications);
+  int get unreadCount => _notifications.length;
+
+  void clearExpiredNotifications() {
+    final now = DateTime.now();
+    _notifications.removeWhere((notification) => 
+        now.difference(notification.timestamp).inHours > 24);
+    _notifyListeners();
+  }
+}
+
+// Notification Model
+class InventoryNotification {
+  final String id;
+  final String title;
+  final String message;
+  final String type; // 'low_stock', 'expiry', 'recommendation', 'system'
+  final String priority; // 'high', 'medium', 'low'
+  final String itemId;
+  final String itemName;
+  final DateTime timestamp;
+  final Map<String, dynamic>? actionData;
+  bool isRead;
+
+  InventoryNotification({
+    required this.title,
+    required this.message,
+    required this.type,
+    required this.priority,
+    required this.itemId,
+    required this.itemName,
+    this.actionData,
+    this.isRead = false,
+  }) : 
+    id = '${DateTime.now().millisecondsSinceEpoch}_${itemId}_$type',
+    timestamp = DateTime.now();
+
+  Color getColor(BuildContext context) {
+    switch (priority) {
+      case 'high':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      case 'low':
+        return Colors.blue;
+      default:
+        return Theme.of(context).primaryColor;
+    }
+  }
+
+  IconData getIcon() {
+    switch (type) {
+      case 'low_stock':
+        return Icons.inventory_2_rounded;
+      case 'expiry':
+        return Icons.calendar_today_rounded;
+      case 'recommendation':
+        return Icons.auto_awesome_rounded;
+      case 'system':
+        return Icons.info_rounded;
+      default:
+        return Icons.notifications_rounded;
+    }
+  }
+}
+
 class RecommendationSection extends StatefulWidget {
   final String householdId;
   final String householdName;
@@ -49,12 +162,16 @@ class RecommendationSection extends StatefulWidget {
 class _RecommendationSectionState extends State<RecommendationSection> {
   final InventoryRecommendationService _recommendationService = InventoryRecommendationService();
   final ShoppingListService _shoppingListService = ShoppingListService();
+  final NotificationService _notificationService = NotificationService();
   
   List<Map<String, dynamic>> _smartRecommendations = [];
   bool _isRecommendationsLoading = false;
   bool _hasError = false;
   int _shoppingListCount = 0;
   Set<String> _itemsInCart = Set<String>();
+  List<InventoryNotification> _notifications = [];
+  OverlayEntry? _notificationOverlay;
+  bool _showNotificationsPanel = false;
 
   @override
   void initState() {
@@ -62,6 +179,190 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     _loadSmartRecommendations();
     _loadShoppingListCount();
     _loadCartState();
+    _setupNotificationListener();
+    _scheduleNotificationCheck();
+  }
+
+  @override
+  void dispose() {
+    _notificationService.removeListener(_updateNotifications);
+    _removeNotificationOverlay();
+    super.dispose();
+  }
+
+  void _setupNotificationListener() {
+    _notificationService.addListener(_updateNotifications);
+  }
+
+  void _updateNotifications() {
+    if (mounted) {
+      setState(() {
+        _notifications = _notificationService.notifications;
+      });
+    }
+  }
+
+  void _scheduleNotificationCheck() {
+    // Check for notifications every 30 seconds
+    Future.delayed(Duration(seconds: 30), () {
+      if (mounted) {
+        _checkForNewNotifications();
+        _scheduleNotificationCheck();
+      }
+    });
+  }
+
+  Future<void> _checkForNewNotifications() async {
+    if (_smartRecommendations.isEmpty) return;
+
+    for (final recommendation in _smartRecommendations) {
+      final type = recommendation['type'] as String? ?? '';
+      final priority = recommendation['priority'] as String? ?? 'medium';
+      final itemId = recommendation['itemId'] as String? ?? '';
+      final itemName = recommendation['itemName'] as String? ?? 'Unknown Item';
+      final title = recommendation['title'] as String? ?? '';
+      final message = recommendation['message'] as String? ?? '';
+
+      // Only create notifications for high and medium priority items
+      if (priority == 'high' || priority == 'medium') {
+        final notificationType = _getNotificationTypeFromRecommendation(type);
+        
+        final notification = InventoryNotification(
+          title: title,
+          message: message,
+          type: notificationType,
+          priority: priority,
+          itemId: itemId,
+          itemName: itemName,
+          actionData: recommendation,
+        );
+
+        _notificationService.addNotification(notification);
+        
+        // Show immediate popup for high priority notifications
+        if (priority == 'high' && mounted) {
+          _showImmediateNotificationPopup(notification);
+        }
+      }
+    }
+  }
+
+  String _getNotificationTypeFromRecommendation(String recommendationType) {
+    if (recommendationType.contains('stock')) return 'low_stock';
+    if (recommendationType.contains('expiry')) return 'expiry';
+    return 'recommendation';
+  }
+
+  void _showImmediateNotificationPopup(InventoryNotification notification) {
+    // Remove any existing overlay
+    _removeNotificationOverlay();
+
+    // Create new overlay entry
+    _notificationOverlay = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 10,
+        left: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: _buildNotificationPopup(notification),
+        ),
+      ),
+    );
+
+    // Insert overlay
+    Overlay.of(context).insert(_notificationOverlay!);
+
+    // Auto remove after 5 seconds
+    Future.delayed(Duration(seconds: 5), () {
+      _removeNotificationOverlay();
+    });
+  }
+
+  void _removeNotificationOverlay() {
+    if (_notificationOverlay != null) {
+      _notificationOverlay?.remove();
+      _notificationOverlay = null;
+    }
+  }
+
+  Widget _buildNotificationPopup(InventoryNotification notification) {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      margin: EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: notification.getColor(context).withOpacity(0.95),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            _removeNotificationOverlay();
+            _handleNotificationAction(notification);
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(notification.getIcon(), color: Colors.white, size: 20),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        notification.title,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        notification.message,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                  onPressed: _removeNotificationOverlay,
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints.tightFor(width: 32, height: 32),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadSmartRecommendations() async {
@@ -83,6 +384,9 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           _smartRecommendations = recommendations;
           _isRecommendationsLoading = false;
         });
+        
+        // Check for notifications after loading recommendations
+        _checkForNewNotifications();
       }
     } catch (e) {
       print('❌ Error loading recommendations: $e');
@@ -126,6 +430,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     setState(() {
       _smartRecommendations = [];
       _itemsInCart.clear();
+      _notificationService.clearExpiredNotifications();
     });
     await Future.wait([
       _loadSmartRecommendations(),
@@ -159,7 +464,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     ).then((_) {
       _loadShoppingListCount();
       _loadCartState();
-      _loadSmartRecommendations(); // Reload to reflect any changes
+      _loadSmartRecommendations();
     });
   }
 
@@ -186,7 +491,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     ).then((_) {
       _loadShoppingListCount();
       _loadCartState();
-      _loadSmartRecommendations(); // Reload to reflect any changes
+      _loadSmartRecommendations();
     });
   }
 
@@ -200,10 +505,8 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
     try {
       if (isCurrentlyInCart) {
-        // Remove from cart
         await _removeFromCart(itemId);
       } else {
-        // Add to cart - this will remove from recommendations
         await _addToCart(recommendation);
       }
     } catch (e) {
@@ -220,7 +523,6 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     
     setState(() {
       _itemsInCart.add(itemId);
-      // Remove the recommendation from the smart recommendations list
       _smartRecommendations.removeWhere((rec) => rec['itemId'] == itemId);
     });
 
@@ -238,11 +540,16 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         
         final quantity = 1;
         widget.onAddToShoppingList(itemName, quantity, itemId);
+
+        // Remove any notifications for this item
+        _notificationService.notifications
+          .where((n) => n.itemId == itemId)
+          .toList()
+          .forEach((n) => _notificationService.dismissNotification(n.id));
       } else {
         _showErrorSnackbar('Failed to add $itemName: ${result['error']}');
         setState(() {
           _itemsInCart.remove(itemId);
-          // Add back to recommendations if failed
           _smartRecommendations.add(recommendation);
         });
       }
@@ -251,7 +558,6 @@ class _RecommendationSectionState extends State<RecommendationSection> {
       _showErrorSnackbar('Error adding $itemName to cart: $e');
       setState(() {
         _itemsInCart.remove(itemId);
-        // Add back to recommendations if failed
         _smartRecommendations.add(recommendation);
       });
     }
@@ -269,8 +575,6 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         });
         _showInfoSnackbar('Item removed from cart');
         _loadShoppingListCount();
-        
-        // Reload recommendations to potentially show the item again
         _loadSmartRecommendations();
       } else {
         _showErrorSnackbar('Failed to remove item: ${result['error']}');
@@ -283,34 +587,46 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        _buildHeader(),
-        const SizedBox(height: 16),
-        
-        if (_hasError) ...[
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: ElevatedButton.icon(
-              icon: Icon(Icons.bug_report_rounded),
-              label: Text('Debug Shopping List Issue'),
-              onPressed: _debugTestShoppingList,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: widget.warningColor,
-                foregroundColor: Colors.white,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 16),
+            
+            if (_hasError) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.bug_report_rounded),
+                  label: Text('Debug Shopping List Issue'),
+                  onPressed: _debugTestShoppingList,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.warningColor,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ),
-            ),
+            ],
+            
+            _isRecommendationsLoading
+                ? _buildRecommendationsLoading()
+                : _hasError
+                    ? _buildErrorState()
+                    : _smartRecommendations.isEmpty
+                        ? _buildNoRecommendations()
+                        : _buildDashboardRecommendations(),
+          ],
+        ),
+
+        // Notifications Panel
+        if (_showNotificationsPanel)
+          Positioned(
+            top: 80,
+            right: 16,
+            child: _buildNotificationsPanel(),
           ),
-        ],
-        
-        _isRecommendationsLoading
-            ? _buildRecommendationsLoading()
-            : _hasError
-                ? _buildErrorState()
-                : _smartRecommendations.isEmpty
-                    ? _buildNoRecommendations()
-                    : _buildDashboardRecommendations(),
       ],
     );
   }
@@ -330,7 +646,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Smart Recommendations',
+                  'Recommendations',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -338,18 +654,61 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'AI-powered inventory insights',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: widget.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
               ],
             ),
             const Spacer(),
+            
+            // Notifications Icon with Badge
+            Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: _notifications.isNotEmpty 
+                        ? widget.warningColor.withOpacity(0.1)
+                        : widget.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      _notifications.isNotEmpty 
+                          ? Icons.notifications_active_rounded 
+                          : Icons.notifications_rounded,
+                      size: 22,
+                    ),
+                    onPressed: _toggleNotificationsPanel,
+                    tooltip: '${_notifications.length} notifications',
+                    color: _notifications.isNotEmpty ? widget.warningColor : widget.primaryColor,
+                  ),
+                ),
+                if (_notifications.isNotEmpty)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: widget.warningColor,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      child: Text(
+                        '${_notifications.length}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            
+            const SizedBox(width: 8),
             
             // Shopping Cart Icon with Badge
             Stack(
@@ -469,6 +828,245 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     );
   }
 
+  void _toggleNotificationsPanel() {
+    setState(() {
+      _showNotificationsPanel = !_showNotificationsPanel;
+    });
+  }
+
+  Widget _buildNotificationsPanel() {
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 320,
+        decoration: BoxDecoration(
+          color: widget.surfaceColor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 20,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: widget.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.notifications_rounded, color: widget.primaryColor, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Inventory Alerts',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: widget.textPrimary,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Spacer(),
+                  if (_notifications.isNotEmpty)
+                    TextButton(
+                      onPressed: _notificationService.dismissAllNotifications,
+                      child: Text(
+                        'Clear All',
+                        style: TextStyle(
+                          color: widget.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 18),
+                    onPressed: _toggleNotificationsPanel,
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints.tightFor(width: 32, height: 32),
+                  ),
+                ],
+              ),
+            ),
+
+            // Notifications List
+            if (_notifications.isEmpty)
+              Container(
+                padding: EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(Icons.notifications_off_rounded, size: 48, color: widget.textLight),
+                    SizedBox(height: 12),
+                    Text(
+                      'No Alerts',
+                      style: TextStyle(
+                        color: widget.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'You\'re all caught up!',
+                      style: TextStyle(
+                        color: widget.textLight,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Container(
+                constraints: BoxConstraints(maxHeight: 400),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _notifications.length,
+                  itemBuilder: (context, index) {
+                    final notification = _notifications[index];
+                    return _buildNotificationItem(notification);
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationItem(InventoryNotification notification) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleNotificationAction(notification),
+        child: Container(
+          padding: EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: widget.backgroundColor,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: notification.getColor(context).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  notification.getIcon(),
+                  color: notification.getColor(context),
+                  size: 18,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            notification.title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: widget.textPrimary,
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: notification.getColor(context).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            notification.priority.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: notification.getColor(context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      notification.message,
+                      style: TextStyle(
+                        color: widget.textSecondary,
+                        fontSize: 12,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      _formatTimeAgo(notification.timestamp),
+                      style: TextStyle(
+                        color: widget.textLight,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close_rounded, size: 16),
+                onPressed: () => _notificationService.dismissNotification(notification.id),
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints.tightFor(width: 24, height: 24),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleNotificationAction(InventoryNotification notification) {
+    _notificationService.dismissNotification(notification.id);
+    
+    if (notification.actionData != null) {
+      _handleRecommendationAction(notification.actionData!);
+    } else {
+      widget.onNavigateToItem(notification.itemId);
+    }
+    
+    setState(() {
+      _showNotificationsPanel = false;
+    });
+  }
+
+  String _formatTimeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    return '${difference.inDays}d ago';
+  }
+
+  // ... (keep all the existing _buildStateWidget, _buildRecommendationsLoading, 
+  // _buildErrorState, _buildNoRecommendations, _buildDashboardRecommendations methods)
+
   Widget _buildStateWidget(String title, String subtitle, IconData icon, Color iconColor, {String? actionText, VoidCallback? onAction}) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -583,13 +1181,11 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   }
 
   Widget _buildDashboardRecommendations() {
-    // Get limited recommendations for dashboard (1-2 items)
     final displayedRecommendations = _smartRecommendations.take(widget.maxDisplayCount).toList();
     final hasMoreRecommendations = _smartRecommendations.length > widget.maxDisplayCount;
     
     return Column(
       children: [
-        // Display limited recommendations
         ...displayedRecommendations.map((recommendation) => 
           _DashboardRecommendationItem(
             recommendation: recommendation,
@@ -605,7 +1201,6 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           )
         ).toList(),
         
-        // "View All Recommendations" button
         if (hasMoreRecommendations) ...[
           const SizedBox(height: 16),
           Container(
@@ -1044,7 +1639,7 @@ class _DashboardRecommendationItem extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onToggleCart, // Toggle cart status on tap
+          onTap: onToggleCart,
           borderRadius: BorderRadius.circular(16),
           child: Container(
             padding: const EdgeInsets.all(16),
@@ -1058,7 +1653,6 @@ class _DashboardRecommendationItem extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Icon with status indicator
                 Stack(
                   children: [
                     Container(
@@ -1101,7 +1695,6 @@ class _DashboardRecommendationItem extends StatelessWidget {
                 
                 const SizedBox(width: 12),
                 
-                // Content
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

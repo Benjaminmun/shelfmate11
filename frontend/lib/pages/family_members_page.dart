@@ -265,7 +265,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   Widget _buildRoleBadge(String role) {
     final bool isCreator = role == 'creator';
-    
     final bool isEditor = role == 'editor';
     
     return Container(
@@ -504,7 +503,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     switch (role) {
       case 'creator':
         return Icons.star;
-
       case 'editor':
         return Icons.edit;
       case 'member':
@@ -1351,7 +1349,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             ),
             SizedBox(height: 16),
             Text(
-              'Your household family members will appear here once they join.\nStart by inviting your family members to create a connected household.',
+              'Your household family members will appear here once they join.\nShare your household code with family members to get started.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
@@ -1359,35 +1357,6 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                 height: 1.6,
               ),
             ),
-            SizedBox(height: 32),
-            if (_isOwner)
-              ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          Icon(Icons.person_add, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text('Invite functionality coming soon!'),
-                        ],
-                      ),
-                      backgroundColor: accentColor,
-                    ),
-                  );
-                },
-                icon: Icon(Icons.person_add_alt_1),
-                label: Text('Invite Family Members'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentColor,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                  elevation: 4,
-                ),
-              ),
           ],
         ),
       ),
@@ -1448,26 +1417,8 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
           icon: Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => Navigator.pop(context),
         ),
+        centerTitle: true,
         actions: [
-          if (_isOwner)
-            IconButton(
-              icon: Icon(Icons.person_add_alt_1),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Row(
-                      children: [
-                        Icon(Icons.person_add, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('Add member functionality coming soon!'),
-                      ],
-                    ),
-                    backgroundColor: accentColor,
-                  ),
-                );
-              },
-              tooltip: 'Add Member',
-            ),
           IconButton(
             icon: Icon(Icons.refresh_rounded),
             onPressed: () => _loadData(),
@@ -1493,51 +1444,53 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                     onRefresh: () => _loadData(),
                     color: primaryColor,
                     backgroundColor: backgroundColor,
-                    child: ListView.builder(
+                    child: CustomScrollView(
                       controller: _scrollController,
-                      padding: EdgeInsets.all(16),
-                      itemCount: _householdMembers.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == _householdMembers.length) {
-                          return _buildLoadMoreButton();
-                        }
-                        return _buildMemberCard(_householdMembers[index], index);
-                      },
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Family Members',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  '${_householdMembers.length} member${_householdMembers.length != 1 ? 's' : ''} in your household',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              return Padding(
+                                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                child: _buildMemberCard(_householdMembers[index], index),
+                              );
+                            },
+                            childCount: _householdMembers.length,
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: _buildLoadMoreButton(),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-      floatingActionButton: _isOwner ? _buildFloatingActionButton() : null,
-    );
-  }
-
-  Widget _buildFloatingActionButton() {
-    return AnimatedOpacity(
-      opacity: _showFab ? 1.0 : 0.0,
-      duration: Duration(milliseconds: 300),
-      child: FloatingActionButton.extended(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.person_add, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Invite family members functionality coming soon!'),
-                ],
-              ),
-              backgroundColor: accentColor,
-            ),
-          );
-        },
-        icon: Icon(Icons.person_add_alt_1),
-        label: Text('Invite'),
-        backgroundColor: accentColor,
-        foregroundColor: Colors.white,
-        elevation: 8,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(25),
-        ),
-      ),
     );
   }
 }

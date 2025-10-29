@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'item_info_page.dart';
 
 class AddItemManually extends StatefulWidget {
   final String householdId;
@@ -15,7 +16,7 @@ class AddItemManually extends StatefulWidget {
   final String userRole;
   final String? barcode;
   final InventoryItem? existingItem;
-  final Map<String, dynamic>? productData; // New parameter for product data
+  final Map<String, dynamic>? productData;
 
   const AddItemManually({
     Key? key,
@@ -24,7 +25,7 @@ class AddItemManually extends StatefulWidget {
     required this.userRole,
     this.barcode,
     this.existingItem,
-    this.productData, // Accept product data
+    this.productData,
   }) : super(key: key);
 
   @override
@@ -116,8 +117,27 @@ class _AddItemManuallyState extends State<AddItemManually> with SingleTickerProv
     );
     
     _isReadOnly = widget.userRole == 'member';
-    _initializeForm();
-    _animationController.forward();
+    
+    // If barcode is provided and no existing item, navigate to ItemInfoPage
+    if (widget.barcode != null && widget.existingItem == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ItemInfoPage(
+              householdId: widget.householdId,
+              householdName: widget.householdName,
+              barcode: widget.barcode!,
+              preFilledData: widget.productData ?? {'source': 'manual'},
+              isEditing: false,
+            ),
+          ),
+        );
+      });
+    } else {
+      _initializeForm();
+      _animationController.forward();
+    }
   }
 
   void _initializeForm() {
