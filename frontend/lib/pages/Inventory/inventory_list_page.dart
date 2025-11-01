@@ -1,26 +1,87 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/inventory_item_model.dart';
-import '../services/inventory_service.dart';
-import 'inventory_details_page.dart';
+import '../../models/inventory_item_model.dart';
+import '../../services/inventory_service.dart';
+import 'inventory_edit_page.dart';
 import 'dart:async';
 
-class MemberInventoryListPage extends StatefulWidget {
+// =============================================
+// EXPIRY DATE MANAGEMENT & NOTIFICATIONS
+// =============================================
+
+class ExpiryDateManager {
+  // Check if item is expiring soon (within 7 days)
+  static bool isExpiringSoon(DateTime? expiryDate) {
+    if (expiryDate == null) return false;
+    final now = DateTime.now();
+    final difference = expiryDate.difference(now);
+    return difference.inDays <= 7 && difference.inDays >= 0;
+  }
+  
+  // Check if item is expired
+  static bool isExpired(DateTime? expiryDate) {
+    if (expiryDate == null) return false;
+    return expiryDate.isBefore(DateTime.now());
+  }
+  
+  // Get expiry status color
+  static Color getExpiryStatusColor(DateTime? expiryDate) {
+    if (expiryDate == null) return Colors.grey; // No expiry date
+    
+    if (isExpired(expiryDate)) {
+      return Colors.red; // Expired
+    } else if (isExpiringSoon(expiryDate)) {
+      return Colors.orange; // Expiring soon
+    } else {
+      return Colors.green; // Not expiring soon
+    }
+  }
+  
+  // Get expiry status text
+  static String getExpiryStatusText(DateTime? expiryDate) {
+    if (expiryDate == null) return 'No Expiry';
+    
+    if (isExpired(expiryDate)) {
+      final days = DateTime.now().difference(expiryDate).inDays;
+      return 'Expired ${days == 0 ? 'today' : '$days days ago'}';
+    } else if (isExpiringSoon(expiryDate)) {
+      final days = expiryDate.difference(DateTime.now()).inDays;
+      return 'Expires in $days ${days == 1 ? 'day' : 'days'}';
+    } else {
+      final days = expiryDate.difference(DateTime.now()).inDays;
+      return 'Expires in $days ${days == 1 ? 'day' : 'days'}';
+    }
+  }
+
+  // Get days until expiry
+  static int? getDaysUntilExpiry(DateTime? expiryDate) {
+    if (expiryDate == null) return null;
+    final now = DateTime.now();
+    if (expiryDate.isBefore(now)) {
+      return -now.difference(expiryDate).inDays;
+    }
+    return expiryDate.difference(now).inDays;
+  }
+}
+
+class InventoryListPage extends StatefulWidget {
   final String householdId;
   final String householdName;
+  final bool isReadOnly;
 
-  const MemberInventoryListPage({
+  const InventoryListPage({
     Key? key,
     required this.householdId,
     required this.householdName,
+    this.isReadOnly = false,
   }) : super(key: key);
 
   @override
-  _MemberInventoryListPageState createState() => _MemberInventoryListPageState();
+  _InventoryListPageState createState() => _InventoryListPageState();
 }
 
-class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
+class _InventoryListPageState extends State<InventoryListPage> {
   final InventoryService _inventoryService = InventoryService();
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color secondaryColor = Color(0xFF4CAF50);
@@ -115,7 +176,6 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
                           _sortAscending = !_sortAscending;
                         });
                         Navigator.pop(context);
-                        _refreshData();
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: primaryColor,
@@ -165,7 +225,6 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
           _sortField = field;
         });
         Navigator.pop(context);
-        _refreshData();
       },
     );
   }
@@ -240,7 +299,7 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: false, 
         title: Text(
           '${widget.householdName} Inventory',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
@@ -399,35 +458,6 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
                 ),
               ),
 
-            // Member access info banner
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
-                border: Border(
-                  bottom: BorderSide(color: primaryColor.withOpacity(0.2)),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.visibility, size: 16, color: primaryColor),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'View Only - Member Access',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Icon(Icons.lock_outline, size: 16, color: primaryColor),
-                ],
-              ),
-            ),
-
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: _inventoryService.getItemsStream(
@@ -448,7 +478,7 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
                     return _buildEmptyState();
                   }
 
-                  // Process items
+                  // Process items directly from the stream
                   List<InventoryItem> items = snapshot.data!.docs.map((doc) {
                     return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
                   }).toList();
@@ -461,7 +491,7 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
                     final matchesCategory = _selectedCategory == 'All' || item.category == _selectedCategory;
                     final matchesLowStock = !_showLowStockOnly || item.quantity < 5;
                     final matchesExpiringSoon = !_showExpiringSoonOnly || 
-                        (item.expiryDate != null && _isExpiringSoon(item.expiryDate!));
+                        (item.expiryDate != null && ExpiryDateManager.isExpiringSoon(item.expiryDate));
                     
                     return matchesSearch && matchesCategory && matchesLowStock && matchesExpiringSoon;
                   }).toList();
@@ -484,62 +514,45 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
           ],
         ),
       ),
+      // Only show FAB if not in read-only mode
+      floatingActionButton: widget.isReadOnly 
+          ? null 
+          : FloatingActionButton(
+              onPressed: () {
+                _navigateToEditPage();
+              },
+              backgroundColor: secondaryColor,
+              child: Icon(Icons.add, color: Colors.white, size: 28),
+              elevation: 4,
+              tooltip: 'Add new item',
+            ),
     );
   }
 
-  bool _isExpiringSoon(DateTime expiryDate) {
-    final now = DateTime.now();
-    final difference = expiryDate.difference(now);
-    return difference.inDays <= 7 && difference.inDays >= 0;
-  }
-
-  bool _isExpired(DateTime expiryDate) {
-    return expiryDate.isBefore(DateTime.now());
-  }
-
-  bool _isLowStock(InventoryItem item) {
-    return item.quantity < 5;
-  }
-
-  void _navigateToDetailsPage(InventoryItem item) {
+  void _navigateToEditPage({InventoryItem? item}) {
+    // Don't navigate if in read-only mode
+    if (widget.isReadOnly) return;
+    
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => InventoryDetailsPage(
-          item: item,
+        builder: (context) => InventoryEditPage(
+          householdId: widget.householdId,
           householdName: widget.householdName,
-          userRole: 'member',
+          item: item,
+          userRole: 'creator',
         ),
       ),
     );
   }
 
   Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
-    final bool isLowStock = _isLowStock(item);
+    final bool isLowStock = item.quantity < 5;
     final bool hasExpiryDate = item.expiryDate != null;
-    final bool isExpired = hasExpiryDate && _isExpired(item.expiryDate!);
-    final bool isExpiringSoon = hasExpiryDate && _isExpiringSoon(item.expiryDate!);
-    
-    Color expiryStatusColor = Colors.green;
-    if (isExpired) {
-      expiryStatusColor = Colors.red;
-    } else if (isExpiringSoon) {
-      expiryStatusColor = Colors.orange;
-    }
-
-    String expiryStatusText = 'No Expiry';
-    if (hasExpiryDate) {
-      if (isExpired) {
-        final days = DateTime.now().difference(item.expiryDate!).inDays;
-        expiryStatusText = 'Expired ${days == 0 ? 'today' : '$days days ago'}';
-      } else if (isExpiringSoon) {
-        final days = item.expiryDate!.difference(DateTime.now()).inDays;
-        expiryStatusText = 'Expires in $days ${days == 1 ? 'day' : 'days'}';
-      } else {
-        final days = item.expiryDate!.difference(DateTime.now()).inDays;
-        expiryStatusText = 'Expires in $days ${days == 1 ? 'day' : 'days'}';
-      }
-    }
+    final Color expiryStatusColor = ExpiryDateManager.getExpiryStatusColor(item.expiryDate);
+    final String expiryStatusText = ExpiryDateManager.getExpiryStatusText(item.expiryDate);
+    final bool isExpired = ExpiryDateManager.isExpired(item.expiryDate);
+    final bool isExpiringSoon = ExpiryDateManager.isExpiringSoon(item.expiryDate);
     
     return Card(
       elevation: 4,
@@ -547,9 +560,11 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          _navigateToDetailsPage(item);
-        },
+        onTap: widget.isReadOnly 
+            ? null // Disable tap in read-only mode
+            : () {
+                _navigateToEditPage(item: item);
+              },
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Row(
@@ -767,6 +782,29 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
                   ],
                 ),
               ),
+              
+              // Action buttons - Only show if not in read-only mode
+              if (!widget.isReadOnly) ...[
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit, color: primaryColor),
+                      onPressed: () {
+                        _navigateToEditPage(item: item);
+                      },
+                      tooltip: 'Edit item',
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      onPressed: () {
+                        _showDeleteDialog(item);
+                      },
+                      tooltip: 'Delete item',
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -918,10 +956,28 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
             ),
             SizedBox(height: 8),
             Text(
-              'The household inventory is currently empty',
+              'Add your first item to get started',
               style: TextStyle(fontSize: 16, color: lightTextColor),
               textAlign: TextAlign.center,
             ),
+            SizedBox(height: 32),
+            // Only show the button if not in read-only mode
+            if (!widget.isReadOnly) ...[
+              ElevatedButton(
+                onPressed: () {
+                  _navigateToEditPage();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: secondaryColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
+                child: Text(
+                  'Add First Item',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -963,6 +1019,90 @@ class _MemberInventoryListPageState extends State<MemberInventoryListPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDeleteDialog(InventoryItem item) {
+    // Don't show delete dialog in read-only mode
+    if (widget.isReadOnly) return;
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning_amber, size: 48, color: Colors.orange),
+                SizedBox(height: 16),
+                Text(
+                  'Delete Item',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: textColor),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Are you sure you want to delete "${item.name}"?',
+                  style: TextStyle(fontSize: 16, color: lightTextColor),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text('Cancel', style: TextStyle(color: primaryColor)),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          try {
+                            await _inventoryService.deleteItem(widget.householdId, item.id!);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('"${item.name}" deleted successfully'),
+                                backgroundColor: secondaryColor,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            );
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error deleting item: $e'),
+                                backgroundColor: Colors.red,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text('Delete', style: TextStyle(color: Colors.white)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:timeago/timeago.dart' as timeago;
-import '../services/household_service_controller.dart';
+import '../../services/household_service_controller.dart';
 
 class FamilyMembersPage extends StatefulWidget {
   final String householdId;

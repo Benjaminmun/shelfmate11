@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/services/inventory_reccomendation_service.dart';
-import '../services/shopping_list_service.dart';
+import '../../services/shopping_list_service.dart';
 import 'shopping_list_page.dart';
 import 'all_recommendations_page.dart';
 

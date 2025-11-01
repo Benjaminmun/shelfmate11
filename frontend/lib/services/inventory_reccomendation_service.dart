@@ -351,13 +351,10 @@ class InventoryRecommendationService {
         priority: priority,
         recommendationData: {
           'type': fixedRecommendation['type'],
-          'aiConfidence': fixedRecommendation['aiConfidence'],
           'analysis': fixedRecommendation['analysisSummary'],
-          'source': 'ai_recommendation',
           'originalRecommendation': fixedRecommendation,
           'addedAt': DateTime.now().toIso8601String(),
           'formattedEstimatedPrice': _formatCurrency(exactPrice),
-          'priceSource': 'firestore_exact',
         },
       );
 

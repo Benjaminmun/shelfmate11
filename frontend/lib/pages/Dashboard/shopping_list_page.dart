@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/shopping_list_service.dart';
+import '../../services/shopping_list_service.dart';
 
 class ShoppingListPage extends StatefulWidget {
   final String householdId;

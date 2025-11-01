@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'household_service.dart';
+import 'Household/household_service.dart';
 import 'user_info_page.dart';
 
 class ProfilePage extends StatefulWidget {

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
-import 'household_service.dart';
-import 'member_inventory_list_page.dart';
-import 'chat_page.dart';
-import '../services/household_service_controller.dart';
-import 'expense_tracker_page.dart';
-import 'profile_page.dart';
+import '../Household/household_service.dart';
+import '../Inventory/member_inventory_list_page.dart';
+import '../chat_page.dart';
+import '../../services/household_service_controller.dart';
+import '../expense_tracker_page.dart';
+import '../profile_page.dart';
 import 'dart:async';
 
 class DashboardService {

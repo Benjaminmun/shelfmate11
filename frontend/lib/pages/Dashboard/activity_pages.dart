@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:frontend/pages/dashboard_page.dart';
+import 'package:frontend/pages/Dashboard/dashboard_page.dart';
 
 // Enhanced Activity Item Widget
 class EnhancedActivityItem extends StatelessWidget {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:frontend/services/inventory_reccomendation_service.dart';
-import '../services/shopping_list_service.dart';
+import '../../services/shopping_list_service.dart';
 import 'shopping_list_page.dart';
 
 class AllRecommendationsPage extends StatefulWidget {

@@ -4,9 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
-import '../pages/dashboard_page.dart';
-import '../pages/member_dashboard_page.dart';
-import '../pages/editor_dashboard_page.dart'; // ADD THIS IMPORT
+import '../pages/Dashboard/dashboard_page.dart';
+import '../pages/Dashboard/member_dashboard_page.dart';
+import '../pages/Dashboard/editor_dashboard_page.dart'; // ADD THIS IMPORT
 import '../pages/login_page.dart';
 
 class PaginationResult {

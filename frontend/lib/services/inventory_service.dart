@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:frontend/pages/dashboard_page.dart';
+import 'package:frontend/pages/Dashboard/dashboard_page.dart';
 import '../models/inventory_audit_log.dart';
 import '../models/inventory_item_model.dart' show InventoryItem;
 

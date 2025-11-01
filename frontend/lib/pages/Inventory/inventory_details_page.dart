@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/inventory_item_model.dart';
+import '../../models/inventory_item_model.dart';
 
 class InventoryDetailsPage extends StatefulWidget {
   final InventoryItem item;

@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
-import '../models/inventory_item_model.dart';
-import '../services/inventory_service.dart';
+import '../../models/inventory_item_model.dart';
+import '../../services/inventory_service.dart';
 
 class InventoryEditPage extends StatefulWidget {
   final String householdId;

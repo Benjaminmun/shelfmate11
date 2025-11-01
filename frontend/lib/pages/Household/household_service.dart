@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_feather_icons/flutter_feather_icons.dart';
-import 'user_info_page.dart';
-import '../services/household_service_controller.dart';
+import '../user_info_page.dart';
+import '../../services/household_service_controller.dart';
 import 'family_members_page.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'dashboard_page.dart';
-import 'member_dashboard_page.dart';
-import 'editor_dashboard_page.dart';
+import '../Dashboard/dashboard_page.dart';
+import '../Dashboard/member_dashboard_page.dart';
+import '../Dashboard/editor_dashboard_page.dart';
 
 class HouseholdService extends StatefulWidget {
   @override

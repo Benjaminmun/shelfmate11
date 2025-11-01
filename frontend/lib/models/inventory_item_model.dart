@@ -1,6 +1,63 @@
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp, FieldValue;
 
-/// Represents an item stored in the inventory.
+// 🏠 HOUSEHOLD PROFILE MODEL
+class HouseholdProfile {
+  final String householdId;
+  final Set<String> preferredItems;
+  final Set<String> ignoredItems;
+  final Map<String, int> restockFrequency;
+  final Map<String, double> categoryPreferences;
+  final Map<String, double> averageConsumptionRates;
+  final Map<String, double> categoryConsumptionRates;
+  DateTime lastUpdated;
+  final List<Map<String, dynamic>> purchaseHistory;
+  final Map<String, double> budgetLimits;
+
+  HouseholdProfile({
+    required this.householdId,
+    required this.preferredItems,
+    required this.ignoredItems,
+    required this.restockFrequency,
+    required this.categoryPreferences,
+    required this.averageConsumptionRates,
+    required this.categoryConsumptionRates,
+    required this.lastUpdated,
+    required this.purchaseHistory,
+    required this.budgetLimits,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'householdId': householdId,
+      'preferredItems': preferredItems.toList(),
+      'ignoredItems': ignoredItems.toList(),
+      'restockFrequency': restockFrequency,
+      'categoryPreferences': categoryPreferences,
+      'averageConsumptionRates': averageConsumptionRates,
+      'categoryConsumptionRates': categoryConsumptionRates,
+      'lastUpdated': lastUpdated.toIso8601String(),
+      'purchaseHistory': purchaseHistory,
+      'budgetLimits': budgetLimits,
+    };
+  }
+
+  factory HouseholdProfile.fromMap(Map<String, dynamic> map) {
+    return HouseholdProfile(
+      householdId: map['householdId'] ?? '',
+      preferredItems: Set<String>.from(map['preferredItems'] ?? []),
+      ignoredItems: Set<String>.from(map['ignoredItems'] ?? []),
+      restockFrequency: Map<String, int>.from(map['restockFrequency'] ?? {}),
+      categoryPreferences: Map<String, double>.from(map['categoryPreferences'] ?? {}),
+      averageConsumptionRates: Map<String, double>.from(map['averageConsumptionRates'] ?? {}),
+      categoryConsumptionRates: Map<String, double>.from(map['categoryConsumptionRates'] ?? {}),
+      lastUpdated: DateTime.parse(map['lastUpdated'] ?? DateTime.now().toIso8601String()),
+      purchaseHistory: List<Map<String, dynamic>>.from(map['purchaseHistory'] ?? []),
+      budgetLimits: Map<String, double>.from(map['budgetLimits'] ?? {}),
+    );
+  }
+}
+
+// 📦 COMPREHENSIVE INVENTORY ITEM MODEL
 class InventoryItem {
   final String? id;
   final String name;
@@ -15,7 +72,7 @@ class InventoryItem {
   final String? barcode;
   final int? minStockLevel;
   final String? imageUrl;
-  final String? localImagePath; // ✅ Added for locally stored image support
+  final String? localImagePath;
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String? addedByUserId;
@@ -77,7 +134,7 @@ class InventoryItem {
   }
 
   /// Converts Firestore document into InventoryItem object
-  static InventoryItem fromMap(Map<String, dynamic> map, String id) {
+  factory InventoryItem.fromMap(Map<String, dynamic> map, String id) {
     return InventoryItem(
       id: id,
       name: map['name'] ?? '',
@@ -197,49 +254,3 @@ class InventoryItem {
   }
 }
 
-
-/// Represents a product in the global products collection (without localImagePath)
-class Product {
-  final String barcode;
-  final String name;
-  final String brand;
-  final String category;
-  final String? description;
-  final String? imageUrl; // ✅ Only Firebase Storage URL, no localImagePath
-  final DateTime lastUpdated;
-
-  Product({
-    required this.barcode,
-    required this.name,
-    required this.brand,
-    required this.category,
-    this.description,
-    this.imageUrl, // ❌ No localImagePath in products collection
-    required this.lastUpdated,
-  });
-
-  /// Converts object to Firestore-compatible map
-  Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'brand': brand,
-      'category': category,
-      'description': description,
-      'imageUrl': imageUrl, // ✅ Only URL, no local path
-      'lastUpdated': Timestamp.fromDate(lastUpdated),
-    };
-  }
-
-  /// Converts Firestore document into Product object
-  static Product fromMap(Map<String, dynamic> map, String barcode) {
-    return Product(
-      barcode: barcode,
-      name: map['name'] ?? '',
-      brand: map['brand'] ?? '',
-      category: map['category'] ?? 'Other',
-      description: map['description'],
-      imageUrl: map['imageUrl'], // ✅ Only URL from products collection
-      lastUpdated: (map['lastUpdated'] as Timestamp).toDate(),
-    );
-  }
-}
