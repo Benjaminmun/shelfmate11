@@ -933,12 +933,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         _isActivitiesLoading = true;
       });
       
-      await _dashboardService.logActivity(
-        _currentHouseholdId,
-        'Dashboard data was manually refreshed',
-        'info',
-      );
-      
       _setupRealTimeSubscriptions();
     }
   }

@@ -610,7 +610,7 @@ class _InventoryDetailsPageState extends State<InventoryDetailsPage> with Single
                           _buildDetailRow('Item Name', widget.item.name, icon: Icons.label_outline),
                           _buildDetailRow('Category', widget.item.category, icon: Icons.category_outlined),
                           _buildDetailRow('Quantity', '${widget.item.quantity}', icon: Icons.format_list_numbered),
-                          _buildDetailRow('Price', '\$${widget.item.price.toStringAsFixed(2)}', icon: Icons.attach_money),
+                          _buildDetailRow('Price', 'RM${widget.item.price.toStringAsFixed(2)}', icon: Icons.attach_money),
                         ],
                       ),
                       

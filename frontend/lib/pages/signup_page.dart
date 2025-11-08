@@ -28,8 +28,22 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Password strength notifier
+  // Enhanced password strength notifier
   final ValueNotifier<PasswordStrength?> _passwordStrengthNotifier = ValueNotifier<PasswordStrength?>(null);
+  final List<String> _commonPasswords = [
+    'password', '123456', '12345678', '1234', 'qwerty', 'abc123', 
+    'password1', 'admin', 'welcome', 'monkey', 'letmein', 'shadow'
+  ];
+
+  // Custom password validation rules
+  final Map<String, bool> _passwordValidation = {
+    'min_length': false,
+    'uppercase': false,
+    'lowercase': false,
+    'numbers': false,
+    'special_chars': false,
+    'not_common': false,
+  };
 
   @override
   void initState() {
@@ -65,10 +79,112 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
 
   void _updatePasswordStrength() {
     final password = passwordController.text;
+    
     if (password.isEmpty) {
       _passwordStrengthNotifier.value = null;
-    } else {
-      _passwordStrengthNotifier.value = PasswordStrength.calculate(text: password);
+      _resetPasswordValidation();
+      return;
+    }
+
+    // Update validation rules
+    _passwordValidation['min_length'] = password.length >= 8;
+    _passwordValidation['uppercase'] = RegExp(r'[A-Z]').hasMatch(password);
+    _passwordValidation['lowercase'] = RegExp(r'[a-z]').hasMatch(password);
+    _passwordValidation['numbers'] = RegExp(r'[0-9]').hasMatch(password);
+    _passwordValidation['special_chars'] = RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password);
+    _passwordValidation['not_common'] = !_commonPasswords.contains(password.toLowerCase());
+
+    // Calculate custom strength score
+    final strength = _calculateCustomPasswordStrength(password);
+    _passwordStrengthNotifier.value = strength;
+  }
+
+  PasswordStrength _calculateCustomPasswordStrength(String password) {
+    int score = 0;
+    int maxScore = 6; // Number of validation criteria
+
+    // Base score from validation rules
+    _passwordValidation.forEach((key, value) {
+      if (value) score++;
+    });
+
+    // Bonus points for length
+    if (password.length >= 12) score += 1;
+    if (password.length >= 16) score += 1;
+
+    // Penalty for sequential characters
+    if (_hasSequentialCharacters(password)) score = score > 0 ? score - 1 : 0;
+
+    // Calculate percentage
+    double percentage = score / (maxScore + 2); // +2 for bonus points
+
+    // Convert to PasswordStrength enum
+    if (percentage >= 0.8) return PasswordStrength.secure;
+    if (percentage >= 0.6) return PasswordStrength.strong;
+    if (percentage >= 0.4) return PasswordStrength.medium;
+    return PasswordStrength.weak;
+  }
+
+  bool _hasSequentialCharacters(String password) {
+    // Check for sequential numbers (123, 456, etc.)
+    for (int i = 0; i < password.length - 2; i++) {
+      int char1 = password.codeUnitAt(i);
+      int char2 = password.codeUnitAt(i + 1);
+      int char3 = password.codeUnitAt(i + 2);
+      
+      if (char2 == char1 + 1 && char3 == char2 + 1) {
+        return true;
+      }
+    }
+    
+    // Check for sequential letters (abc, def, etc.)
+    final lowerPassword = password.toLowerCase();
+    for (int i = 0; i < lowerPassword.length - 2; i++) {
+      int char1 = lowerPassword.codeUnitAt(i);
+      int char2 = lowerPassword.codeUnitAt(i + 1);
+      int char3 = lowerPassword.codeUnitAt(i + 2);
+      
+      if (char1 >= 97 && char1 <= 122 && 
+          char2 == char1 + 1 && 
+          char3 == char2 + 1) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  void _resetPasswordValidation() {
+    _passwordValidation.updateAll((key, value) => false);
+  }
+
+  String _getPasswordStrengthText(PasswordStrength? strength) {
+    switch (strength) {
+      case PasswordStrength.weak:
+        return 'Weak password';
+      case PasswordStrength.medium:
+        return 'Medium strength';
+      case PasswordStrength.strong:
+        return 'Strong password';
+      case PasswordStrength.secure:
+        return 'Very strong password';
+      default:
+        return 'Enter a password';
+    }
+  }
+
+  Color _getPasswordStrengthColor(PasswordStrength? strength) {
+    switch (strength) {
+      case PasswordStrength.weak:
+        return Colors.red;
+      case PasswordStrength.medium:
+        return Colors.orange;
+      case PasswordStrength.strong:
+        return Colors.lightGreen;
+      case PasswordStrength.secure:
+        return Colors.green;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -83,10 +199,10 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   Future<void> _signUpWithEmailPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Additional password strength validation
+    // Enhanced password strength validation
     final strength = _passwordStrengthNotifier.value;
     if (strength == PasswordStrength.weak || strength == null) {
-      _showDialog('Weak Password', 'Please choose a stronger password. Your password should include uppercase letters, numbers, and special characters.');
+      _showDialog('Weak Password', 'Please choose a stronger password. Your password should include:\n\n• At least 8 characters\n• Uppercase and lowercase letters\n• Numbers\n• Special characters\n• Not a common password');
       return;
     }
 
@@ -115,7 +231,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
 
       // After successful signup, send email verification
       await userCredential.user!.sendEmailVerification();
-      _showDialog('Success', 'Sign-up successful! Please verify your email.');
+      _showDialog('Success', 'Sign-up successful! Please check your email to verify your account before logging in.');
 
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
@@ -129,13 +245,29 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   }
 
   void _handleFirebaseAuthError(FirebaseAuthException e) {
-    if (e.code == 'weak-password') {
-      _showDialog('Error', 'The password provided is too weak.');
-    } else if (e.code == 'email-already-in-use') {
-      _showDialog('Error', 'The account already exists for that email.');
-    } else {
-      _showDialog('Error', e.message!);
+    String errorMessage = 'An error occurred during sign-up.';
+    
+    switch (e.code) {
+      case 'weak-password':
+        errorMessage = 'The password provided is too weak. Please choose a stronger password.';
+        break;
+      case 'email-already-in-use':
+        errorMessage = 'An account already exists with this email address.';
+        break;
+      case 'invalid-email':
+        errorMessage = 'The email address is not valid.';
+        break;
+      case 'operation-not-allowed':
+        errorMessage = 'Email/password accounts are not enabled. Please contact support.';
+        break;
+      case 'network-request-failed':
+        errorMessage = 'Network error. Please check your internet connection.';
+        break;
+      default:
+        errorMessage = e.message ?? errorMessage;
     }
+    
+    _showDialog('Error', errorMessage);
   }
 
   void _showDialog(String title, String message) {
@@ -149,13 +281,26 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(title == 'Success' ? Icons.check_circle : Icons.error_outline, 
-                      color: title == 'Success' ? Color(0xFF4CAF50) : Colors.red, 
-                      size: 60),
+                Icon(
+                  title == 'Success' ? Icons.check_circle : Icons.error_outline, 
+                  color: title == 'Success' ? Color(0xFF4CAF50) : Colors.red, 
+                  size: 60
+                ),
                 SizedBox(height: 16),
-                Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2D5D7C))),
+                Text(
+                  title, 
+                  style: TextStyle(
+                    fontSize: 20, 
+                    fontWeight: FontWeight.bold, 
+                    color: Color(0xFF2D5D7C)
+                  )
+                ),
                 SizedBox(height: 16),
-                Text(message, textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+                Text(
+                  message, 
+                  textAlign: TextAlign.center, 
+                  style: TextStyle(fontSize: 16)
+                ),
                 SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -190,7 +335,10 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                       padding: EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(title == 'Success' ? 'Continue to Login' : 'Try Again', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      title == 'Success' ? 'Continue to Login' : 'Try Again', 
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)
+                    ),
                   ),
                 ),
               ],
@@ -299,6 +447,9 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                               if (value == null || value.isEmpty) {
                                 return 'Please enter your full name';
                               }
+                              if (value.trim().split(' ').length < 2) {
+                                return 'Please enter your full name (first and last name)';
+                              }
                               return null;
                             },
                           ),
@@ -319,7 +470,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                                 return 'Please enter your email';
                               }
                               if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                                return 'Please enter a valid email';
+                                return 'Please enter a valid email address';
                               }
                               return null;
                             },
@@ -346,7 +497,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                                     return 'Password must be at least 6 characters';
                                   }
                                   
-                                  // Additional strength validation
+                                  // Enhanced strength validation
                                   final strength = _passwordStrengthNotifier.value;
                                   if (strength == PasswordStrength.weak) {
                                     return 'Please choose a stronger password';
@@ -354,8 +505,12 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                                   return null;
                                 },
                               ),
+                              SizedBox(height: 12),
+                              // Enhanced password strength indicator
+                              _buildPasswordStrengthIndicator(),
                               SizedBox(height: 8),
-                              // Password strength indicator
+                              // Password requirements checklist
+                              _buildPasswordRequirements(),
                             ],
                           ),
                         ),
@@ -447,6 +602,104 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPasswordStrengthIndicator() {
+    return ValueListenableBuilder<PasswordStrength?>(
+      valueListenable: _passwordStrengthNotifier,
+      builder: (context, strength, child) {
+        if (strength == null || passwordController.text.isEmpty) {
+          return SizedBox();
+        }
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: strength == PasswordStrength.weak ? 0.25 :
+                           strength == PasswordStrength.medium ? 0.5 :
+                           strength == PasswordStrength.strong ? 0.75 : 1.0,
+                    backgroundColor: Colors.grey[300],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      _getPasswordStrengthColor(strength),
+                    ),
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  _getPasswordStrengthText(strength),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: _getPasswordStrengthColor(strength),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPasswordRequirements() {
+    return ValueListenableBuilder<PasswordStrength?>(
+      valueListenable: _passwordStrengthNotifier,
+      builder: (context, strength, child) {
+        if (passwordController.text.isEmpty) {
+          return SizedBox();
+        }
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Password requirements:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[600],
+              ),
+            ),
+            SizedBox(height: 4),
+            _buildRequirementItem('At least 8 characters', _passwordValidation['min_length']!),
+            _buildRequirementItem('Uppercase letter (A-Z)', _passwordValidation['uppercase']!),
+            _buildRequirementItem('Lowercase letter (a-z)', _passwordValidation['lowercase']!),
+            _buildRequirementItem('Number (0-9)', _passwordValidation['numbers']!),
+            _buildRequirementItem('Special character (!@#\$%)', _passwordValidation['special_chars']!),
+            _buildRequirementItem('Not a common password', _passwordValidation['not_common']!),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRequirementItem(String text, bool isMet) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 16,
+            color: isMet ? Colors.green : Colors.grey,
+          ),
+          SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: isMet ? Colors.green : Colors.grey,
+            ),
+          ),
+        ],
       ),
     );
   }

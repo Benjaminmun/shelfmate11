@@ -21,7 +21,7 @@ class DashboardService {
   Future<Map<String, dynamic>> _getUserDisplayInfo() async {
     final user = _auth.currentUser;
     if (user == null) {
-      return {'userName': 'Unknown', 'fullName': 'Unknown User', 'role': 'member'};
+      return {'userName': 'Unknown', 'fullName': 'Unknown User', 'role': 'editor'};
     }
     
     try {
@@ -30,8 +30,7 @@ class DashboardService {
         final data = userDoc.data();
         final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
         final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
-        final role = data?['role'] as String? ?? 'member'; // Default to 'member' if not set
-        
+        final role = data?['role'] as String? ?? 'editor'; 
         return {
           'userName': userName,
           'fullName': fullName,
@@ -47,7 +46,7 @@ class DashboardService {
     return {
       'userName': fallbackName,
       'fullName': fallbackName,
-      'role': 'member',
+      'role': 'Editor',
     };
   }
 

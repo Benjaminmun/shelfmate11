@@ -465,7 +465,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   sortField: _sortField, 
                   sortAscending: _sortAscending
                 ),
-                builder: (context, snapshot) {
+                builder: (context, snapshot) {  
                   if (snapshot.hasError) {
                     return _buildErrorState('Error loading inventory: ${snapshot.error}');
                   }
