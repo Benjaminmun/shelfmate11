@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import '../Household/household_service.dart';
 import '../Inventory/member_inventory_list_page.dart';
-import '../chat_page.dart';
 import '../../services/household_service_controller.dart';
 import '../expense_tracker_page.dart';
 import '../profile_page.dart';
@@ -478,18 +477,7 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
           onPressed: _manualRefresh,
           tooltip: 'Refresh Data',
         ),
-        IconButton(
-          icon: Icon(Icons.chat_rounded, size: 24),
-          onPressed: _currentHouseholdId.isNotEmpty ? () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatPage(householdId: _currentHouseholdId),
-              ),
-            );
-          } : null,
-          tooltip: 'AI Assistant',
-        ),
+    
         if (_currentHousehold.isNotEmpty)
           IconButton(
             icon: Icon(Icons.swap_horiz_rounded, size: 24),
@@ -899,20 +887,6 @@ class _MemberDashboardPageState extends State<MemberDashboardPage> with SingleTi
               Icons.analytics_rounded,
               _warningColor,
               () => setState(() => _currentIndex = 2),
-            ),
-            _buildEnhancedActionCard(
-              'AI Assistant',
-              'Get help with your inventory',
-              Icons.chat_rounded,
-              _accentColor,
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ChatPage(householdId: _currentHouseholdId),
-                  ),
-                );
-              },
             ),
             _buildEnhancedActionCard(
               'Switch Household',

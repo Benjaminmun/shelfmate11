@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import '../Household/household_service.dart';
 import '../Inventory/inventory_list_page.dart';
-import '../chat_page.dart';
 import '../../services/household_service_controller.dart';
 import '../Inventory/add_item_page.dart';
 import '../expense_tracker_page.dart';
@@ -1018,19 +1017,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     centerTitle: true,
     actions: [
 
-      
-      IconButton(
-        icon: Icon(Icons.chat_rounded, size: 24),
-        onPressed: _currentHouseholdId.isNotEmpty ? () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatPage(householdId: _currentHouseholdId),
-            ),
-          );
-        } : null,
-        tooltip: 'AI Assistant',
-      ),
+    
       
       // 🆕 Settings Button (replaces refresh and switch household)
       PopupMenuButton<String>(
@@ -1876,20 +1863,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               _successColor,
               () => setState(() => _currentIndex = 2),
             ),
-            _buildEnhancedActionCard(
-              'AI Assistant',
-              'Get help with your inventory',
-              Icons.chat_rounded,
-              _accentColor,
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ChatPage(householdId: _currentHouseholdId ),
-                  ),
-                );
-              },
-            ),
+
             _buildEnhancedActionCard(
               'Expense Tracking',
               'Monitor your spending',
