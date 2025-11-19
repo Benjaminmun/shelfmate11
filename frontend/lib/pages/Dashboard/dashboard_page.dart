@@ -15,36 +15,38 @@ import 'recommendation_section.dart';
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // Enhanced method to get user info including fullName
   Future<Map<String, String>> _getUserDisplayInfo() async {
     final user = _auth.currentUser;
     if (user == null) {
       return {'userName': 'Unknown', 'fullName': 'Unknown User'};
     }
-    
+
     try {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         final data = userDoc.data();
-        final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
-        final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
-        
-        return {
-          'userName': userName,
-          'fullName': fullName,
-        };
+        final userName =
+            data?['userName'] as String? ??
+            user.displayName ??
+            user.email?.split('@').first ??
+            'Unknown';
+        final fullName =
+            data?['fullName'] as String? ??
+            data?['displayName'] as String? ??
+            userName;
+
+        return {'userName': userName, 'fullName': fullName};
       }
     } catch (e) {
       print('Error fetching user info: $e');
     }
-    
+
     // Fallback to Firebase Auth display name
-    final fallbackName = user.displayName ?? user.email?.split('@').first ?? 'Unknown';
-    return {
-      'userName': fallbackName,
-      'fullName': fallbackName,
-    };
+    final fallbackName =
+        user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+    return {'userName': fallbackName, 'fullName': fallbackName};
   }
 
   // Real-time inventory stats stream
@@ -52,7 +54,7 @@ class DashboardService {
     if (householdId.isEmpty) {
       return Stream.value({});
     }
-    
+
     return _firestore
         .collection('households')
         .doc(householdId)
@@ -62,78 +64,86 @@ class DashboardService {
           return await _calculateStats(snapshot);
         });
   }
-  
+
   // In DashboardService - _calculateStats method
-Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
-  int totalItems = snapshot.docs.length;
-  int lowStockItems = 0;
-  int expiringSoonItems = 0;
-  int totalCategories = 0;
-  double totalValue = 0.0;
-  Set<String> categories = Set();
+  Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
+    int totalItems = snapshot.docs.length;
+    int lowStockItems = 0;
+    int expiringSoonItems = 0;
+    int totalCategories = 0;
+    double totalValue = 0.0;
+    Set<String> categories = Set();
 
-  // Use device local time instead of GMT+8
-  final now = DateTime.now(); // Remove GMT+8 conversion
-  final today = DateTime(now.year, now.month, now.day);
-  today.add(Duration(days: 7)); // Define next week for expiry check
+    // Use device local time instead of GMT+8
+    final now = DateTime.now(); // Remove GMT+8 conversion
+    final today = DateTime(now.year, now.month, now.day);
+    today.add(Duration(days: 7)); // Define next week for expiry check
 
-  for (var doc in snapshot.docs) {
-    final data = doc.data() as Map<String, dynamic>;
-    final quantity = (data['quantity'] ?? 0).toInt();
-    final price = (data['price'] ?? 0).toDouble();
-    
-    if (quantity < 5) lowStockItems++;
-    if (data['category'] != null) categories.add(data['category'] as String);
-    totalValue += quantity * price;
+    for (var doc in snapshot.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final quantity = (data['quantity'] ?? 0).toInt();
+      final price = (data['price'] ?? 0).toDouble();
 
-    // Enhanced expiry date checking - use local time
-    if (data['expiryDate'] != null) {
-      try {
-        DateTime? expiry;
-        
-        // Handle different expiry date formats
-        if (data['expiryDate'] is Timestamp) {
-          expiry = (data['expiryDate'] as Timestamp).toDate();
-        } else if (data['expiryDate'] is String) {
-          expiry = DateTime.parse(data['expiryDate'] as String);
-        }
-        
-        if (expiry != null) {
-          // Use local time directly - remove GMT+8 conversion
-          final expiryDate = DateTime(expiry.year, expiry.month, expiry.day);
-          
-          // Check if expiry is within next 7 days (including today)
-          final daysUntilExpiry = expiryDate.difference(today).inDays;
-          
-          if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
-            expiringSoonItems++;
-            print('Expiring soon: ${doc.id} - $expiryDate (${daysUntilExpiry} days)');
+      if (quantity < 5) lowStockItems++;
+      if (data['category'] != null) categories.add(data['category'] as String);
+      totalValue += quantity * price;
+
+      // Enhanced expiry date checking - use local time
+      if (data['expiryDate'] != null) {
+        try {
+          DateTime? expiry;
+
+          // Handle different expiry date formats
+          if (data['expiryDate'] is Timestamp) {
+            expiry = (data['expiryDate'] as Timestamp).toDate();
+          } else if (data['expiryDate'] is String) {
+            expiry = DateTime.parse(data['expiryDate'] as String);
           }
+
+          if (expiry != null) {
+            // Use local time directly - remove GMT+8 conversion
+            final expiryDate = DateTime(expiry.year, expiry.month, expiry.day);
+
+            // Check if expiry is within next 7 days (including today)
+            final daysUntilExpiry = expiryDate.difference(today).inDays;
+
+            if (daysUntilExpiry >= 0 && daysUntilExpiry <= 7) {
+              expiringSoonItems++;
+              print(
+                'Expiring soon: ${doc.id} - $expiryDate (${daysUntilExpiry} days)',
+              );
+            }
+          }
+        } catch (e) {
+          print(
+            'Error parsing expiry date for ${doc.id}: ${data['expiryDate']} - $e',
+          );
         }
-      } catch (e) {
-        print('Error parsing expiry date for ${doc.id}: ${data['expiryDate']} - $e');
       }
     }
+
+    totalCategories = categories.length;
+
+    print(
+      'Stats calculated - Total: $totalItems, Expiring: $expiringSoonItems',
+    );
+
+    return {
+      'totalItems': totalItems,
+      'lowStockItems': lowStockItems,
+      'expiringSoonItems': expiringSoonItems,
+      'totalCategories': totalCategories,
+      'totalValue': totalValue,
+    };
   }
 
-  totalCategories = categories.length;
-
-  print('Stats calculated - Total: $totalItems, Expiring: $expiringSoonItems');
-
-  return {
-    'totalItems': totalItems,
-    'lowStockItems': lowStockItems,
-    'expiringSoonItems': expiringSoonItems,
-    'totalCategories': totalCategories,
-    'totalValue': totalValue,
-  };
-}
-
-  Stream<List<Map<String, dynamic>>> getRecentActivitiesStream(String householdId) {
+  Stream<List<Map<String, dynamic>>> getRecentActivitiesStream(
+    String householdId,
+  ) {
     if (householdId.isEmpty) {
       return Stream.value([]);
     }
-    
+
     try {
       return _firestore
           .collection('households')
@@ -147,11 +157,13 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
               final data = doc.data();
               return {
                 'id': doc.id,
-                'message': data['description'] ?? data['message'] ?? 'No message',
+                'message':
+                    data['description'] ?? data['message'] ?? 'No message',
                 'timestamp': data['timestamp'] ?? Timestamp.now(),
                 'type': data['type'] ?? 'info',
                 'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
+                'fullName':
+                    data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
               };
@@ -217,8 +229,8 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
 
   // Enhanced logActivity method with fullName support
   Future<void> logActivity(
-    String householdId, 
-    String description, 
+    String householdId,
+    String description,
     String type, {
     String? userId,
     String? userName,
@@ -226,18 +238,18 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
     String? itemName,
   }) async {
     if (householdId.isEmpty) return;
-    
+
     try {
       // If fullName is not provided, try to get user info
       String? finalUserName = userName;
       String? finalFullName = fullName;
-      
+
       if (fullName == null) {
         final userInfo = await _getUserDisplayInfo();
         finalUserName = userInfo['userName'];
         finalFullName = userInfo['fullName'];
       }
-      
+
       await _firestore
           .collection('households')
           .doc(householdId)
@@ -247,7 +259,8 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
             'type': type,
             'timestamp': FieldValue.serverTimestamp(),
             'userId': userId ?? _auth.currentUser?.uid,
-            'userName': finalUserName ?? _auth.currentUser?.displayName ?? 'User',
+            'userName':
+                finalUserName ?? _auth.currentUser?.displayName ?? 'User',
             'fullName': finalFullName ?? finalUserName ?? 'User',
             'itemName': itemName,
           });
@@ -260,9 +273,11 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
   // Get detailed activity statistics
   Future<Map<String, dynamic>> getActivityStats(String householdId) async {
     if (householdId.isEmpty) return {};
-    
+
     try {
-      final weekAgo = Timestamp.fromDate(DateTime.now().subtract(Duration(days: 7)));
+      final weekAgo = Timestamp.fromDate(
+        DateTime.now().subtract(Duration(days: 7)),
+      );
       final snapshot = await _firestore
           .collection('households')
           .doc(householdId)
@@ -276,10 +291,18 @@ Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
       for (var doc in snapshot.docs) {
         final type = doc['type'] ?? 'info';
         switch (type) {
-          case 'add': adds++; break;
-          case 'update': updates++; break;
-          case 'delete': deletes++; break;
-          case 'warning': warnings++; break;
+          case 'add':
+            adds++;
+            break;
+          case 'update':
+            updates++;
+            break;
+          case 'delete':
+            deletes++;
+            break;
+          case 'warning':
+            warnings++;
+            break;
         }
       }
 
@@ -314,7 +337,8 @@ class AnimatedStatNumber extends StatefulWidget {
   _AnimatedStatNumberState createState() => _AnimatedStatNumberState();
 }
 
-class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTickerProviderStateMixin {
+class _AnimatedStatNumberState extends State<AnimatedStatNumber>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<int> _animation;
   late int _previousValue;
@@ -323,15 +347,13 @@ class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTick
   void initState() {
     super.initState();
     _previousValue = widget.value;
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    
-    _animation = IntTween(begin: _previousValue, end: widget.value).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    
+    _controller = AnimationController(duration: widget.duration, vsync: this);
+
+    _animation = IntTween(
+      begin: _previousValue,
+      end: widget.value,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
     _controller.forward();
   }
 
@@ -341,9 +363,10 @@ class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTick
     if (oldWidget.value != widget.value) {
       _previousValue = _animation.value;
       _controller.reset();
-      _animation = IntTween(begin: _previousValue, end: widget.value).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-      );
+      _animation = IntTween(
+        begin: _previousValue,
+        end: widget.value,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
       _controller.forward();
     }
   }
@@ -359,10 +382,7 @@ class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTick
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        return Text(
-          _animation.value.toString(),
-          style: widget.style,
-        );
+        return Text(_animation.value.toString(), style: widget.style);
       },
     );
   }
@@ -395,7 +415,7 @@ class EnhancedActivityItem extends StatelessWidget {
     final color = _getActivityColor(activity['type']);
     final timestamp = activity['timestamp'] as Timestamp;
     final hasDetails = activity['itemName'] != null;
-    
+
     // Get user display info with fullName support
     final String userName = activity['userName'] ?? 'Unknown User';
     final String fullName = activity['fullName'] ?? userName;
@@ -418,10 +438,7 @@ class EnhancedActivityItem extends StatelessWidget {
                 offset: Offset(0, 2),
               ),
             ],
-            border: Border.all(
-              color: color.withOpacity(0.1),
-              width: 1,
-            ),
+            border: Border.all(color: color.withOpacity(0.1), width: 1),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,21 +451,15 @@ class EnhancedActivityItem extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      color.withOpacity(0.2),
-                      color.withOpacity(0.1),
-                    ],
+                    colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
                   ),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: color.withOpacity(0.3),
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: color.withOpacity(0.3), width: 1.5),
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
               SizedBox(width: 12),
-              
+
               // Activity Content
               Expanded(
                 child: Column(
@@ -466,13 +477,16 @@ class EnhancedActivityItem extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    
+
                     SizedBox(height: 8),
-                    
+
                     // Item Name (if available)
                     if (hasDetails && activity['itemName'] != null)
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -486,10 +500,10 @@ class EnhancedActivityItem extends StatelessWidget {
                           ),
                         ),
                       ),
-                    
+
                     if (hasDetails && activity['itemName'] != null)
                       SizedBox(height: 8),
-                    
+
                     // User and Time Info with fullName support - FIXED ROW
                     Row(
                       children: [
@@ -520,33 +534,31 @@ class EnhancedActivityItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Spacer(),
-                        
+
                         // Time - FIXED TIME FORMAT
-                        Icon(Icons.access_time_rounded, size: 12, color: textLight),
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 12,
+                          color: textLight,
+                        ),
                         SizedBox(width: 4),
                         Text(
                           _formatActivityTime(timestamp),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: textLight,
-                          ),
+                          style: TextStyle(fontSize: 12, color: textLight),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
-              
+
               // Activity Type Badge
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: color.withOpacity(0.2),
-                    width: 1,
-                  ),
+                  border: Border.all(color: color.withOpacity(0.2), width: 1),
                 ),
                 child: Text(
                   _getActivityTypeLabel(activity['type']),
@@ -567,56 +579,74 @@ class EnhancedActivityItem extends StatelessWidget {
 
   // FIXED: Enhanced time formatting with GMT+8
   String _formatActivityTime(Timestamp timestamp) {
-  // Use device local time directly - remove GMT+8 conversion
-  final date = timestamp.toDate(); // This uses the device's local timezone
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final activityDate = DateTime(date.year, date.month, date.day);
-  
-  if (activityDate == today) {
-    // Today: show time only
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  } else if (activityDate == today.subtract(Duration(days: 1))) {
-    // Yesterday
-    return 'Yesterday';
-  } else {
-    // Other days: show date
-    return '${date.day}/${date.month}';
+    // Use device local time directly - remove GMT+8 conversion
+    final date = timestamp.toDate(); // This uses the device's local timezone
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final activityDate = DateTime(date.year, date.month, date.day);
+
+    if (activityDate == today) {
+      // Today: show time only
+      final hour = date.hour.toString().padLeft(2, '0');
+      final minute = date.minute.toString().padLeft(2, '0');
+      return '$hour:$minute';
+    } else if (activityDate == today.subtract(Duration(days: 1))) {
+      // Yesterday
+      return 'Yesterday';
+    } else {
+      // Other days: show date
+      return '${date.day}/${date.month}';
+    }
   }
-}
 
   String _getActivityTypeLabel(String type) {
     switch (type) {
-      case 'add': return 'ADDED';
-      case 'update': return 'UPDATED';
-      case 'delete': return 'DELETED';
-      case 'warning': return 'ALERT';
-      case 'info': return 'INFO';
-      default: return 'ACTIVITY';
+      case 'add':
+        return 'ADDED';
+      case 'update':
+        return 'UPDATED';
+      case 'delete':
+        return 'DELETED';
+      case 'warning':
+        return 'ALERT';
+      case 'info':
+        return 'INFO';
+      default:
+        return 'ACTIVITY';
     }
   }
 
   IconData _getActivityIcon(String type) {
     switch (type) {
-      case 'add': return Icons.add_circle_rounded;
-      case 'update': return Icons.edit_rounded;
-      case 'delete': return Icons.delete_rounded;
-      case 'warning': return Icons.warning_amber_rounded;
-      case 'info': return Icons.info_rounded;
-      default: return Icons.info_rounded;
+      case 'add':
+        return Icons.add_circle_rounded;
+      case 'update':
+        return Icons.edit_rounded;
+      case 'delete':
+        return Icons.delete_rounded;
+      case 'warning':
+        return Icons.warning_amber_rounded;
+      case 'info':
+        return Icons.info_rounded;
+      default:
+        return Icons.info_rounded;
     }
   }
 
   Color _getActivityColor(String type) {
     switch (type) {
-      case 'add': return Color(0xFF10B981);
-      case 'update': return Color(0xFF3B82F6);
-      case 'delete': return Color(0xFFEF4444);
-      case 'warning': return Color(0xFFF59E0B);
-      case 'info': return Color(0xFF6B7280);
-      default: return Color(0xFF6B7280);
+      case 'add':
+        return Color(0xFF10B981);
+      case 'update':
+        return Color(0xFF3B82F6);
+      case 'delete':
+        return Color(0xFFEF4444);
+      case 'warning':
+        return Color(0xFFF59E0B);
+      case 'info':
+        return Color(0xFF6B7280);
+      default:
+        return Color(0xFF6B7280);
     }
   }
 }
@@ -628,8 +658,9 @@ class ActivityShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: List.generate(3, (index) => 
-        Container(
+      children: List.generate(
+        3,
+        (index) => Container(
           margin: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           padding: EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -721,16 +752,19 @@ class DashboardPage extends StatefulWidget {
   final String? selectedHousehold;
   final String? householdId;
 
-  const DashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
+  const DashboardPage({Key? key, this.selectedHousehold, this.householdId})
+    : super(key: key);
 
   @override
   _DashboardPageState createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> with SingleTickerProviderStateMixin {
-  final HouseholdServiceController _householdServiceController = HouseholdServiceController();
+class _DashboardPageState extends State<DashboardPage>
+    with SingleTickerProviderStateMixin {
+  final HouseholdServiceController _householdServiceController =
+      HouseholdServiceController();
   final DashboardService _dashboardService = DashboardService();
-  
+
   // Enhanced color scheme with gradients
   final Color _primaryColor = Color(0xFF2D5D7C);
   final Color _secondaryColor = Color(0xFF6270B1);
@@ -757,7 +791,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   bool _hasError = false;
   String _errorMessage = '';
   bool _isActivitiesLoading = true;
-  
+
   int _currentIndex = 0;
   int _selectedActivityTab = 0;
 
@@ -771,12 +805,12 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    
+
     _initializeAnimations();
     _currentHousehold = widget.selectedHousehold ?? '';
     _currentHouseholdId = widget.householdId ?? '';
     _loadUserData();
-    
+
     if (_currentHouseholdId.isNotEmpty) {
       _setupRealTimeSubscriptions();
     } else {
@@ -797,7 +831,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       final userInfo = await _dashboardService._getUserDisplayInfo();
-      
+
       setState(() {
         _userFullName = userInfo['fullName'] ?? 'User';
       });
@@ -818,35 +852,39 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     // Set up real-time stats subscription
     _statsSubscription = _dashboardService
         .getInventoryStatsStream(_currentHouseholdId)
-        .listen((stats) {
-      if (mounted) {
-        setState(() {
-          _totalItems = stats['totalItems'] ?? 0;
-          _lowStockItems = stats['lowStockItems'] ?? 0;
-          _expiringSoonItems = stats['expiringSoonItems'] ?? 0;
-          _totalValue = stats['totalValue'] ?? 0.0;
-          _isLoading = false;
-          _hasError = false;
-        });
-        
-        // Load activity stats
-        _loadActivityStats();
-        
-        // Start animations when first data arrives
-        if (!_animationController.isAnimating) {
-          _animationController.forward();
-        }
-      }
-    }, onError: (error) {
-      print('Stats stream error: $error');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-          _errorMessage = 'Failed to load real-time data: ${error.toString()}';
-        });
-      }
-    });
+        .listen(
+          (stats) {
+            if (mounted) {
+              setState(() {
+                _totalItems = stats['totalItems'] ?? 0;
+                _lowStockItems = stats['lowStockItems'] ?? 0;
+                _expiringSoonItems = stats['expiringSoonItems'] ?? 0;
+                _totalValue = stats['totalValue'] ?? 0.0;
+                _isLoading = false;
+                _hasError = false;
+              });
+
+              // Load activity stats
+              _loadActivityStats();
+
+              // Start animations when first data arrives
+              if (!_animationController.isAnimating) {
+                _animationController.forward();
+              }
+            }
+          },
+          onError: (error) {
+            print('Stats stream error: $error');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _hasError = true;
+                _errorMessage =
+                    'Failed to load real-time data: ${error.toString()}';
+              });
+            }
+          },
+        );
 
     // Set up activities subscription
     _setupActivitiesSubscription();
@@ -855,17 +893,20 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   void _setupActivitiesSubscription() {
     _activitiesSubscription = _dashboardService
         .getRecentActivitiesStream(_currentHouseholdId)
-        .listen((activities) {
-      if (mounted) {
-        setState(() {
-          _recentActivities = activities;
-          _isActivitiesLoading = false;
-        });
-      }
-    }, onError: (error) {
-      print('Activities stream error: $error');
-      _createSampleActivities();
-    });
+        .listen(
+          (activities) {
+            if (mounted) {
+              setState(() {
+                _recentActivities = activities;
+                _isActivitiesLoading = false;
+              });
+            }
+          },
+          onError: (error) {
+            print('Activities stream error: $error');
+            _createSampleActivities();
+          },
+        );
   }
 
   Future<void> _loadActivityStats() async {
@@ -881,16 +922,10 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     setState(() {
       _recentActivities = [
         {
-          'message': 'Welcome to your household! Start by adding some items to see activity here.',
-          'timestamp': Timestamp.now(),
-          'type': 'info',
-          'userName': 'System',
-          'fullName': 'System',
-          'itemName': null,
-        },
-        {
           'message': 'Milk was added to inventory',
-          'timestamp': Timestamp.fromDate(DateTime.now().subtract(Duration(hours: 2))),
+          'timestamp': Timestamp.fromDate(
+            DateTime.now().subtract(Duration(hours: 2)),
+          ),
           'type': 'add',
           'userName': _userFullName,
           'fullName': _userFullName,
@@ -898,7 +933,9 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         },
         {
           'message': 'Eggs quantity was updated',
-          'timestamp': Timestamp.fromDate(DateTime.now().subtract(Duration(hours: 4))),
+          'timestamp': Timestamp.fromDate(
+            DateTime.now().subtract(Duration(hours: 4)),
+          ),
           'type': 'update',
           'userName': _userFullName,
           'fullName': _userFullName,
@@ -906,7 +943,9 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         },
         {
           'message': 'Bread is running low',
-          'timestamp': Timestamp.fromDate(DateTime.now().subtract(Duration(days: 1))),
+          'timestamp': Timestamp.fromDate(
+            DateTime.now().subtract(Duration(days: 1)),
+          ),
           'type': 'warning',
           'userName': 'System',
           'fullName': 'System',
@@ -931,7 +970,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         _isLoading = true;
         _isActivitiesLoading = true;
       });
-      
+
       _setupRealTimeSubscriptions();
     }
   }
@@ -949,18 +988,27 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
 
   Widget _getPage(int index) {
     switch (index) {
-      case 0: return _buildDashboardContent();
-      case 1: return InventoryListPage(
-        householdId: _currentHouseholdId,
-        householdName: _currentHousehold,
-      );
-      case 2: return AddItemPage(
-        householdId: _currentHouseholdId,
-        householdName: _currentHousehold,
-      );
-      case 3: return ExpenseTrackerPage(householdId: _currentHouseholdId, isReadOnly: true); 
-      case 4: return ProfilePage();
-      default: return _buildDashboardContent();
+      case 0:
+        return _buildDashboardContent();
+      case 1:
+        return InventoryListPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+        );
+      case 2:
+        return AddItemPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+        );
+      case 3:
+        return ExpenseTrackerPage(
+          householdId: _currentHouseholdId,
+          isReadOnly: true,
+        );
+      case 4:
+        return ProfilePage();
+      default:
+        return _buildDashboardContent();
     }
   }
 
@@ -978,87 +1026,84 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         body: _hasError
             ? _buildErrorState()
             : _isLoading
-                ? _buildLoadingState()
-                : _currentHousehold.isNotEmpty
-                    ? _getPage(_currentIndex)
-                    : _buildHouseholdSelection(),
-        bottomNavigationBar: _currentHousehold.isNotEmpty 
-            ? _buildBottomNavigationBar() 
+            ? _buildLoadingState()
+            : _currentHousehold.isNotEmpty
+            ? _getPage(_currentIndex)
+            : _buildHouseholdSelection(),
+        bottomNavigationBar: _currentHousehold.isNotEmpty
+            ? _buildBottomNavigationBar()
             : null,
       ),
     );
   }
 
   AppBar _buildAppBar() {
-  return AppBar(
-    automaticallyImplyLeading: false,
-    title: AnimatedSwitcher(
-      duration: Duration(milliseconds: 300),
-      child: Text(
-        _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
-        key: ValueKey(_currentHousehold),
-        style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
-          letterSpacing: -0.5,
+    return AppBar(
+      automaticallyImplyLeading: false,
+      title: AnimatedSwitcher(
+        duration: Duration(milliseconds: 300),
+        child: Text(
+          _currentHousehold.isNotEmpty ? '$_currentHousehold' : 'Dashboard',
+          key: ValueKey(_currentHousehold),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            letterSpacing: -0.5,
+          ),
         ),
       ),
-    ),
-    backgroundColor: _primaryColor,
-    elevation: 0,
-    iconTheme: IconThemeData(color: Colors.white),
-    shape: ContinuousRectangleBorder(
-      borderRadius: BorderRadius.only(
-        bottomLeft: Radius.circular(40),
-        bottomRight: Radius.circular(40),
+      backgroundColor: _primaryColor,
+      elevation: 0,
+      iconTheme: IconThemeData(color: Colors.white),
+      shape: ContinuousRectangleBorder(
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(40),
+          bottomRight: Radius.circular(40),
+        ),
       ),
-    ),
-    centerTitle: true,
-    actions: [
-
-    
-      
-      // 🆕 Settings Button (replaces refresh and switch household)
-      PopupMenuButton<String>(
-        icon: Icon(Icons.settings_rounded, size: 24),
-        tooltip: 'Settings',
-        onSelected: (value) {
-          if (value == 'refresh') {
-            _manualRefresh();
-          } else if (value == 'switch_household') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => HouseholdService()),
-            );
-          }
-        },
-        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-          PopupMenuItem<String>(
-            value: 'refresh',
-            child: Row(
-              children: [
-                Icon(Icons.refresh_rounded, color: _textPrimary),
-                SizedBox(width: 12),
-                Text('Refresh Data'),
-              ],
+      centerTitle: true,
+      actions: [
+        // 🆕 Settings Button (replaces refresh and switch household)
+        PopupMenuButton<String>(
+          icon: Icon(Icons.settings_rounded, size: 24),
+          tooltip: 'Settings',
+          onSelected: (value) {
+            if (value == 'refresh') {
+              _manualRefresh();
+            } else if (value == 'switch_household') {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => HouseholdService()),
+              );
+            }
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+            PopupMenuItem<String>(
+              value: 'refresh',
+              child: Row(
+                children: [
+                  Icon(Icons.refresh_rounded, color: _textPrimary),
+                  SizedBox(width: 12),
+                  Text('Refresh Data'),
+                ],
+              ),
             ),
-          ),
-          PopupMenuItem<String>(
-            value: 'switch_household',
-            child: Row(
-              children: [
-                Icon(Icons.swap_horiz_rounded, color: _textPrimary),
-                SizedBox(width: 12),
-                Text('Switch Household'),
-              ],
+            PopupMenuItem<String>(
+              value: 'switch_household',
+              child: Row(
+                children: [
+                  Icon(Icons.swap_horiz_rounded, color: _textPrimary),
+                  SizedBox(width: 12),
+                  Text('Switch Household'),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    ],
-  );
-}
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _buildBottomNavigationBar() {
     return Container(
@@ -1102,12 +1147,18 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     );
   }
 
-  BottomNavigationBarItem _buildNavItem(IconData icon, String label, int index) {
+  BottomNavigationBarItem _buildNavItem(
+    IconData icon,
+    String label,
+    int index,
+  ) {
     return BottomNavigationBarItem(
       icon: Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: _currentIndex == index ? _primaryColor.withOpacity(0.15) : Colors.transparent,
+          color: _currentIndex == index
+              ? _primaryColor.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, size: 24),
@@ -1129,7 +1180,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           SizedBox(height: 24),
           _buildQuickStats(),
           SizedBox(height: 24),
-          
+
           // 🔮 ENHANCED: Smart Recommendations Section
           RecommendationSection(
             householdId: _currentHouseholdId,
@@ -1149,7 +1200,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
             onNavigateToItem: _navigateToItem,
           ),
           SizedBox(height: 24),
-          
+
           _buildActivitySection(),
           SizedBox(height: 24),
           _buildQuickActions(),
@@ -1194,7 +1245,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 ),
                 SizedBox(height: 8),
                 Text(
-                  _currentHousehold.isNotEmpty 
+                  _currentHousehold.isNotEmpty
                       ? 'Your $_currentHousehold inventory is looking great!'
                       : 'Manage your household inventory efficiently',
                   style: TextStyle(
@@ -1234,7 +1285,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     Color statusColor;
     String statusText;
     IconData statusIcon;
-    
+
     if (_hasError) {
       statusColor = _errorColor;
       statusText = 'Needs Attention';
@@ -1248,7 +1299,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
       statusText = 'Live & Updated';
       statusIcon = Icons.check_circle_rounded;
     }
-    
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -1334,14 +1385,21 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               _successColor,
               'Total inventory worth',
               isCurrency: true,
-            )
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildEnhancedStatCard(String title, int value, IconData icon, Color color, String subtitle, {bool isCurrency = false}) {
+  Widget _buildEnhancedStatCard(
+    String title,
+    int value,
+    IconData icon,
+    Color color,
+    String subtitle, {
+    bool isCurrency = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: _surfaceColor,
@@ -1368,7 +1426,10 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                      colors: [
+                        color.withOpacity(0.15),
+                        color.withOpacity(0.05),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -1425,13 +1486,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               ),
             ),
             SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 11,
-                color: _textLight,
-              ),
-            ),
+            Text(subtitle, style: TextStyle(fontSize: 11, color: _textLight)),
           ],
         ),
       ),
@@ -1490,7 +1545,9 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.5,
           ),
-          child: _selectedActivityTab == 0 ? _buildRecentActivityView() : _buildActivityStatsView(),
+          child: _selectedActivityTab == 0
+              ? _buildRecentActivityView()
+              : _buildActivityStatsView(),
         ),
       ],
     );
@@ -1521,10 +1578,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
 
   Widget _buildRecentActivityView() {
     if (_isActivitiesLoading) {
-      return Container(
-        height: 300,
-        child: ActivityShimmer(),
-      );
+      return Container(height: 300, child: ActivityShimmer());
     }
 
     if (_recentActivities.isEmpty) {
@@ -1593,10 +1647,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 children: [
                   Text(
                     'View All Activities',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   SizedBox(width: 6),
                   Icon(Icons.arrow_forward_rounded, size: 16),
@@ -1659,10 +1710,30 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               childAspectRatio: 1.4,
             ),
             children: [
-              _buildActivityStatItem('Total Activities', total, Icons.analytics_rounded, _primaryColor),
-              _buildActivityStatItem('Items Added', adds, Icons.add_rounded, _successColor),
-              _buildActivityStatItem('Items Updated', updates, Icons.edit_rounded, _accentColor),
-              _buildActivityStatItem('Items Deleted', deletes, Icons.delete_rounded, _errorColor),
+              _buildActivityStatItem(
+                'Total Activities',
+                total,
+                Icons.analytics_rounded,
+                _primaryColor,
+              ),
+              _buildActivityStatItem(
+                'Items Added',
+                adds,
+                Icons.add_rounded,
+                _successColor,
+              ),
+              _buildActivityStatItem(
+                'Items Updated',
+                updates,
+                Icons.edit_rounded,
+                _accentColor,
+              ),
+              _buildActivityStatItem(
+                'Items Deleted',
+                deletes,
+                Icons.delete_rounded,
+                _errorColor,
+              ),
             ],
           ),
           if (warnings > 0) ...[
@@ -1676,7 +1747,11 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: _warningColor, size: 24),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: _warningColor,
+                    size: 24,
+                  ),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -1692,10 +1767,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                         SizedBox(height: 4),
                         Text(
                           'Consider restocking these items soon',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 12, color: _textSecondary),
                         ),
                       ],
                     ),
@@ -1709,7 +1781,12 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     );
   }
 
-  Widget _buildActivityStatItem(String title, int value, IconData icon, Color color) {
+  Widget _buildActivityStatItem(
+    String title,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1791,11 +1868,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Text(
               'Your recent activities will appear here when you add, update, or delete items from your inventory',
-              style: TextStyle(
-                fontSize: 14,
-                color: _textLight,
-                height: 1.4,
-              ),
+              style: TextStyle(fontSize: 14, color: _textLight, height: 1.4),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1808,16 +1881,15 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               backgroundColor: _primaryColor,
               foregroundColor: Colors.white,
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               elevation: 2,
             ),
             icon: Icon(Icons.add_rounded, size: 18),
             label: Text(
               'Add Your First Item',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -1877,7 +1949,13 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     );
   }
 
-  Widget _buildEnhancedActionCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildEnhancedActionCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(16),
@@ -1948,7 +2026,9 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
         }
 
         if (snapshot.hasError) {
-          return _buildErrorState(message: 'Error loading households: ${snapshot.error}');
+          return _buildErrorState(
+            message: 'Error loading households: ${snapshot.error}',
+          );
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -1972,10 +2052,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               SizedBox(height: 8),
               Text(
                 'Choose a household to manage its inventory',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 14, color: _textSecondary),
               ),
               SizedBox(height: 24),
               Expanded(
@@ -2045,7 +2122,11 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 color: _errorColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.error_outline_rounded, size: 35, color: _errorColor),
+              child: Icon(
+                Icons.error_outline_rounded,
+                size: 35,
+                color: _errorColor,
+              ),
             ),
             SizedBox(height: 16),
             Text(
@@ -2061,10 +2142,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 message ?? _errorMessage,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 13, color: _textSecondary),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -2075,15 +2153,14 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 backgroundColor: _primaryColor,
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 2,
               ),
               child: Text(
                 'Try Again',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -2106,7 +2183,11 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                 color: _primaryColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.home_work_outlined, size: 40, color: _primaryColor),
+              child: Icon(
+                Icons.home_work_outlined,
+                size: 40,
+                color: _primaryColor,
+              ),
             ),
             SizedBox(height: 16),
             Text(
@@ -2122,29 +2203,26 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 'Create your first household to get started',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 14, color: _textSecondary),
                 textAlign: TextAlign.center,
               ),
             ),
             SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () => _householdServiceController.createNewHousehold(context),
+              onPressed: () =>
+                  _householdServiceController.createNewHousehold(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _primaryColor,
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 2,
               ),
               child: Text(
                 'Create New Household',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -2153,9 +2231,13 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
     );
   }
 
-  Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId) {
+  Widget _buildHouseholdCard(
+    String householdName,
+    Timestamp createdAt,
+    String householdId,
+  ) {
     DateTime createdDate = createdAt.toDate();
-    
+
     return Material(
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(16),
@@ -2192,11 +2274,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                   color: _primaryColor.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.home_rounded,
-                  color: _primaryColor,
-                  size: 25,
-                ),
+                child: Icon(Icons.home_rounded, color: _primaryColor, size: 25),
               ),
               SizedBox(height: 12),
               Text(
@@ -2213,10 +2291,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
               SizedBox(height: 6),
               Text(
                 'Created ${_formatDate(createdDate)}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: _textLight,
-                ),
+                style: TextStyle(fontSize: 11, color: _textLight),
               ),
             ],
           ),
@@ -2224,7 +2299,6 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
       ),
     );
   }
-
 
   // Utility methods
   String _formatDate(DateTime date) {
@@ -2236,17 +2310,19 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
 class PulseIndicator extends StatefulWidget {
   final Color color;
   final double size;
-  
-  const PulseIndicator({Key? key, required this.color, this.size = 8}) : super(key: key);
-  
+
+  const PulseIndicator({Key? key, required this.color, this.size = 8})
+    : super(key: key);
+
   @override
   _PulseIndicatorState createState() => _PulseIndicatorState();
 }
 
-class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProviderStateMixin {
+class _PulseIndicatorState extends State<PulseIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
-  
+
   @override
   void initState() {
     super.initState();
@@ -2254,16 +2330,16 @@ class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProvid
       duration: Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
   }
-  
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(

@@ -44,10 +44,12 @@ class AllRecommendationsPage extends StatefulWidget {
   _AllRecommendationsPageState createState() => _AllRecommendationsPageState();
 }
 
-class _AllRecommendationsPageState extends State<AllRecommendationsPage> with SingleTickerProviderStateMixin {
-  final InventoryRecommendationService _recommendationService = InventoryRecommendationService();
+class _AllRecommendationsPageState extends State<AllRecommendationsPage>
+    with SingleTickerProviderStateMixin {
+  final InventoryRecommendationService _recommendationService =
+      InventoryRecommendationService();
   final ShoppingListService _shoppingListService = ShoppingListService();
-  
+
   List<Map<String, dynamic>> _smartRecommendations = [];
   bool _isRecommendationsLoading = false;
   bool _hasError = false;
@@ -84,18 +86,21 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
   Future<void> _loadSmartRecommendations() async {
     if (widget.householdId.isEmpty) return;
-    
+
     setState(() {
       _isRecommendationsLoading = true;
       _hasError = false;
     });
 
     try {
-      print('🔄 Loading all smart recommendations for household: ${widget.householdId}');
-      final recommendations = await _recommendationService.getSmartRecommendations(widget.householdId);
-      
+      print(
+        '🔄 Loading all smart recommendations for household: ${widget.householdId}',
+      );
+      final recommendations = await _recommendationService
+          .getSmartRecommendations(widget.householdId);
+
       print('✅ Loaded ${recommendations.length} recommendations');
-      
+
       if (mounted) {
         setState(() {
           _smartRecommendations = recommendations;
@@ -116,7 +121,9 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
   Future<void> _loadShoppingListCount() async {
     try {
-      final count = await _shoppingListService.getShoppingListCount(widget.householdId);
+      final count = await _shoppingListService.getShoppingListCount(
+        widget.householdId,
+      );
       if (mounted) {
         setState(() {
           _shoppingListCount = count;
@@ -132,10 +139,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
       _smartRecommendations = [];
       _itemsInCart.clear();
     });
-    await Future.wait([
-      _loadSmartRecommendations(),
-      _loadShoppingListCount(),
-    ]);
+    await Future.wait([_loadSmartRecommendations(), _loadShoppingListCount()]);
   }
 
   void _toggleCategoryView() {
@@ -154,26 +158,30 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => ShoppingListPage(
-          householdId: widget.householdId,
-          householdName: widget.householdName,
-          primaryColor: widget.primaryColor,
-          secondaryColor: widget.secondaryColor,
-          accentColor: widget.accentColor,
-          successColor: widget.successColor,
-          warningColor: widget.warningColor,
-          errorColor: widget.errorColor,
-          backgroundColor: widget.backgroundColor,
-          surfaceColor: widget.surfaceColor,
-          textPrimary: widget.textPrimary,
-          textSecondary: widget.textSecondary,
-          textLight: widget.textLight,
-        ),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            ShoppingListPage(
+              householdId: widget.householdId,
+              householdName: widget.householdName,
+              primaryColor: widget.primaryColor,
+              secondaryColor: widget.secondaryColor,
+              accentColor: widget.accentColor,
+              successColor: widget.successColor,
+              warningColor: widget.warningColor,
+              errorColor: widget.errorColor,
+              backgroundColor: widget.backgroundColor,
+              surfaceColor: widget.surfaceColor,
+              textPrimary: widget.textPrimary,
+              textSecondary: widget.textSecondary,
+              textLight: widget.textLight,
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;
           const curve = Curves.easeInOut;
-          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
           return SlideTransition(
             position: animation.drive(tween),
             child: child,
@@ -187,11 +195,13 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   }
 
   Future<void> _toggleCartStatus(Map<String, dynamic> recommendation) async {
-    final String itemId = recommendation['itemId'] ?? 'custom_${DateTime.now().millisecondsSinceEpoch}';
+    final String itemId =
+        recommendation['itemId'] ??
+        'custom_${DateTime.now().millisecondsSinceEpoch}';
     final String itemName = recommendation['itemName'] ?? 'Unknown Item';
-    
+
     print('🔄 Toggling cart status for: $itemName (ID: $itemId)');
-    
+
     final bool isCurrentlyInCart = _itemsInCart.contains(itemId);
 
     try {
@@ -213,20 +223,23 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   }
 
   Future<void> _addToCart(Map<String, dynamic> recommendation) async {
-    final String itemId = recommendation['itemId'] ?? 'custom_${DateTime.now().millisecondsSinceEpoch}';
+    final String itemId =
+        recommendation['itemId'] ??
+        'custom_${DateTime.now().millisecondsSinceEpoch}';
     final String itemName = recommendation['itemName'] ?? 'Unknown Item';
-    
+
     print('🛒 Adding to cart: $itemName (ID: $itemId)');
-    
+
     setState(() {
       _itemsInCart.add(itemId);
     });
 
     try {
-      final result = await _recommendationService.addRecommendationToShoppingList(
-        householdId: widget.householdId,
-        recommendation: recommendation,
-      );
+      final result = await _recommendationService
+          .addRecommendationToShoppingList(
+            householdId: widget.householdId,
+            recommendation: recommendation,
+          );
 
       if (result['success'] == true) {
         _showEnhancedSnackbar(
@@ -235,9 +248,9 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
           color: widget.successColor,
         );
         print('✅ Successfully added to cart: $itemName');
-        
+
         _loadShoppingListCount();
-        
+
         final quantity = 1; // Always use quantity 1
         widget.onAddToShoppingList(itemName, quantity, itemId);
       } else {
@@ -265,10 +278,13 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
   Future<void> _removeFromCart(String itemId) async {
     print('🗑️ Removing from cart: $itemId');
-    
+
     try {
-      final result = await _shoppingListService.removeFromShoppingList(widget.householdId, itemId);
-      
+      final result = await _shoppingListService.removeFromShoppingList(
+        widget.householdId,
+        itemId,
+      );
+
       if (result['success'] == true) {
         setState(() {
           _itemsInCart.remove(itemId);
@@ -301,25 +317,34 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
     // Search filter
     if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((rec) =>
-        rec['title'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        rec['message'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        rec['category'].toString().toLowerCase().contains(_searchQuery.toLowerCase())
-      ).toList();
+      filtered = filtered
+          .where(
+            (rec) =>
+                rec['title'].toString().toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+                rec['message'].toString().toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ||
+                rec['category'].toString().toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ),
+          )
+          .toList();
     }
 
     // Category filter
     if (_selectedCategories.isNotEmpty) {
-      filtered = filtered.where((rec) => 
-        _selectedCategories.contains(rec['category'])
-      ).toList();
+      filtered = filtered
+          .where((rec) => _selectedCategories.contains(rec['category']))
+          .toList();
     }
 
     // Priority filter
     if (_selectedPriorities.isNotEmpty) {
-      filtered = filtered.where((rec) => 
-        _selectedPriorities.contains(rec['priority'])
-      ).toList();
+      filtered = filtered
+          .where((rec) => _selectedPriorities.contains(rec['priority']))
+          .toList();
     }
 
     return filtered;
@@ -328,7 +353,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   @override
   Widget build(BuildContext context) {
     final filteredRecommendations = _filteredRecommendations;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -400,15 +425,15 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
           // Search and Filter Bar
           _buildSearchFilterBar(),
-          
+
           // Stats Overview
-          if (!_isRecommendationsLoading && !_hasError && filteredRecommendations.isNotEmpty)
+          if (!_isRecommendationsLoading &&
+              !_hasError &&
+              filteredRecommendations.isNotEmpty)
             _buildEnhancedStatsOverview(),
 
           // Main Content
-          Expanded(
-            child: _buildContent(),
-          ),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
@@ -523,21 +548,29 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
               decoration: InputDecoration(
                 hintText: 'Search recommendations...',
                 hintStyle: TextStyle(color: widget.textSecondary),
-                prefixIcon: Icon(Icons.search_rounded, color: widget.textSecondary),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: widget.textSecondary,
+                ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           // Filter Chips
           Row(
             children: [
               _buildFilterChip(
                 label: 'View',
-                icon: _showCategoryView ? Icons.list_rounded : Icons.category_rounded,
+                icon: _showCategoryView
+                    ? Icons.list_rounded
+                    : Icons.category_rounded,
                 isSelected: false,
                 onTap: _toggleCategoryView,
               ),
@@ -545,14 +578,21 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
               _buildFilterChip(
                 label: 'Filter',
                 icon: Icons.filter_list_rounded,
-                isSelected: _selectedCategories.isNotEmpty || _selectedPriorities.isNotEmpty,
+                isSelected:
+                    _selectedCategories.isNotEmpty ||
+                    _selectedPriorities.isNotEmpty,
                 onTap: _showFilterDialog,
               ),
               const Spacer(),
-              if (_selectedCategories.isNotEmpty || _selectedPriorities.isNotEmpty || _searchQuery.isNotEmpty)
+              if (_selectedCategories.isNotEmpty ||
+                  _selectedPriorities.isNotEmpty ||
+                  _searchQuery.isNotEmpty)
                 TextButton(
                   onPressed: _clearFilters,
-                  child: Text('Clear', style: TextStyle(color: widget.primaryColor)),
+                  child: Text(
+                    'Clear',
+                    style: TextStyle(color: widget.primaryColor),
+                  ),
                 ),
             ],
           ),
@@ -572,16 +612,24 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? widget.primaryColor.withOpacity(0.1) : widget.backgroundColor,
+          color: isSelected
+              ? widget.primaryColor.withOpacity(0.1)
+              : widget.backgroundColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? widget.primaryColor : widget.textLight.withOpacity(0.3),
+            color: isSelected
+                ? widget.primaryColor
+                : widget.textLight.withOpacity(0.3),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: isSelected ? widget.primaryColor : widget.textSecondary),
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? widget.primaryColor : widget.textSecondary,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -600,9 +648,15 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   Widget _buildEnhancedStatsOverview() {
     final filtered = _filteredRecommendations;
     final totalItems = filtered.length;
-    final urgentItems = filtered.where((rec) => rec['priority'] == 'high').length;
-    final inCartItems = filtered.where((rec) => _itemsInCart.contains(rec['itemId'])).length;
-    final completionPercentage = totalItems > 0 ? (inCartItems / totalItems) * 100 : 0;
+    final urgentItems = filtered
+        .where((rec) => rec['priority'] == 'high')
+        .length;
+    final inCartItems = filtered
+        .where((rec) => _itemsInCart.contains(rec['itemId']))
+        .length;
+    final completionPercentage = totalItems > 0
+        ? (inCartItems / totalItems) * 100
+        : 0;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -633,7 +687,10 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeOut,
-                  width: MediaQuery.of(context).size.width * (completionPercentage / 100) * 0.8,
+                  width:
+                      MediaQuery.of(context).size.width *
+                      (completionPercentage / 100) *
+                      0.8,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [widget.successColor, widget.primaryColor],
@@ -644,17 +701,32 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Stats Row
           Row(
             children: [
-              _buildStatItem('Total', '$totalItems', Icons.auto_awesome_rounded, widget.primaryColor),
+              _buildStatItem(
+                'Total',
+                '$totalItems',
+                Icons.auto_awesome_rounded,
+                widget.primaryColor,
+              ),
               const SizedBox(width: 16),
-              _buildStatItem('Urgent', '$urgentItems', Icons.warning_rounded, widget.errorColor),
+              _buildStatItem(
+                'Urgent',
+                '$urgentItems',
+                Icons.warning_rounded,
+                widget.errorColor,
+              ),
               const SizedBox(width: 16),
-              _buildStatItem('In Cart', '$inCartItems', Icons.shopping_cart_rounded, widget.successColor),
+              _buildStatItem(
+                'In Cart',
+                '$inCartItems',
+                Icons.shopping_cart_rounded,
+                widget.successColor,
+              ),
               const Spacer(),
               Text(
                 '${completionPercentage.toStringAsFixed(0)}% Complete',
@@ -671,7 +743,12 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+  Widget _buildStatItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Row(
       children: [
         Container(
@@ -697,10 +774,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
             ),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                color: widget.textSecondary,
-              ),
+              style: TextStyle(fontSize: 11, color: widget.textSecondary),
             ),
           ],
         ),
@@ -770,28 +844,16 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                         color: Colors.white,
                       ),
                       const SizedBox(height: 8),
-                      Container(
-                        width: 150,
-                        height: 12,
-                        color: Colors.white,
-                      ),
+                      Container(width: 150, height: 12, color: Colors.white),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              height: 12,
-              color: Colors.white,
-            ),
+            Container(width: double.infinity, height: 12, color: Colors.white),
             const SizedBox(height: 8),
-            Container(
-              width: 250,
-              height: 12,
-              color: Colors.white,
-            ),
+            Container(width: 250, height: 12, color: Colors.white),
           ],
         ),
       ),
@@ -812,7 +874,11 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                 color: widget.errorColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.error_outline_rounded, size: 60, color: widget.errorColor),
+              child: Icon(
+                Icons.error_outline_rounded,
+                size: 60,
+                color: widget.errorColor,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
@@ -842,7 +908,10 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.primaryColor,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -888,7 +957,9 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
               ),
               const SizedBox(height: 12),
               Text(
-                _searchQuery.isNotEmpty || _selectedCategories.isNotEmpty || _selectedPriorities.isNotEmpty
+                _searchQuery.isNotEmpty ||
+                        _selectedCategories.isNotEmpty ||
+                        _selectedPriorities.isNotEmpty
                     ? 'No recommendations match your current filters.'
                     : 'Your smart inventory system is working perfectly. No recommendations needed at this time.',
                 style: TextStyle(
@@ -899,7 +970,9 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
-              if (_searchQuery.isNotEmpty || _selectedCategories.isNotEmpty || _selectedPriorities.isNotEmpty)
+              if (_searchQuery.isNotEmpty ||
+                  _selectedCategories.isNotEmpty ||
+                  _selectedPriorities.isNotEmpty)
                 ElevatedButton(
                   onPressed: _clearFilters,
                   child: Text('Clear Filters'),
@@ -924,57 +997,77 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
   Widget _buildListView() {
     final filtered = _filteredRecommendations;
-    final urgentItems = filtered.where((rec) => rec['priority'] == 'high').toList();
-    final otherItems = filtered.where((rec) => rec['priority'] != 'high').toList();
+    final urgentItems = filtered
+        .where((rec) => rec['priority'] == 'high')
+        .toList();
+    final otherItems = filtered
+        .where((rec) => rec['priority'] != 'high')
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (urgentItems.isNotEmpty) ...[
-          _buildSectionHeader('Urgent Items', urgentItems.length, widget.errorColor),
+          _buildSectionHeader(
+            'Urgent Items',
+            urgentItems.length,
+            widget.errorColor,
+          ),
           const SizedBox(height: 16),
-          ...urgentItems.asMap().entries.map((entry) => 
-            _AdvancedRecommendationItem(
-              recommendation: entry.value,
-              index: entry.key,
-              onTap: () => _handleRecommendationAction(entry.value),
-              onToggleCart: () => _toggleCartStatus(entry.value),
-              isInCart: _itemsInCart.contains(entry.value['itemId']),
-              textPrimary: widget.textPrimary,
-              textSecondary: widget.textSecondary,
-              textLight: widget.textLight,
-              backgroundColor: widget.backgroundColor,
-              surfaceColor: widget.surfaceColor,
-              successColor: widget.successColor,
-              primaryColor: widget.primaryColor,
-              warningColor: widget.warningColor,
-              errorColor: widget.errorColor,
-            )
-          ).toList(),
+          ...urgentItems
+              .asMap()
+              .entries
+              .map(
+                (entry) => _AdvancedRecommendationItem(
+                  recommendation: entry.value,
+                  index: entry.key,
+                  onTap: () => _handleRecommendationAction(entry.value),
+                  onToggleCart: () => _toggleCartStatus(entry.value),
+                  isInCart: _itemsInCart.contains(entry.value['itemId']),
+                  textPrimary: widget.textPrimary,
+                  textSecondary: widget.textSecondary,
+                  textLight: widget.textLight,
+                  backgroundColor: widget.backgroundColor,
+                  surfaceColor: widget.surfaceColor,
+                  successColor: widget.successColor,
+                  primaryColor: widget.primaryColor,
+                  warningColor: widget.warningColor,
+                  errorColor: widget.errorColor,
+                ),
+              )
+              .toList(),
           const SizedBox(height: 24),
         ],
-        
+
         if (otherItems.isNotEmpty) ...[
-          _buildSectionHeader('Other Recommendations', otherItems.length, widget.primaryColor),
+          _buildSectionHeader(
+            'Other Recommendations',
+            otherItems.length,
+            widget.primaryColor,
+          ),
           const SizedBox(height: 16),
-          ...otherItems.asMap().entries.map((entry) => 
-            _AdvancedRecommendationItem(
-              recommendation: entry.value,
-              index: entry.key,
-              onTap: () => _handleRecommendationAction(entry.value),
-              onToggleCart: () => _toggleCartStatus(entry.value),
-              isInCart: _itemsInCart.contains(entry.value['itemId']),
-              textPrimary: widget.textPrimary,
-              textSecondary: widget.textSecondary,
-              textLight: widget.textLight,
-              backgroundColor: widget.backgroundColor,
-              surfaceColor: widget.surfaceColor,
-              successColor: widget.successColor,
-              primaryColor: widget.primaryColor,
-              warningColor: widget.warningColor,
-              errorColor: widget.errorColor,
-            )
-          ).toList(),
+          ...otherItems
+              .asMap()
+              .entries
+              .map(
+                (entry) => _AdvancedRecommendationItem(
+                  recommendation: entry.value,
+                  index: entry.key,
+                  onTap: () => _handleRecommendationAction(entry.value),
+                  onToggleCart: () => _toggleCartStatus(entry.value),
+                  isInCart: _itemsInCart.contains(entry.value['itemId']),
+                  textPrimary: widget.textPrimary,
+                  textSecondary: widget.textSecondary,
+                  textLight: widget.textLight,
+                  backgroundColor: widget.backgroundColor,
+                  surfaceColor: widget.surfaceColor,
+                  successColor: widget.successColor,
+                  primaryColor: widget.primaryColor,
+                  warningColor: widget.warningColor,
+                  errorColor: widget.errorColor,
+                ),
+              )
+              .toList(),
         ],
       ],
     );
@@ -982,7 +1075,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
   Widget _buildCategoryView() {
     final Map<String, List<Map<String, dynamic>>> categorized = {};
-    
+
     for (final recommendation in _filteredRecommendations) {
       final category = recommendation['category'] as String? ?? 'general';
       categorized.putIfAbsent(category, () => []).add(recommendation);
@@ -991,21 +1084,23 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        ...categorized.entries.map((entry) => 
-          _AdvancedCategorySection(
-            category: entry.key,
-            recommendations: entry.value,
-            onTap: _handleRecommendationAction,
-            onToggleCart: _toggleCartStatus,
-            itemsInCart: _itemsInCart,
-            textPrimary: widget.textPrimary,
-            textSecondary: widget.textSecondary,
-            textLight: widget.textLight,
-            surfaceColor: widget.surfaceColor,
-            primaryColor: widget.primaryColor,
-            errorColor: widget.errorColor,
-          )
-        ).toList(),
+        ...categorized.entries
+            .map(
+              (entry) => _AdvancedCategorySection(
+                category: entry.key,
+                recommendations: entry.value,
+                onTap: _handleRecommendationAction,
+                onToggleCart: _toggleCartStatus,
+                itemsInCart: _itemsInCart,
+                textPrimary: widget.textPrimary,
+                textSecondary: widget.textSecondary,
+                textLight: widget.textLight,
+                surfaceColor: widget.surfaceColor,
+                primaryColor: widget.primaryColor,
+                errorColor: widget.errorColor,
+              ),
+            )
+            .toList(),
       ],
     );
   }
@@ -1058,8 +1153,14 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
   }
 
   void _showFilterDialog() {
-    final categories = _smartRecommendations.map((rec) => rec['category'] as String).toSet().toList();
-    final priorities = _smartRecommendations.map((rec) => rec['priority'] as String).toSet().toList();
+    final categories = _smartRecommendations
+        .map((rec) => rec['category'] as String)
+        .toSet()
+        .toList();
+    final priorities = _smartRecommendations
+        .map((rec) => rec['priority'] as String)
+        .toSet()
+        .toList();
 
     showModalBottomSheet(
       context: context,
@@ -1094,7 +1195,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               Text(
                 'Categories',
                 style: TextStyle(
@@ -1123,15 +1224,17 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                     backgroundColor: widget.backgroundColor,
                     selectedColor: widget.primaryColor.withOpacity(0.1),
                     labelStyle: TextStyle(
-                      color: isSelected ? widget.primaryColor : widget.textSecondary,
+                      color: isSelected
+                          ? widget.primaryColor
+                          : widget.textSecondary,
                     ),
                     checkmarkColor: widget.primaryColor,
                   );
                 }).toList(),
               ),
-              
+
               const SizedBox(height: 20),
-              
+
               Text(
                 'Priority',
                 style: TextStyle(
@@ -1160,15 +1263,17 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                     backgroundColor: widget.backgroundColor,
                     selectedColor: _getPriorityColor(priority).withOpacity(0.1),
                     labelStyle: TextStyle(
-                      color: isSelected ? _getPriorityColor(priority) : widget.textSecondary,
+                      color: isSelected
+                          ? _getPriorityColor(priority)
+                          : widget.textSecondary,
                     ),
                     checkmarkColor: _getPriorityColor(priority),
                   );
                 }).toList(),
               ),
-              
+
               const SizedBox(height: 30),
-              
+
               Row(
                 children: [
                   Expanded(
@@ -1236,7 +1341,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 
   void _handleRecommendationAction(Map<String, dynamic> recommendation) {
     final String? itemId = recommendation['itemId'] as String?;
-    
+
     if (itemId == null) {
       _showEnhancedSnackbar(
         message: 'Invalid recommendation: missing item ID',
@@ -1270,8 +1375,12 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Color(recommendation['color'] as int).withOpacity(0.8),
-                          Color(recommendation['color'] as int).withOpacity(0.6),
+                          Color(
+                            recommendation['color'] as int,
+                          ).withOpacity(0.8),
+                          Color(
+                            recommendation['color'] as int,
+                          ).withOpacity(0.6),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -1309,13 +1418,13 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: Icon(
-                    _itemsInCart.contains(recommendation['itemId']) 
-                        ? Icons.remove_shopping_cart_rounded 
+                    _itemsInCart.contains(recommendation['itemId'])
+                        ? Icons.remove_shopping_cart_rounded
                         : Icons.add_shopping_cart_rounded,
                   ),
                   label: Text(
-                    _itemsInCart.contains(recommendation['itemId']) 
-                        ? 'Remove from Cart' 
+                    _itemsInCart.contains(recommendation['itemId'])
+                        ? 'Remove from Cart'
                         : 'Add to Cart',
                   ),
                   onPressed: () {
@@ -1323,8 +1432,9 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
                     _toggleCartStatus(recommendation);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _itemsInCart.contains(recommendation['itemId']) 
-                        ? widget.errorColor 
+                    backgroundColor:
+                        _itemsInCart.contains(recommendation['itemId'])
+                        ? widget.errorColor
                         : widget.primaryColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1373,9 +1483,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
         ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: duration,
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1385,7 +1493,6 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> with Si
 }
 
 // ... rest of the code remains the same (_AdvancedCategorySection, _AdvancedRecommendationItem, _DetailChip)
-
 
 class _AdvancedCategorySection extends StatefulWidget {
   final String category;
@@ -1416,10 +1523,12 @@ class _AdvancedCategorySection extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<_AdvancedCategorySection> createState() => _AdvancedCategorySectionState();
+  State<_AdvancedCategorySection> createState() =>
+      _AdvancedCategorySectionState();
 }
 
-class _AdvancedCategorySectionState extends State<_AdvancedCategorySection> with SingleTickerProviderStateMixin {
+class _AdvancedCategorySectionState extends State<_AdvancedCategorySection>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _heightAnimation;
   bool _isExpanded = true;
@@ -1456,8 +1565,12 @@ class _AdvancedCategorySectionState extends State<_AdvancedCategorySection> with
 
   @override
   Widget build(BuildContext context) {
-    final urgentCount = widget.recommendations.where((r) => r['priority'] == 'high').length;
-    final inCartCount = widget.recommendations.where((r) => widget.itemsInCart.contains(r['itemId'])).length;
+    final urgentCount = widget.recommendations
+        .where((r) => r['priority'] == 'high')
+        .length;
+    final inCartCount = widget.recommendations
+        .where((r) => widget.itemsInCart.contains(r['itemId']))
+        .length;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -1500,7 +1613,9 @@ class _AdvancedCategorySectionState extends State<_AdvancedCategorySection> with
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: _getCategoryColor(widget.category).withOpacity(0.3),
+                            color: _getCategoryColor(
+                              widget.category,
+                            ).withOpacity(0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -1542,14 +1657,21 @@ class _AdvancedCategorySectionState extends State<_AdvancedCategorySection> with
                         if (urgentCount > 0)
                           Container(
                             margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.red.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.warning_rounded, size: 12, color: Colors.red),
+                                Icon(
+                                  Icons.warning_rounded,
+                                  size: 12,
+                                  color: Colors.red,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   '$urgentCount',
@@ -1577,31 +1699,37 @@ class _AdvancedCategorySectionState extends State<_AdvancedCategorySection> with
               ),
             ),
           ),
-          
+
           // Animated expandable content
           SizeTransition(
             sizeFactor: _heightAnimation,
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Column(
-                children: widget.recommendations.asMap().entries.map((entry) => 
-                  _AdvancedRecommendationItem(
-                    recommendation: entry.value,
-                    index: entry.key,
-                    onTap: () => widget.onTap(entry.value),
-                    onToggleCart: () => widget.onToggleCart(entry.value),
-                    isInCart: widget.itemsInCart.contains(entry.value['itemId']),
-                    textPrimary: widget.textPrimary,
-                    textSecondary: widget.textSecondary,
-                    textLight: widget.textLight,
-                    backgroundColor: widget.surfaceColor,
-                    surfaceColor: widget.surfaceColor,
-                    successColor: Colors.green,
-                    primaryColor: widget.primaryColor,
-                    warningColor: Colors.orange,
-                    errorColor: widget.errorColor,
-                  )
-                ).toList(),
+                children: widget.recommendations
+                    .asMap()
+                    .entries
+                    .map(
+                      (entry) => _AdvancedRecommendationItem(
+                        recommendation: entry.value,
+                        index: entry.key,
+                        onTap: () => widget.onTap(entry.value),
+                        onToggleCart: () => widget.onToggleCart(entry.value),
+                        isInCart: widget.itemsInCart.contains(
+                          entry.value['itemId'],
+                        ),
+                        textPrimary: widget.textPrimary,
+                        textSecondary: widget.textSecondary,
+                        textLight: widget.textLight,
+                        backgroundColor: widget.surfaceColor,
+                        surfaceColor: widget.surfaceColor,
+                        successColor: Colors.green,
+                        primaryColor: widget.primaryColor,
+                        warningColor: Colors.orange,
+                        errorColor: widget.errorColor,
+                      ),
+                    )
+                    .toList(),
               ),
             ),
           ),
@@ -1686,10 +1814,12 @@ class _AdvancedRecommendationItem extends StatelessWidget {
     final String priority = recommendation['priority'] as String;
     final String category = recommendation['category'] as String? ?? 'general';
     final bool isCategoryAdjusted = recommendation['categoryAdjusted'] == true;
-    final double? preferenceScore = recommendation['preferenceScore'] as double?;
+    final double? preferenceScore =
+        recommendation['preferenceScore'] as double?;
     final bool isAIGenerated = recommendation['aiGenerated'] == true;
     final int? daysUntilExpiry = recommendation['daysUntilExpiry'] as int?;
-    final double? consumptionRate = recommendation['consumptionRate'] as double?;
+    final double? consumptionRate =
+        recommendation['consumptionRate'] as double?;
     final int? currentStock = recommendation['currentStock'] as int?;
     final bool isUrgent = priority == 'high';
 
@@ -1706,19 +1836,23 @@ class _AdvancedRecommendationItem extends StatelessWidget {
             offset: const Offset(0, 4),
           ),
         ],
-        border: isInCart 
+        border: isInCart
             ? Border.all(color: successColor.withOpacity(0.3), width: 2)
-            : (isUrgent 
-                ? Border.all(color: errorColor.withOpacity(0.3), width: 2)
-                : null),
+            : (isUrgent
+                  ? Border.all(color: errorColor.withOpacity(0.3), width: 2)
+                  : null),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onToggleCart, // Toggle cart status on tap
           borderRadius: BorderRadius.circular(20),
-          splashColor: isInCart ? successColor.withOpacity(0.1) : color.withOpacity(0.1),
-          highlightColor: isInCart ? successColor.withOpacity(0.05) : color.withOpacity(0.05),
+          splashColor: isInCart
+              ? successColor.withOpacity(0.1)
+              : color.withOpacity(0.1),
+          highlightColor: isInCart
+              ? successColor.withOpacity(0.05)
+              : color.withOpacity(0.05),
           child: Container(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -1729,11 +1863,17 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                   width: 4,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: isInCart ? successColor : _getPriorityColor(priority),
+                    color: isInCart
+                        ? successColor
+                        : _getPriorityColor(priority),
                     borderRadius: BorderRadius.circular(2),
                     boxShadow: [
                       BoxShadow(
-                        color: (isInCart ? successColor : _getPriorityColor(priority)).withOpacity(0.3),
+                        color:
+                            (isInCart
+                                    ? successColor
+                                    : _getPriorityColor(priority))
+                                .withOpacity(0.3),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -1741,7 +1881,7 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                
+
                 // Icon with better styling
                 Container(
                   width: 50,
@@ -1750,14 +1890,19 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: isInCart 
-                          ? [successColor.withOpacity(0.8), successColor.withOpacity(0.6)]
+                      colors: isInCart
+                          ? [
+                              successColor.withOpacity(0.8),
+                              successColor.withOpacity(0.6),
+                            ]
                           : [color.withOpacity(0.8), color.withOpacity(0.6)],
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: (isInCart ? successColor : color).withOpacity(0.3),
+                        color: (isInCart ? successColor : color).withOpacity(
+                          0.3,
+                        ),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -1767,9 +1912,9 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                     children: [
                       Center(
                         child: Icon(
-                          isInCart ? Icons.check_circle_rounded : icon, 
-                          color: Colors.white, 
-                          size: 24
+                          isInCart ? Icons.check_circle_rounded : icon,
+                          color: Colors.white,
+                          size: 24,
                         ),
                       ),
                       if (isCategoryAdjusted)
@@ -1814,7 +1959,7 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1850,7 +1995,7 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 8),
-                                if (isInCart) 
+                                if (isInCart)
                                   Text(
                                     '✓ In shopping list • Tap to remove',
                                     style: TextStyle(
@@ -1875,9 +2020,9 @@ class _AdvancedRecommendationItem extends StatelessWidget {
                           _buildPriorityBadge(priority),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Enhanced detail chips (without quantity)
                       _buildEnhancedDetailInfo(
                         currentStock: currentStock,
@@ -1899,10 +2044,10 @@ class _AdvancedRecommendationItem extends StatelessWidget {
 
   Widget _buildPriorityBadge(String priority) {
     final Color bgColor = _getPriorityColor(priority);
-    final IconData icon = priority == 'high' 
-        ? Icons.warning_rounded 
+    final IconData icon = priority == 'high'
+        ? Icons.warning_rounded
         : Icons.info_rounded;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1999,11 +2144,7 @@ class _AdvancedRecommendationItem extends StatelessWidget {
       );
     }
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: details,
-    );
+    return Wrap(spacing: 8, runSpacing: 6, children: details);
   }
 }
 

@@ -18,17 +18,17 @@ class ExpiryDateManager {
     final difference = expiryDate.difference(now);
     return difference.inDays <= 7 && difference.inDays >= 0;
   }
-  
+
   // Check if item is expired
   static bool isExpired(DateTime? expiryDate) {
     if (expiryDate == null) return false;
     return expiryDate.isBefore(DateTime.now());
   }
-  
+
   // Get expiry status color
   static Color getExpiryStatusColor(DateTime? expiryDate) {
     if (expiryDate == null) return Colors.grey; // No expiry date
-    
+
     if (isExpired(expiryDate)) {
       return Colors.red; // Expired
     } else if (isExpiringSoon(expiryDate)) {
@@ -37,11 +37,11 @@ class ExpiryDateManager {
       return Colors.green; // Not expiring soon
     }
   }
-  
+
   // Get expiry status text
   static String getExpiryStatusText(DateTime? expiryDate) {
     if (expiryDate == null) return 'No Expiry';
-    
+
     if (isExpired(expiryDate)) {
       final days = DateTime.now().difference(expiryDate).inDays;
       return 'Expired ${days == 0 ? 'today' : '$days days ago'}';
@@ -126,7 +126,9 @@ class _InventoryListPageState extends State<InventoryListPage> {
 
   Future<void> _loadCategories() async {
     try {
-      final categories = await _inventoryService.getCategories(widget.householdId);
+      final categories = await _inventoryService.getCategories(
+        widget.householdId,
+      );
       setState(() {
         _categories = ['All', ...categories];
       });
@@ -186,7 +188,10 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       ),
                       child: Text(
                         _sortAscending ? 'Ascending' : 'Descending',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: primaryColor,
+                        ),
                       ),
                     ),
                   ),
@@ -196,11 +201,15 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: Text('Apply'),
+                      child: Text(
+                        'Apply',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
                 ],
@@ -216,7 +225,9 @@ class _InventoryListPageState extends State<InventoryListPage> {
   Widget _buildSortOption(String title, String field) {
     return ListTile(
       leading: Icon(
-        _sortField == field ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        _sortField == field
+            ? Icons.radio_button_checked
+            : Icons.radio_button_unchecked,
         color: _sortField == field ? primaryColor : lightTextColor,
       ),
       title: Text(title),
@@ -280,12 +291,13 @@ class _InventoryListPageState extends State<InventoryListPage> {
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   minimumSize: Size(double.infinity, 50),
                 ),
-                child: Text('Close'),
+                child: Text('Close', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -299,10 +311,14 @@ class _InventoryListPageState extends State<InventoryListPage> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        automaticallyImplyLeading: false, 
+        automaticallyImplyLeading: false,
         title: Text(
           '${widget.householdName} Inventory',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
         ),
         backgroundColor: primaryColor,
         elevation: 4,
@@ -350,7 +366,10 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       ),
                       filled: true,
                       fillColor: backgroundColor,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                     ),
                   ),
                   SizedBox(height: 12),
@@ -370,7 +389,9 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                       Icon(
                                         Icons.category,
                                         size: 16,
-                                        color: _selectedCategory == category ? Colors.white : primaryColor,
+                                        color: _selectedCategory == category
+                                            ? Colors.white
+                                            : primaryColor,
                                       ),
                                       SizedBox(width: 4),
                                       Text(category),
@@ -379,18 +400,26 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                   selected: _selectedCategory == category,
                                   onSelected: (selected) {
                                     setState(() {
-                                      _selectedCategory = selected ? category : 'All';
+                                      _selectedCategory = selected
+                                          ? category
+                                          : 'All';
                                     });
                                   },
                                   backgroundColor: Colors.white,
                                   selectedColor: primaryColor,
                                   labelStyle: TextStyle(
-                                    color: _selectedCategory == category ? Colors.white : lightTextColor,
-                                    fontWeight: _selectedCategory == category ? FontWeight.w600 : FontWeight.normal,
+                                    color: _selectedCategory == category
+                                        ? Colors.white
+                                        : lightTextColor,
+                                    fontWeight: _selectedCategory == category
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
                                   ),
                                   shape: StadiumBorder(
                                     side: BorderSide(
-                                      color: _selectedCategory == category ? primaryColor : Colors.grey.shade300,
+                                      color: _selectedCategory == category
+                                          ? primaryColor
+                                          : Colors.grey.shade300,
                                     ),
                                   ),
                                 ),
@@ -401,10 +430,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       ),
                       if (_showLowStockOnly || _showExpiringSoonOnly)
                         IconButton(
-                          icon: Icon(
-                            Icons.filter_alt,
-                            color: Colors.orange,
-                          ),
+                          icon: Icon(Icons.filter_alt, color: Colors.orange),
                           onPressed: _showFilterOptions,
                           tooltip: 'Active filters',
                         ),
@@ -428,8 +454,8 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         _showLowStockOnly && _showExpiringSoonOnly
                             ? 'Showing: Low Stock & Expiring Soon'
                             : _showLowStockOnly
-                                ? 'Showing: Low Stock Only'
-                                : 'Showing: Expiring Soon Only',
+                            ? 'Showing: Low Stock Only'
+                            : 'Showing: Expiring Soon Only',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.orange,
@@ -461,13 +487,15 @@ class _InventoryListPageState extends State<InventoryListPage> {
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: _inventoryService.getItemsStream(
-                  widget.householdId, 
-                  sortField: _sortField, 
-                  sortAscending: _sortAscending
+                  widget.householdId,
+                  sortField: _sortField,
+                  sortAscending: _sortAscending,
                 ),
-                builder: (context, snapshot) {  
+                builder: (context, snapshot) {
                   if (snapshot.hasError) {
-                    return _buildErrorState('Error loading inventory: ${snapshot.error}');
+                    return _buildErrorState(
+                      'Error loading inventory: ${snapshot.error}',
+                    );
                   }
 
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -480,20 +508,35 @@ class _InventoryListPageState extends State<InventoryListPage> {
 
                   // Process items directly from the stream
                   List<InventoryItem> items = snapshot.data!.docs.map((doc) {
-                    return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+                    return InventoryItem.fromMap(
+                      doc.data() as Map<String, dynamic>,
+                      doc.id,
+                    );
                   }).toList();
 
                   // Filter items based on search query, category, and active filters
                   final filteredItems = items.where((item) {
-                    final matchesSearch = item.name.toLowerCase().contains(_searchQuery) ||
-                        (item.description?.toLowerCase().contains(_searchQuery) ?? false) ||
+                    final matchesSearch =
+                        item.name.toLowerCase().contains(_searchQuery) ||
+                        (item.description?.toLowerCase().contains(
+                              _searchQuery,
+                            ) ??
+                            false) ||
                         (item.category.toLowerCase().contains(_searchQuery));
-                    final matchesCategory = _selectedCategory == 'All' || item.category == _selectedCategory;
-                    final matchesLowStock = !_showLowStockOnly || item.quantity < 5;
-                    final matchesExpiringSoon = !_showExpiringSoonOnly || 
-                        (item.expiryDate != null && ExpiryDateManager.isExpiringSoon(item.expiryDate));
-                    
-                    return matchesSearch && matchesCategory && matchesLowStock && matchesExpiringSoon;
+                    final matchesCategory =
+                        _selectedCategory == 'All' ||
+                        item.category == _selectedCategory;
+                    final matchesLowStock =
+                        !_showLowStockOnly || item.quantity < 5;
+                    final matchesExpiringSoon =
+                        !_showExpiringSoonOnly ||
+                        (item.expiryDate != null &&
+                            ExpiryDateManager.isExpiringSoon(item.expiryDate));
+
+                    return matchesSearch &&
+                        matchesCategory &&
+                        matchesLowStock &&
+                        matchesExpiringSoon;
                   }).toList();
 
                   if (filteredItems.isEmpty) {
@@ -515,8 +558,8 @@ class _InventoryListPageState extends State<InventoryListPage> {
         ),
       ),
       // Only show FAB if not in read-only mode
-      floatingActionButton: widget.isReadOnly 
-          ? null 
+      floatingActionButton: widget.isReadOnly
+          ? null
           : FloatingActionButton(
               onPressed: () {
                 _navigateToEditPage();
@@ -532,7 +575,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
   void _navigateToEditPage({InventoryItem? item}) {
     // Don't navigate if in read-only mode
     if (widget.isReadOnly) return;
-    
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -549,18 +592,24 @@ class _InventoryListPageState extends State<InventoryListPage> {
   Widget _buildInventoryCard(InventoryItem item, BuildContext context) {
     final bool isLowStock = item.quantity < 5;
     final bool hasExpiryDate = item.expiryDate != null;
-    final Color expiryStatusColor = ExpiryDateManager.getExpiryStatusColor(item.expiryDate);
-    final String expiryStatusText = ExpiryDateManager.getExpiryStatusText(item.expiryDate);
+    final Color expiryStatusColor = ExpiryDateManager.getExpiryStatusColor(
+      item.expiryDate,
+    );
+    final String expiryStatusText = ExpiryDateManager.getExpiryStatusText(
+      item.expiryDate,
+    );
     final bool isExpired = ExpiryDateManager.isExpired(item.expiryDate);
-    final bool isExpiringSoon = ExpiryDateManager.isExpiringSoon(item.expiryDate);
-    
+    final bool isExpiringSoon = ExpiryDateManager.isExpiringSoon(
+      item.expiryDate,
+    );
+
     return Card(
       elevation: 4,
       margin: EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: widget.isReadOnly 
+        onTap: widget.isReadOnly
             ? null // Disable tap in read-only mode
             : () {
                 _navigateToEditPage(item: item);
@@ -595,7 +644,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                 ],
               ),
               SizedBox(width: 16),
-              
+
               // Item details - This is the main content area
               Expanded(
                 child: Column(
@@ -619,11 +668,17 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         ),
                         if (hasExpiryDate)
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: expiryStatusColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: expiryStatusColor, width: 1),
+                              border: Border.all(
+                                color: expiryStatusColor,
+                                width: 1,
+                              ),
                             ),
                             child: Text(
                               expiryStatusText,
@@ -637,14 +692,17 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       ],
                     ),
                     SizedBox(height: 8),
-                    
+
                     // Category and status chips
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: primaryColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
@@ -658,18 +716,28 @@ class _InventoryListPageState extends State<InventoryListPage> {
                             ),
                           ),
                         ),
-                        if (isLowStock) 
+                        if (isLowStock)
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.orange.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.orange, width: 1),
+                              border: Border.all(
+                                color: Colors.orange,
+                                width: 1,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.warning, size: 14, color: Colors.orange),
+                                Icon(
+                                  Icons.warning,
+                                  size: 14,
+                                  color: Colors.orange,
+                                ),
                                 SizedBox(width: 4),
                                 Text(
                                   'Low Stock',
@@ -684,7 +752,10 @@ class _InventoryListPageState extends State<InventoryListPage> {
                           ),
                         if (isExpired)
                           Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.red.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -693,7 +764,11 @@ class _InventoryListPageState extends State<InventoryListPage> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.error_outline, size: 14, color: Colors.red),
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 14,
+                                  color: Colors.red,
+                                ),
                                 SizedBox(width: 4),
                                 Text(
                                   'Expired',
@@ -709,7 +784,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       ],
                     ),
                     SizedBox(height: 12),
-                    
+
                     // Item details in a compact layout
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -717,18 +792,28 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         // Quantity and price
                         Row(
                           children: [
-                            _buildDetailItem(Icons.format_list_numbered, '${item.quantity} units'),
+                            _buildDetailItem(
+                              Icons.format_list_numbered,
+                              '${item.quantity} units',
+                            ),
                             SizedBox(width: 16),
-                            _buildDetailItem(Icons.attach_money, 'RM ${item.price.toStringAsFixed(2)}'),
+                            _buildDetailItem(
+                              Icons.attach_money,
+                              'RM ${item.price.toStringAsFixed(2)}',
+                            ),
                           ],
                         ),
                         SizedBox(height: 8),
-                        
+
                         // Expiry date with color coding
                         if (hasExpiryDate)
                           Row(
                             children: [
-                              Icon(Icons.calendar_today, size: 16, color: expiryStatusColor),
+                              Icon(
+                                Icons.calendar_today,
+                                size: 16,
+                                color: expiryStatusColor,
+                              ),
                               SizedBox(width: 4),
                               Expanded(
                                 child: Text(
@@ -745,7 +830,11 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         else
                           Row(
                             children: [
-                              Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                              Icon(
+                                Icons.calendar_today,
+                                size: 16,
+                                color: Colors.grey,
+                              ),
                               SizedBox(width: 4),
                               Text(
                                 'No expiry date',
@@ -756,13 +845,18 @@ class _InventoryListPageState extends State<InventoryListPage> {
                               ),
                             ],
                           ),
-                        
+
                         // Location
-                        if (item.location != null && item.location!.isNotEmpty) ...[
+                        if (item.location != null &&
+                            item.location!.isNotEmpty) ...[
                           SizedBox(height: 8),
                           Row(
                             children: [
-                              Icon(Icons.location_on, size: 16, color: lightTextColor),
+                              Icon(
+                                Icons.location_on,
+                                size: 16,
+                                color: lightTextColor,
+                              ),
                               SizedBox(width: 4),
                               Expanded(
                                 child: Text(
@@ -782,7 +876,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                   ],
                 ),
               ),
-              
+
               // Action buttons - Only show if not in read-only mode
               if (!widget.isReadOnly) ...[
                 Column(
@@ -843,17 +937,23 @@ class _InventoryListPageState extends State<InventoryListPage> {
         item.imageUrl!,
         fit: BoxFit.cover,
         width: double.infinity,
-        loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                  : null,
-              color: primaryColor,
-            ),
-          );
-        },
+        loadingBuilder:
+            (
+              BuildContext context,
+              Widget child,
+              ImageChunkEvent? loadingProgress,
+            ) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                      : null,
+                  color: primaryColor,
+                ),
+              );
+            },
         errorBuilder: (context, error, stackTrace) {
           return _buildDefaultIcon();
         },
@@ -875,10 +975,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
       children: [
         Icon(icon, size: 16, color: lightTextColor),
         SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(fontSize: 14, color: lightTextColor),
-        ),
+        Text(text, style: TextStyle(fontSize: 14, color: lightTextColor)),
       ],
     );
   }
@@ -912,7 +1009,11 @@ class _InventoryListPageState extends State<InventoryListPage> {
             SizedBox(height: 16),
             Text(
               'Something went wrong',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: textColor),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
             ),
             SizedBox(height: 8),
             Text(
@@ -927,12 +1028,19 @@ class _InventoryListPageState extends State<InventoryListPage> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               child: Text(
                 'Try Again',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -948,11 +1056,19 @@ class _InventoryListPageState extends State<InventoryListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined, size: 80, color: lightTextColor.withOpacity(0.5)),
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 80,
+              color: lightTextColor.withOpacity(0.5),
+            ),
             SizedBox(height: 16),
             Text(
               'No inventory items yet',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: textColor),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
             ),
             SizedBox(height: 8),
             Text(
@@ -969,12 +1085,19 @@ class _InventoryListPageState extends State<InventoryListPage> {
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: secondaryColor,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 ),
                 child: Text(
                   'Add First Item',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -989,11 +1112,19 @@ class _InventoryListPageState extends State<InventoryListPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.search_off, size: 64, color: lightTextColor.withOpacity(0.5)),
+          Icon(
+            Icons.search_off,
+            size: 64,
+            color: lightTextColor.withOpacity(0.5),
+          ),
           SizedBox(height: 16),
           Text(
             'No items found',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: textColor),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: textColor,
+            ),
           ),
           SizedBox(height: 8),
           Text(
@@ -1013,9 +1144,15 @@ class _InventoryListPageState extends State<InventoryListPage> {
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: Text('Clear All Filters'),
+            child: Text(
+              'Clear All Filters',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -1025,12 +1162,14 @@ class _InventoryListPageState extends State<InventoryListPage> {
   void _showDeleteDialog(InventoryItem item) {
     // Don't show delete dialog in read-only mode
     if (widget.isReadOnly) return;
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: EdgeInsets.all(20),
             child: Column(
@@ -1040,7 +1179,11 @@ class _InventoryListPageState extends State<InventoryListPage> {
                 SizedBox(height: 16),
                 Text(
                   'Delete Item',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: textColor),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
                 ),
                 SizedBox(height: 16),
                 Text(
@@ -1056,10 +1199,17 @@ class _InventoryListPageState extends State<InventoryListPage> {
                       child: OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryColor,
+                          side: BorderSide(color: primaryColor),
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: Text('Cancel', style: TextStyle(color: primaryColor)),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(color: primaryColor),
+                        ),
                       ),
                     ),
                     SizedBox(width: 16),
@@ -1068,13 +1218,20 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         onPressed: () async {
                           Navigator.of(context).pop();
                           try {
-                            await _inventoryService.deleteItem(widget.householdId, item.id!);
+                            await _inventoryService.deleteItem(
+                              widget.householdId,
+                              item.id!,
+                            );
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('"${item.name}" deleted successfully'),
+                                content: Text(
+                                  '"${item.name}" deleted successfully',
+                                ),
                                 backgroundColor: secondaryColor,
                                 behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
                             );
                           } catch (e) {
@@ -1083,17 +1240,25 @@ class _InventoryListPageState extends State<InventoryListPage> {
                                 content: Text('Error deleting item: $e'),
                                 backgroundColor: Colors.red,
                                 behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
                             );
                           }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: Text('Delete', style: TextStyle(color: Colors.white)),
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                     ),
                   ],

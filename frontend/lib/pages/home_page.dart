@@ -9,15 +9,18 @@ class HomePage extends StatefulWidget {
   _HomePageState createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
-  // Color scheme from DashboardPage
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
+  // Updated color scheme to match DashboardPage
   static const Color primaryColor = Color(0xFF2D5D7C);
-  static const Color secondaryColor = Color(0xFF4CAF50);
-  static const Color accentColor = Color(0xFFFF9800);
-  static const Color backgroundColor = Color(0xFFF8FAFC);
-  static const Color cardColor = Colors.white;
-  static const Color textColor = Color(0xFF1E293B);
-  static const Color lightTextColor = Color(0xFF64748B);
+  static const Color secondaryColor = Color(0xFF6270B1);
+  static const Color accentColor = Color(0xFF4CC9F0);
+  static const Color successColor = Color(0xFF10B981);
+  static const Color warningColor = Color(0xFFF59E0B);
+  static const Color backgroundColor = Color(0xFFF8FAFF);
+  static const Color cardColor = Color(0xFFFFFFFF);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -27,36 +30,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 1200),
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    
-    _slideAnimation = Tween<Offset>(
-      begin: Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOut,
-      ),
-    );
-    
+
+    _slideAnimation = Tween<Offset>(begin: Offset(0, 0.3), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
+
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutBack,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
     );
-    
+
     _animationController.forward();
   }
 
@@ -79,10 +71,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           var tween = Tween(begin: begin, end: end).chain(curveTween);
           var offsetAnimation = animation.drive(tween);
 
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
+          return SlideTransition(position: offsetAnimation, child: child);
         },
         transitionDuration: Duration(milliseconds: 600),
       ),
@@ -140,7 +129,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   opacity: _fadeAnimation,
                   child: SlideTransition(
                     position: _slideAnimation,
-                    child: _buildButton(context, 'Get Started', const SignUpPage(), secondaryColor),
+                    child: _buildButton(
+                      context,
+                      'Get Started',
+                      const SignUpPage(),
+                      primaryColor,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -148,11 +142,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   opacity: _fadeAnimation,
                   child: SlideTransition(
                     position: _slideAnimation,
-                    child: _buildOutlinedButton(context, 'Log In', const LoginPage()),
+                    child: _buildOutlinedButton(
+                      context,
+                      'Log In',
+                      const LoginPage(),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 40),
-                // Divider with text and animation
               ],
             ),
           ),
@@ -184,11 +181,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          Icons.inventory_2_outlined,
-          color: Colors.white,
-          size: 80,
-        ),
+        child: Icon(Icons.inventory_2_outlined, color: Colors.white, size: 80),
       ),
     );
   }
@@ -217,7 +210,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w500,
-        color: textColor.withOpacity(0.7),
+        color: textPrimary.withOpacity(0.7),
         letterSpacing: 0.1,
       ),
       textAlign: TextAlign.center,
@@ -245,7 +238,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           'Real-Time Sync',
           'Sync inventory across devices instantly',
           Icons.sync,
-          secondaryColor,
+          successColor,
         ),
         _buildFeatureCard(
           'Barcode Scanning',
@@ -257,13 +250,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           'Expense Tracking',
           'Track your inventory expenses',
           Icons.attach_money,
-          Colors.green,
+          warningColor,
         ),
       ],
     );
   }
 
-  Widget _buildFeatureCard(String title, String description, IconData icon, Color color) {
+  Widget _buildFeatureCard(
+    String title,
+    String description,
+    IconData icon,
+    Color color,
+  ) {
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
@@ -304,16 +302,13 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: textColor,
+                    color: textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: lightTextColor,
-                  ),
+                  style: TextStyle(fontSize: 12, color: textSecondary),
                 ),
               ],
             ),
@@ -323,7 +318,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildButton(BuildContext context, String text, Widget page, Color color) {
+  Widget _buildButton(
+    BuildContext context,
+    String text,
+    Widget page,
+    Color color,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 58,
@@ -332,7 +332,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           shadowColor: color.withOpacity(0.4),
         ),
         child: Text(
@@ -356,20 +358,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         style: OutlinedButton.styleFrom(
           foregroundColor: primaryColor,
           side: BorderSide(color: primaryColor, width: 2),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 16),
           backgroundColor: Colors.transparent,
         ),
         child: Text(
           text,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
-
-
 }

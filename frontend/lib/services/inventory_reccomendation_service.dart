@@ -11,10 +11,10 @@ class InventoryRecommendationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Connectivity _connectivity = Connectivity();
-  
+
   // Add ShoppingListService instance
   final ShoppingListService _shoppingListService = ShoppingListService();
-  
+
   // Enhanced cache with TTL
   final Map<String, _CachedConsumptionRate> _consumptionRateCache = {};
   final Map<String, HouseholdProfile> _householdProfileCache = {};
@@ -121,21 +121,27 @@ class InventoryRecommendationService {
   };
 
   // 🎯 MAIN RECOMMENDATION METHOD
-  Future<List<Map<String, dynamic>>> getSmartRecommendations(String householdId) async {
+  Future<List<Map<String, dynamic>>> getSmartRecommendations(
+    String householdId,
+  ) async {
     final cacheKey = '${householdId}_recommendations';
     final cached = _recommendationCache[cacheKey];
     if (cached != null) {
-      return cached.where((rec) => !_isRecommendationAdded(householdId, rec)).toList();
+      return cached
+          .where((rec) => !_isRecommendationAdded(householdId, rec))
+          .toList();
     }
 
     try {
       final hasConnection = await _checkConnection();
       if (!hasConnection) {
-        throw Exception('No internet connection. Please check your connection and try again.');
+        throw Exception(
+          'No internet connection. Please check your connection and try again.',
+        );
       }
 
       final stopwatch = Stopwatch()..start();
-      
+
       // Fetch data for specific household
       final responses = await Future.wait<dynamic>([
         _fetchInventoryBatch(householdId),
@@ -147,7 +153,8 @@ class InventoryRecommendationService {
       final inventoryItems = responses[0] as List<InventoryItem>;
       final consumptionRates = responses[1] as Map<String, double>;
       final householdProfile = responses[2] as HouseholdProfile;
-      final categoryPatterns = responses[3] as Map<String, CategoryConsumptionPattern>;
+      final categoryPatterns =
+          responses[3] as Map<String, CategoryConsumptionPattern>;
 
       if (inventoryItems.isEmpty) {
         return _getPersonalizedDefaultRecommendations(householdProfile);
@@ -164,19 +171,30 @@ class InventoryRecommendationService {
       // Cache the results
       _cacheRecommendations(cacheKey, recommendations);
 
-      _logPerformance('Enhanced recommendations generated in ${stopwatch.elapsedMilliseconds}ms');
-      
-      return recommendations.where((rec) => !_isRecommendationAdded(householdId, rec)).toList();
+      _logPerformance(
+        'Enhanced recommendations generated in ${stopwatch.elapsedMilliseconds}ms',
+      );
+
+      return recommendations
+          .where((rec) => !_isRecommendationAdded(householdId, rec))
+          .toList();
     } catch (e) {
       _logError('Error generating enhanced recommendations', e);
       final householdProfile = await _getHouseholdProfile(householdId);
-      final defaultRecs = _getPersonalizedDefaultRecommendations(householdProfile);
-      return defaultRecs.where((rec) => !_isRecommendationAdded(householdId, rec)).toList();
+      final defaultRecs = _getPersonalizedDefaultRecommendations(
+        householdProfile,
+      );
+      return defaultRecs
+          .where((rec) => !_isRecommendationAdded(householdId, rec))
+          .toList();
     }
   }
 
   // 📈 GET USAGE ANALYTICS FOR SPECIFIC ITEM
-  Future<Map<String, dynamic>> getItemUsageAnalytics(String householdId, String itemId) async {
+  Future<Map<String, dynamic>> getItemUsageAnalytics(
+    String householdId,
+    String itemId,
+  ) async {
     try {
       final consumptionRate = await _calculateConsumptionRate(itemId);
       final itemDoc = await _firestore
@@ -191,16 +209,22 @@ class InventoryRecommendationService {
       }
 
       final item = InventoryItem.fromMap(itemDoc.data()!, itemId);
-      final categoryProfile = _categoryProfiles[item.category.toLowerCase()] ?? _categoryProfiles['household_supplies']!;
-      
+      final categoryProfile =
+          _categoryProfiles[item.category.toLowerCase()] ??
+          _categoryProfiles['household_supplies']!;
+
       // Get recent usage history
       final usageHistory = await _getUsageHistory(itemId, 30); // Last 30 days
 
       // Calculate metrics
-      final double daysOfSupply = consumptionRate > 0 ? (item.quantity / consumptionRate).toDouble() : 0.0;
-      final minStockLevel = item.minStockLevel ?? _calculateDefaultMinStockLevel(categoryProfile, consumptionRate);
+      final double daysOfSupply = consumptionRate > 0
+          ? (item.quantity / consumptionRate).toDouble()
+          : 0.0;
+      final minStockLevel =
+          item.minStockLevel ??
+          _calculateDefaultMinStockLevel(categoryProfile, consumptionRate);
       final isBelowMinStock = item.quantity <= minStockLevel;
-      
+
       // Expiry analysis
       double expiryRisk = 0.0;
       int? daysUntilExpiry;
@@ -220,19 +244,24 @@ class InventoryRecommendationService {
         'expiryRisk': expiryRisk,
         'daysUntilExpiry': daysUntilExpiry,
         'usageHistory': usageHistory,
-        'recommendedRestockQuantity': _calculateRecommendedQuantity(UsageAnalysis(
-          item: item,
-          consumptionRate: consumptionRate,
-          daysOfSupply: daysOfSupply,
-          stockoutProbability: _calculateStockoutProbability(daysOfSupply, categoryProfile.lowStockThreshold),
-          expiryRisk: expiryRisk,
-          categoryProfile: categoryProfile,
-          lastRestockDate: await _getLastRestockDate(itemId),
-          usageConsistency: 0.7, // Default
-          minStockLevel: minStockLevel,
-          isBelowMinStock: isBelowMinStock,
-          minStockCompliance: isBelowMinStock ? 0.0 : 1.0,
-        )),
+        'recommendedRestockQuantity': _calculateRecommendedQuantity(
+          UsageAnalysis(
+            item: item,
+            consumptionRate: consumptionRate,
+            daysOfSupply: daysOfSupply,
+            stockoutProbability: _calculateStockoutProbability(
+              daysOfSupply,
+              categoryProfile.lowStockThreshold,
+            ),
+            expiryRisk: expiryRisk,
+            categoryProfile: categoryProfile,
+            lastRestockDate: await _getLastRestockDate(itemId),
+            usageConsistency: 0.7, // Default
+            minStockLevel: minStockLevel,
+            isBelowMinStock: isBelowMinStock,
+            minStockCompliance: isBelowMinStock ? 0.0 : 1.0,
+          ),
+        ),
         'lastRestockDate': await _getLastRestockDate(itemId),
         'analysisTimestamp': DateTime.now().toIso8601String(),
       };
@@ -270,7 +299,9 @@ class InventoryRecommendationService {
   }
 
   // 🔍 DIAGNOSE SHOPPING LIST ISSUE
-  Future<Map<String, dynamic>> diagnoseShoppingListIssue(String householdId) async {
+  Future<Map<String, dynamic>> diagnoseShoppingListIssue(
+    String householdId,
+  ) async {
     try {
       // Check shopping list items
       final shoppingListSnapshot = await _firestore
@@ -290,7 +321,9 @@ class InventoryRecommendationService {
         'shoppingListItemCount': shoppingListSnapshot.docs.length,
         'inventoryItemCount': inventorySnapshot.docs.length,
         'hasDuplicateItems': await _checkDuplicateItems(householdId),
-        'hasExpiredRecommendations': await _checkExpiredRecommendations(householdId),
+        'hasExpiredRecommendations': await _checkExpiredRecommendations(
+          householdId,
+        ),
         'diagnosisTimestamp': DateTime.now().toIso8601String(),
       };
     } catch (e) {
@@ -333,7 +366,7 @@ class InventoryRecommendationService {
   }) async {
     try {
       final fixedRecommendation = _validateAndFixRecommendation(recommendation);
-      
+
       final itemId = fixedRecommendation['itemId'] as String;
       final itemName = fixedRecommendation['itemName'] as String;
       final category = fixedRecommendation['category'] as String;
@@ -383,14 +416,13 @@ class InventoryRecommendationService {
           'recommendationRemoved': true,
         };
       } else {
-        throw Exception('Shopping list service returned error: ${result['error']}');
+        throw Exception(
+          'Shopping list service returned error: ${result['error']}',
+        );
       }
     } catch (e) {
       _logError('Error adding recommendation to shopping list', e);
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
@@ -432,7 +464,9 @@ class InventoryRecommendationService {
       _consumptionRateCache.remove(itemId);
       _recommendationCache.remove('${householdId}_recommendations');
 
-      print('✅ Tracked inventory update: $itemName ($oldQuantity → $newQuantity)');
+      print(
+        '✅ Tracked inventory update: $itemName ($oldQuantity → $newQuantity)',
+      );
     } catch (e) {
       print('❌ Error tracking inventory update: $e');
     }
@@ -464,8 +498,12 @@ class InventoryRecommendationService {
         );
 
         // Generate recommendations based on analysis
-        recommendations.addAll(_detectLowStockAlerts(item, analysis, timestamp));
-        recommendations.addAll(_detectExpiryRiskAlerts(item, analysis, timestamp));
+        recommendations.addAll(
+          _detectLowStockAlerts(item, analysis, timestamp),
+        );
+        recommendations.addAll(
+          _detectExpiryRiskAlerts(item, analysis, timestamp),
+        );
       } catch (e) {
         _logError('Error generating recommendations for item ${item.id}', e);
       }
@@ -490,19 +528,32 @@ class InventoryRecommendationService {
     Map<String, CategoryConsumptionPattern> categoryPatterns,
   ) async {
     final category = item.category.toLowerCase();
-    final categoryProfile = _categoryProfiles[category] ?? _categoryProfiles['household_supplies']!;
+    final categoryProfile =
+        _categoryProfiles[category] ?? _categoryProfiles['household_supplies']!;
     final householdPattern = categoryPatterns[category];
 
     // Calculate detailed consumption metrics
-    final consumptionRate = _calculateAdjustedConsumptionRate(item, baseConsumptionRate, householdPattern, categoryProfile);
-    final daysOfSupply = consumptionRate > 0 ? item.quantity / consumptionRate : 999.0;
-    final stockoutProbability = _calculateStockoutProbability(daysOfSupply, categoryProfile.lowStockThreshold);
-    
+    final consumptionRate = _calculateAdjustedConsumptionRate(
+      item,
+      baseConsumptionRate,
+      householdPattern,
+      categoryProfile,
+    );
+    final daysOfSupply = consumptionRate > 0
+        ? item.quantity / consumptionRate
+        : 999.0;
+    final stockoutProbability = _calculateStockoutProbability(
+      daysOfSupply,
+      categoryProfile.lowStockThreshold,
+    );
+
     // Calculate expiry risk
     final expiryRisk = _calculateExpiryRisk(item, categoryProfile);
 
     // Calculate min stock level compliance
-    final minStockLevel = item.minStockLevel ?? _calculateDefaultMinStockLevel(categoryProfile, consumptionRate);
+    final minStockLevel =
+        item.minStockLevel ??
+        _calculateDefaultMinStockLevel(categoryProfile, consumptionRate);
     final isBelowMinStock = item.quantity <= minStockLevel;
     final minStockCompliance = isBelowMinStock ? 0.0 : 1.0;
 
@@ -522,7 +573,11 @@ class InventoryRecommendationService {
   }
 
   // 🚨 ENHANCED LOW STOCK DETECTION
-  List<Map<String, dynamic>> _detectLowStockAlerts(InventoryItem item, UsageAnalysis analysis, int timestamp) {
+  List<Map<String, dynamic>> _detectLowStockAlerts(
+    InventoryItem item,
+    UsageAnalysis analysis,
+    int timestamp,
+  ) {
     final recommendations = <Map<String, dynamic>>[];
     final categoryProfile = analysis.categoryProfile;
 
@@ -531,45 +586,54 @@ class InventoryRecommendationService {
       final neededQuantity = _calculateRecommendedQuantity(analysis);
       final urgencyLevel = _determineMinStockUrgency(analysis);
 
-      recommendations.add(_buildMinStockRecommendation(
-        item: item,
-        analysis: analysis,
-        neededQuantity: neededQuantity,
-        urgencyLevel: urgencyLevel,
-        timestamp: timestamp,
-      ));
+      recommendations.add(
+        _buildMinStockRecommendation(
+          item: item,
+          analysis: analysis,
+          neededQuantity: neededQuantity,
+          urgencyLevel: urgencyLevel,
+          timestamp: timestamp,
+        ),
+      );
     }
-
     // 🎯 CHECK 2: Based on days of supply
     else if (analysis.daysOfSupply <= categoryProfile.lowStockThreshold) {
       final neededQuantity = _calculateRecommendedQuantity(analysis);
       final urgencyLevel = _determineLowStockUrgency(analysis);
 
-      recommendations.add(_buildLowStockRecommendation(
-        item: item,
-        analysis: analysis,
-        neededQuantity: neededQuantity,
-        urgencyLevel: urgencyLevel,
-        timestamp: timestamp,
-      ));
+      recommendations.add(
+        _buildLowStockRecommendation(
+          item: item,
+          analysis: analysis,
+          neededQuantity: neededQuantity,
+          urgencyLevel: urgencyLevel,
+          timestamp: timestamp,
+        ),
+      );
     }
 
     // 🚨 CHECK 3: Critical stock alert for very low quantities
     if (analysis.daysOfSupply <= 1 || item.quantity == 0) {
-      recommendations.add(_buildCriticalStockRecommendation(
-        item: item,
-        analysis: analysis,
-        timestamp: timestamp,
-      ));
+      recommendations.add(
+        _buildCriticalStockRecommendation(
+          item: item,
+          analysis: analysis,
+          timestamp: timestamp,
+        ),
+      );
     }
 
     return recommendations;
   }
 
   // ⏰ ENHANCED EXPIRY DETECTION
-  List<Map<String, dynamic>> _detectExpiryRiskAlerts(InventoryItem item, UsageAnalysis analysis, int timestamp) {
+  List<Map<String, dynamic>> _detectExpiryRiskAlerts(
+    InventoryItem item,
+    UsageAnalysis analysis,
+    int timestamp,
+  ) {
     final recommendations = <Map<String, dynamic>>[];
-    
+
     if (item.expiryDate == null) return recommendations;
 
     final daysUntilExpiry = item.expiryDate!.difference(DateTime.now()).inDays;
@@ -578,34 +642,41 @@ class InventoryRecommendationService {
     // Check if item is approaching expiry
     if (daysUntilExpiry <= categoryProfile.expiryWarningThreshold) {
       final urgencyLevel = _determineExpiryUrgency(daysUntilExpiry);
-      
-      recommendations.add(_buildExpiryRecommendation(
-        item: item,
-        analysis: analysis,
-        daysUntilExpiry: daysUntilExpiry,
-        urgencyLevel: urgencyLevel,
-        timestamp: timestamp,
-      ));
+
+      recommendations.add(
+        _buildExpiryRecommendation(
+          item: item,
+          analysis: analysis,
+          daysUntilExpiry: daysUntilExpiry,
+          urgencyLevel: urgencyLevel,
+          timestamp: timestamp,
+        ),
+      );
     }
 
     // Critical expiry alert for items expiring soon
     if (daysUntilExpiry <= 3) {
-      recommendations.add(_buildCriticalExpiryRecommendation(
-        item: item,
-        analysis: analysis,
-        daysUntilExpiry: daysUntilExpiry,
-        timestamp: timestamp,
-      ));
+      recommendations.add(
+        _buildCriticalExpiryRecommendation(
+          item: item,
+          analysis: analysis,
+          daysUntilExpiry: daysUntilExpiry,
+          timestamp: timestamp,
+        ),
+      );
     }
 
     // Usage recommendation for items nearing expiry
-    if (daysUntilExpiry <= 7 && analysis.consumptionRate < categoryProfile.typicalDailyUsage) {
-      recommendations.add(_buildUseSoonRecommendation(
-        item: item,
-        analysis: analysis,
-        daysUntilExpiry: daysUntilExpiry,
-        timestamp: timestamp,
-      ));
+    if (daysUntilExpiry <= 7 &&
+        analysis.consumptionRate < categoryProfile.typicalDailyUsage) {
+      recommendations.add(
+        _buildUseSoonRecommendation(
+          item: item,
+          analysis: analysis,
+          daysUntilExpiry: daysUntilExpiry,
+          timestamp: timestamp,
+        ),
+      );
     }
 
     return recommendations;
@@ -648,8 +719,9 @@ class InventoryRecommendationService {
     required UsageAnalysis analysis,
     required int timestamp,
   }) {
-    final message = '${item.name} is critically low! Only ${item.quantity} left. '
-                   'Restock immediately to avoid running out.';
+    final message =
+        '${item.name} is critically low! Only ${item.quantity} left. '
+        'Restock immediately to avoid running out.';
 
     return _buildAIPoweredRecommendation(
       type: 'critical_stock_alert',
@@ -676,8 +748,7 @@ class InventoryRecommendationService {
     required String urgencyLevel,
     required int timestamp,
   }) {
-    final message = '${item.name} expires in $daysUntilExpiry days. '
-                   'Consider using it soon to prevent waste.';
+    final message = '${item.name} expires in $daysUntilExpiry days. ';
 
     return _buildAIPoweredRecommendation(
       type: 'expiry_alert',
@@ -702,8 +773,9 @@ class InventoryRecommendationService {
     required int daysUntilExpiry,
     required int timestamp,
   }) {
-    final message = '${item.name} expires in $daysUntilExpiry days! '
-                   'Use it immediately to avoid waste.';
+    final message =
+        '${item.name} expires in $daysUntilExpiry days! '
+        'Use it immediately to avoid waste.';
 
     return _buildAIPoweredRecommendation(
       type: 'critical_expiry_alert',
@@ -729,8 +801,9 @@ class InventoryRecommendationService {
     required String urgencyLevel,
     required int timestamp,
   }) {
-    final message = '${item.name} is below minimum stock level (${analysis.minStockLevel}). '
-                   'Restock $neededQuantity ${neededQuantity == 1 ? 'unit' : 'units'} to maintain optimal inventory.';
+    final message =
+        '${item.name} is below minimum stock level (${analysis.minStockLevel}). '
+        'Restock $neededQuantity ${neededQuantity == 1 ? 'unit' : 'units'} to maintain optimal inventory.';
 
     return _buildAIPoweredRecommendation(
       type: 'min_stock_alert',
@@ -759,8 +832,9 @@ class InventoryRecommendationService {
     required int timestamp,
   }) {
     final daysLeft = analysis.daysOfSupply.floor();
-    final message = 'Based on your usage patterns, ${item.name} will run out in $daysLeft days. '
-                   'Consider restocking $neededQuantity ${neededQuantity == 1 ? 'unit' : 'units'} to maintain supply.';
+    final message =
+        'Based on your usage patterns, ${item.name} will run out in $daysLeft days. '
+        'Consider restocking $neededQuantity ${neededQuantity == 1 ? 'unit' : 'units'} to maintain supply.';
 
     return _buildAIPoweredRecommendation(
       type: 'low_stock_alert',
@@ -786,8 +860,9 @@ class InventoryRecommendationService {
     required int daysUntilExpiry,
     required int timestamp,
   }) {
-    final message = '${item.name} expires in $daysUntilExpiry days and your usage rate is lower than typical. '
-                   'Consider using this item more frequently to prevent waste.';
+    final message =
+        '${item.name} expires in $daysUntilExpiry days and your usage rate is lower than typical. '
+        'Consider using this item more frequently to prevent waste.';
 
     return _buildAIPoweredRecommendation(
       type: 'use_soon_alert',
@@ -827,7 +902,10 @@ class InventoryRecommendationService {
     return max(adjustedRate, 0.01); // Minimum consumption rate
   }
 
-  int _calculateDefaultMinStockLevel(CategoryConsumptionProfile profile, double consumptionRate) {
+  int _calculateDefaultMinStockLevel(
+    CategoryConsumptionProfile profile,
+    double consumptionRate,
+  ) {
     // Default to 7 days of supply for min stock level
     final defaultMinStock = (consumptionRate * 7).ceil();
     return max(defaultMinStock, 1); // At least 1
@@ -835,40 +913,54 @@ class InventoryRecommendationService {
 
   int _calculateRecommendedQuantity(UsageAnalysis analysis) {
     final targetDaysOfSupply = analysis.categoryProfile.lowStockThreshold * 2;
-    
+
     // Calculate needed quantity based on usage
-    double neededByUsage = (targetDaysOfSupply * analysis.consumptionRate - analysis.item.quantity).ceilToDouble();
-    
+    double neededByUsage =
+        (targetDaysOfSupply * analysis.consumptionRate - analysis.item.quantity)
+            .ceilToDouble();
+
     // Calculate needed quantity based on min stock level
     double neededByMinStock = 0.0;
     if (analysis.isBelowMinStock) {
-      neededByMinStock = (analysis.minStockLevel - analysis.item.quantity).toDouble();
+      neededByMinStock = (analysis.minStockLevel - analysis.item.quantity)
+          .toDouble();
     }
-    
+
     // Use the larger of the two calculations
     final needed = max(neededByUsage, neededByMinStock).ceil();
-    
+
     return needed.clamp(1, 10);
   }
 
-  double _calculateExpiryRisk(InventoryItem item, CategoryConsumptionProfile profile) {
+  double _calculateExpiryRisk(
+    InventoryItem item,
+    CategoryConsumptionProfile profile,
+  ) {
     if (item.expiryDate == null) return 0.0;
 
     final daysLeft = item.expiryDate!.difference(DateTime.now()).inDays;
     double riskLevel = 0.0;
 
-    if (daysLeft <= 0) riskLevel = 1.0;
-    else if (daysLeft <= 3) riskLevel = 0.9;
-    else if (daysLeft <= 7) riskLevel = 0.7;
-    else if (daysLeft <= 14) riskLevel = 0.5;
-    else if (daysLeft <= 30) riskLevel = 0.3;
+    if (daysLeft <= 0)
+      riskLevel = 1.0;
+    else if (daysLeft <= 3)
+      riskLevel = 0.9;
+    else if (daysLeft <= 7)
+      riskLevel = 0.7;
+    else if (daysLeft <= 14)
+      riskLevel = 0.5;
+    else if (daysLeft <= 30)
+      riskLevel = 0.3;
 
     riskLevel *= profile.expirySensitivity;
 
     return riskLevel.clamp(0.0, 1.0);
   }
 
-  double _calculateStockoutProbability(double daysOfSupply, int lowStockThreshold) {
+  double _calculateStockoutProbability(
+    double daysOfSupply,
+    int lowStockThreshold,
+  ) {
     if (daysOfSupply <= 1) return 0.95;
     if (daysOfSupply <= lowStockThreshold * 0.5) return 0.8;
     if (daysOfSupply <= lowStockThreshold) return 0.6;
@@ -878,8 +970,10 @@ class InventoryRecommendationService {
 
   // 🚨 URGENCY CALCULATION METHODS
   String _determineMinStockUrgency(UsageAnalysis analysis) {
-    final deficitRatio = (analysis.minStockLevel - analysis.item.quantity) / analysis.minStockLevel;
-    
+    final deficitRatio =
+        (analysis.minStockLevel - analysis.item.quantity) /
+        analysis.minStockLevel;
+
     if (deficitRatio >= 0.7) return 'high';
     if (deficitRatio >= 0.4) return 'medium';
     return 'low';
@@ -887,8 +981,11 @@ class InventoryRecommendationService {
 
   String _determineLowStockUrgency(UsageAnalysis analysis) {
     if (analysis.daysOfSupply <= 1) return 'high';
-    if (analysis.daysOfSupply <= analysis.categoryProfile.lowStockThreshold * 0.5) return 'high';
-    if (analysis.daysOfSupply <= analysis.categoryProfile.lowStockThreshold) return 'medium';
+    if (analysis.daysOfSupply <=
+        analysis.categoryProfile.lowStockThreshold * 0.5)
+      return 'high';
+    if (analysis.daysOfSupply <= analysis.categoryProfile.lowStockThreshold)
+      return 'medium';
     return 'low';
   }
 
@@ -926,7 +1023,9 @@ class InventoryRecommendationService {
     }
   }
 
-  Future<Map<String, double>> _fetchAllConsumptionRates(String householdId) async {
+  Future<Map<String, double>> _fetchAllConsumptionRates(
+    String householdId,
+  ) async {
     try {
       final inventorySnapshot = await _firestore
           .collection('households')
@@ -946,7 +1045,10 @@ class InventoryRecommendationService {
       final results = await Future.wait(consumptionRateFutures);
       return Map<String, double>.fromEntries(results);
     } catch (e) {
-      _logError('Error fetching consumption rates for household $householdId', e);
+      _logError(
+        'Error fetching consumption rates for household $householdId',
+        e,
+      );
       return {};
     }
   }
@@ -973,7 +1075,7 @@ class InventoryRecommendationService {
 
       final analysis = _analyzeConsumptionPatterns(auditSnapshot.docs);
       _cacheConsumptionRate(itemId, analysis.weightedRate);
-      
+
       return analysis.weightedRate;
     } catch (e) {
       _logError('Error calculating consumption rate for item $itemId', e);
@@ -982,7 +1084,9 @@ class InventoryRecommendationService {
     }
   }
 
-  ConsumptionAnalysisResult _analyzeConsumptionPatterns(List<QueryDocumentSnapshot> auditLogs) {
+  ConsumptionAnalysisResult _analyzeConsumptionPatterns(
+    List<QueryDocumentSnapshot> auditLogs,
+  ) {
     double totalUsed = 0;
     DateTime? earliest;
     DateTime? latest;
@@ -999,8 +1103,12 @@ class InventoryRecommendationService {
           final usage = (oldVal - newVal).toDouble();
           totalUsed += usage;
 
-          earliest = earliest == null || timestamp.isBefore(earliest) ? timestamp : earliest;
-          latest = latest == null || timestamp.isAfter(latest) ? timestamp : latest;
+          earliest = earliest == null || timestamp.isBefore(earliest)
+              ? timestamp
+              : earliest;
+          latest = latest == null || timestamp.isAfter(latest)
+              ? timestamp
+              : latest;
         }
       } catch (e) {
         continue;
@@ -1020,7 +1128,8 @@ class InventoryRecommendationService {
   // 🏠 HOUSEHOLD PROFILE METHODS
   Future<HouseholdProfile> _getHouseholdProfile(String householdId) async {
     final cached = _householdProfileCache[householdId];
-    if (cached != null && DateTime.now().difference(cached.lastUpdated) < _cacheDuration) {
+    if (cached != null &&
+        DateTime.now().difference(cached.lastUpdated) < _cacheDuration) {
       return cached;
     }
 
@@ -1068,7 +1177,8 @@ class InventoryRecommendationService {
     }
   }
 
-  Future<Map<String, CategoryConsumptionPattern>> _fetchCategoryConsumptionPatterns(String householdId) async {
+  Future<Map<String, CategoryConsumptionPattern>>
+  _fetchCategoryConsumptionPatterns(String householdId) async {
     try {
       final patternsSnapshot = await _firestore
           .collection('household_consumption_patterns')
@@ -1077,12 +1187,13 @@ class InventoryRecommendationService {
           .get();
 
       final patterns = <String, CategoryConsumptionPattern>{};
-      
+
       for (final doc in patternsSnapshot.docs) {
         final data = doc.data();
         patterns[doc.id] = CategoryConsumptionPattern(
           category: doc.id,
-          averageConsumptionRate: (data['averageConsumptionRate'] ?? 0.1).toDouble(),
+          averageConsumptionRate: (data['averageConsumptionRate'] ?? 0.1)
+              .toDouble(),
           consistencyScore: (data['consistencyScore'] ?? 0.7).toDouble(),
           dataPoints: (data['dataPoints'] ?? 10).toInt(),
           adjustmentFactor: (data['adjustmentFactor'] ?? 1.0).toDouble(),
@@ -1097,10 +1208,13 @@ class InventoryRecommendationService {
   }
 
   // 📊 USAGE HISTORY METHODS
-  Future<List<Map<String, dynamic>>> _getUsageHistory(String itemId, int days) async {
+  Future<List<Map<String, dynamic>>> _getUsageHistory(
+    String itemId,
+    int days,
+  ) async {
     try {
       final startDate = DateTime.now().subtract(Duration(days: days));
-      
+
       final auditSnapshot = await _firestore
           .collection('inventory_audit_logs')
           .where('itemId', isEqualTo: itemId)
@@ -1136,7 +1250,7 @@ class InventoryRecommendationService {
   }) async {
     try {
       if (oldQuantity == newQuantity) return; // No change
-      
+
       final usageAmount = oldQuantity - newQuantity;
       if (usageAmount <= 0) return; // Only track consumption, not additions
 
@@ -1154,7 +1268,9 @@ class InventoryRecommendationService {
         'type': 'quantity_change',
       });
 
-      print('📝 Created usage audit log: $itemName $oldQuantity → $newQuantity (used: $usageAmount)');
+      print(
+        '📝 Created usage audit log: $itemName $oldQuantity → $newQuantity (used: $usageAmount)',
+      );
     } catch (e) {
       print('❌ Error creating usage audit log: $e');
     }
@@ -1200,13 +1316,16 @@ class InventoryRecommendationService {
   int _getPriorityColor(String priority) {
     const colors = {
       'high': 0xFFE74C3C,
-      'medium': 0xFFF39C12,  
+      'medium': 0xFFF39C12,
       'low': 0xFF2ECC71,
     };
     return colors[priority] ?? 0xFF95A5A6;
   }
 
-  double _calculateUsageConsistency(String itemId, CategoryConsumptionPattern? householdPattern) {
+  double _calculateUsageConsistency(
+    String itemId,
+    CategoryConsumptionPattern? householdPattern,
+  ) {
     // If we have household pattern data, use its consistency score
     if (householdPattern != null) {
       return householdPattern.consistencyScore;
@@ -1226,23 +1345,17 @@ class InventoryRecommendationService {
     return confidence.clamp(0.0, 1.0);
   }
 
-  List<Map<String, dynamic>> _getPersonalizedDefaultRecommendations(HouseholdProfile householdProfile) {
-    return [
-      {
-        'type': 'welcome',
-        'priority': 'low',
-        'title': 'Welcome to Smart Recommendations',
-        'message': 'Start adding items to your inventory to get personalized recommendations.',
-        'icon': Icons.emoji_objects_rounded,
-        'color': 0xFF2ECC71,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'aiGenerated': false,
-      }
-    ];
+  List<Map<String, dynamic>> _getPersonalizedDefaultRecommendations(
+    HouseholdProfile householdProfile,
+  ) {
+    return [];
   }
 
   // 💾 CACHE MANAGEMENT
-  void _cacheRecommendations(String cacheKey, List<Map<String, dynamic>> recommendations) {
+  void _cacheRecommendations(
+    String cacheKey,
+    List<Map<String, dynamic>> recommendations,
+  ) {
     // Simple cache eviction if too large
     if (_recommendationCache.length >= _maxCacheSize) {
       _recommendationCache.remove(_recommendationCache.keys.first);
@@ -1251,7 +1364,10 @@ class InventoryRecommendationService {
   }
 
   void _cacheConsumptionRate(String itemId, double rate) {
-    _consumptionRateCache[itemId] = _CachedConsumptionRate(rate, DateTime.now());
+    _consumptionRateCache[itemId] = _CachedConsumptionRate(
+      rate,
+      DateTime.now(),
+    );
   }
 
   // 🔧 UTILITY METHODS
@@ -1287,12 +1403,18 @@ class InventoryRecommendationService {
     return '${itemId}_${type}_$timestamp';
   }
 
-  bool _isRecommendationAdded(String householdId, Map<String, dynamic> recommendation) {
+  bool _isRecommendationAdded(
+    String householdId,
+    Map<String, dynamic> recommendation,
+  ) {
     final key = _getRecommendationKey(recommendation);
     return _addedRecommendations[householdId]?.contains(key) ?? false;
   }
 
-  void _markRecommendationAsAdded(String householdId, Map<String, dynamic> recommendation) {
+  void _markRecommendationAsAdded(
+    String householdId,
+    Map<String, dynamic> recommendation,
+  ) {
     final key = _getRecommendationKey(recommendation);
     _addedRecommendations.putIfAbsent(householdId, () => <String>{});
     _addedRecommendations[householdId]!.add(key);
@@ -1301,27 +1423,27 @@ class InventoryRecommendationService {
 
   Map<String, dynamic> _validateAndFixRecommendation(Map<String, dynamic> rec) {
     final fixedRec = Map<String, dynamic>.from(rec);
-    
+
     if (fixedRec['itemId'] == null) {
       fixedRec['itemId'] = 'custom_${DateTime.now().millisecondsSinceEpoch}';
     }
-    
+
     if (fixedRec['itemName'] == null) {
       fixedRec['itemName'] = 'Unknown Item';
     }
-    
+
     if (fixedRec['category'] == null) {
       fixedRec['category'] = 'general';
     }
-    
+
     if (fixedRec['priority'] == null) {
       fixedRec['priority'] = 'medium';
     }
-    
+
     if (fixedRec['aiConfidence'] == null) {
       fixedRec['aiConfidence'] = 0.7;
     }
-    
+
     return fixedRec;
   }
 
@@ -1362,11 +1484,13 @@ class InventoryRecommendationService {
       final weekAgo = DateTime.now().subtract(Duration(days: 7));
       final cacheKey = '${householdId}_recommendations';
       final cached = _recommendationCache[cacheKey];
-      
+
       if (cached != null) {
         for (final rec in cached) {
           final timestamp = rec['timestamp'] as int? ?? 0;
-          if (DateTime.fromMillisecondsSinceEpoch(timestamp).isBefore(weekAgo)) {
+          if (DateTime.fromMillisecondsSinceEpoch(
+            timestamp,
+          ).isBefore(weekAgo)) {
             return true;
           }
         }
@@ -1442,11 +1566,21 @@ class HouseholdProfile {
       preferredItems: Set<String>.from(map['preferredItems'] ?? []),
       ignoredItems: Set<String>.from(map['ignoredItems'] ?? []),
       restockFrequency: Map<String, int>.from(map['restockFrequency'] ?? {}),
-      categoryPreferences: Map<String, double>.from(map['categoryPreferences'] ?? {}),
-      averageConsumptionRates: Map<String, double>.from(map['averageConsumptionRates'] ?? {}),
-      categoryConsumptionRates: Map<String, double>.from(map['categoryConsumptionRates'] ?? {}),
-      lastUpdated: DateTime.parse(map['lastUpdated'] ?? DateTime.now().toIso8601String()),
-      purchaseHistory: List<Map<String, dynamic>>.from(map['purchaseHistory'] ?? []),
+      categoryPreferences: Map<String, double>.from(
+        map['categoryPreferences'] ?? {},
+      ),
+      averageConsumptionRates: Map<String, double>.from(
+        map['averageConsumptionRates'] ?? {},
+      ),
+      categoryConsumptionRates: Map<String, double>.from(
+        map['categoryConsumptionRates'] ?? {},
+      ),
+      lastUpdated: DateTime.parse(
+        map['lastUpdated'] ?? DateTime.now().toIso8601String(),
+      ),
+      purchaseHistory: List<Map<String, dynamic>>.from(
+        map['purchaseHistory'] ?? [],
+      ),
       budgetLimits: Map<String, double>.from(map['budgetLimits'] ?? {}),
     );
   }
@@ -1498,13 +1632,7 @@ class CategoryConsumptionPattern {
   });
 }
 
-enum ConsumptionPattern {
-  daily,
-  regular,
-  steady,
-  irregular,
-  variable,
-}
+enum ConsumptionPattern { daily, regular, steady, irregular, variable }
 
 class UsageAnalysis {
   final InventoryItem item;

@@ -12,6 +12,8 @@ class NotificationService {
 
   final List<InventoryNotification> _notifications = [];
   final List<VoidCallback> _listeners = [];
+  final Set<String> _processedRecommendations =
+      {}; // Track processed recommendations
 
   void addListener(VoidCallback listener) {
     _listeners.add(listener);
@@ -28,37 +30,77 @@ class NotificationService {
   }
 
   void addNotification(InventoryNotification notification) {
-    // Avoid duplicates
-    if (!_notifications.any((n) => 
-        n.itemId == notification.itemId && 
-        n.type == notification.type &&
-        n.timestamp.difference(notification.timestamp).inHours < 1)) {
-      
+    // Create a unique key for this recommendation to avoid duplicates
+    final recommendationKey =
+        '${notification.itemId}_${notification.type}_${notification.priority}';
+
+    // Avoid duplicates using the processed set
+    if (!_processedRecommendations.contains(recommendationKey)) {
       _notifications.add(notification);
+      _processedRecommendations.add(recommendationKey);
       _notifyListeners();
-      
-      print('🔔 Added notification: ${notification.title}');
+
+      print(
+        '🔔 Added notification: ${notification.title} (Key: $recommendationKey)',
+      );
+    } else {
+      print('🔔 Skipped duplicate notification: ${notification.title}');
     }
   }
 
   void dismissNotification(String notificationId) {
+    final notification = _notifications.firstWhere(
+      (n) => n.id == notificationId,
+    );
     _notifications.removeWhere((n) => n.id == notificationId);
+
+    // Also remove from processed set when dismissed
+    final recommendationKey =
+        '${notification.itemId}_${notification.type}_${notification.priority}';
+    _processedRecommendations.remove(recommendationKey);
+
     _notifyListeners();
   }
 
   void dismissAllNotifications() {
     _notifications.clear();
+    _processedRecommendations.clear();
     _notifyListeners();
   }
 
-  List<InventoryNotification> get notifications => List.unmodifiable(_notifications);
+  List<InventoryNotification> get notifications =>
+      List.unmodifiable(_notifications);
   int get unreadCount => _notifications.length;
 
   void clearExpiredNotifications() {
     final now = DateTime.now();
-    _notifications.removeWhere((notification) => 
-        now.difference(notification.timestamp).inHours > 24);
+    final expiredNotifications = _notifications
+        .where(
+          (notification) => now.difference(notification.timestamp).inHours > 24,
+        )
+        .toList();
+
+    for (final notification in expiredNotifications) {
+      final recommendationKey =
+          '${notification.itemId}_${notification.type}_${notification.priority}';
+      _processedRecommendations.remove(recommendationKey);
+    }
+
+    _notifications.removeWhere(
+      (notification) => now.difference(notification.timestamp).inHours > 24,
+    );
     _notifyListeners();
+  }
+
+  // Clear specific recommendation from processed set (when added to cart)
+  void clearProcessedRecommendation(
+    String itemId,
+    String type,
+    String priority,
+  ) {
+    final recommendationKey = '${itemId}_${type}_$priority';
+    _processedRecommendations.remove(recommendationKey);
+    print('🔔 Cleared processed recommendation: $recommendationKey');
   }
 }
 
@@ -84,9 +126,8 @@ class InventoryNotification {
     required this.itemName,
     this.actionData,
     this.isRead = false,
-  }) : 
-    id = '${DateTime.now().millisecondsSinceEpoch}_${itemId}_$type',
-    timestamp = DateTime.now();
+  }) : id = '${DateTime.now().millisecondsSinceEpoch}_${itemId}_$type',
+       timestamp = DateTime.now();
 
   Color getColor(BuildContext context) {
     switch (priority) {
@@ -160,10 +201,11 @@ class RecommendationSection extends StatefulWidget {
 }
 
 class _RecommendationSectionState extends State<RecommendationSection> {
-  final InventoryRecommendationService _recommendationService = InventoryRecommendationService();
+  final InventoryRecommendationService _recommendationService =
+      InventoryRecommendationService();
   final ShoppingListService _shoppingListService = ShoppingListService();
   final NotificationService _notificationService = NotificationService();
-  
+
   List<Map<String, dynamic>> _smartRecommendations = [];
   bool _isRecommendationsLoading = false;
   bool _hasError = false;
@@ -172,6 +214,8 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   List<InventoryNotification> _notifications = [];
   OverlayEntry? _notificationOverlay;
   bool _showNotificationsPanel = false;
+  Set<String> _processedNotificationKeys =
+      Set<String>(); // Track which recommendations have been notified
 
   @override
   void initState() {
@@ -223,13 +267,23 @@ class _RecommendationSectionState extends State<RecommendationSection> {
       final title = recommendation['title'] as String? ?? '';
       final message = recommendation['message'] as String? ?? '';
 
-      // Only create notifications for high and medium priority items
-      if (priority == 'high' || priority == 'medium') {
+      // Create a unique key for this recommendation
+      final notificationKey = '${itemId}_${type}_$priority';
+
+      // Only process if we haven't already created a notification for this specific recommendation
+      if (!_processedNotificationKeys.contains(notificationKey) &&
+          (priority == 'high' || priority == 'medium')) {
         final notificationType = _getNotificationTypeFromRecommendation(type);
-        
+
+        // Fix for expiry messages - use "Item expired" when appropriate
+        String finalMessage = message;
+        if (type.contains('expiry') && _isExpiredItem(recommendation)) {
+          finalMessage = '$itemName has expired';
+        }
+
         final notification = InventoryNotification(
           title: title,
-          message: message,
+          message: finalMessage,
           type: notificationType,
           priority: priority,
           itemId: itemId,
@@ -238,13 +292,28 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         );
 
         _notificationService.addNotification(notification);
-        
+        _processedNotificationKeys.add(notificationKey);
+
         // Show immediate popup for high priority notifications
         if (priority == 'high' && mounted) {
           _showImmediateNotificationPopup(notification);
         }
       }
     }
+  }
+
+  bool _isExpiredItem(Map<String, dynamic> recommendation) {
+    final daysUntilExpiry = recommendation['daysUntilExpiry'];
+    final expiryRiskLevel = recommendation['expiryRiskLevel'] as String? ?? '';
+
+    // Check if item is already expired
+    if (daysUntilExpiry is int) {
+      return daysUntilExpiry <= 0;
+    }
+
+    // Check based on risk level
+    return expiryRiskLevel.toLowerCase().contains('expired') ||
+        expiryRiskLevel.toLowerCase().contains('urgent');
   }
 
   String _getNotificationTypeFromRecommendation(String recommendationType) {
@@ -321,7 +390,11 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(notification.getIcon(), color: Colors.white, size: 20),
+                  child: Icon(
+                    notification.getIcon(),
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
                 SizedBox(width: 12),
                 Expanded(
@@ -352,7 +425,11 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                   onPressed: _removeNotificationOverlay,
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints.tightFor(width: 32, height: 32),
@@ -367,24 +444,29 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   Future<void> _loadSmartRecommendations() async {
     if (widget.householdId.isEmpty || _smartRecommendations.isNotEmpty) return;
-    
+
     setState(() {
       _isRecommendationsLoading = true;
       _hasError = false;
+      _processedNotificationKeys
+          .clear(); // Clear processed keys when loading new recommendations
     });
 
     try {
-      print('🔄 Loading smart recommendations for household: ${widget.householdId}');
-      final recommendations = await _recommendationService.getSmartRecommendations(widget.householdId);
-      
+      print(
+        '🔄 Loading smart recommendations for household: ${widget.householdId}',
+      );
+      final recommendations = await _recommendationService
+          .getSmartRecommendations(widget.householdId);
+
       print('✅ Loaded ${recommendations.length} recommendations');
-      
+
       if (mounted) {
         setState(() {
           _smartRecommendations = recommendations;
           _isRecommendationsLoading = false;
         });
-        
+
         // Check for notifications after loading recommendations
         _checkForNewNotifications();
       }
@@ -402,7 +484,9 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   Future<void> _loadShoppingListCount() async {
     try {
-      final count = await _shoppingListService.getShoppingListCount(widget.householdId);
+      final count = await _shoppingListService.getShoppingListCount(
+        widget.householdId,
+      );
       if (mounted) {
         setState(() {
           _shoppingListCount = count;
@@ -415,10 +499,14 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   Future<void> _loadCartState() async {
     try {
-      final shoppingListItems = await _shoppingListService.getShoppingListItems(widget.householdId);
+      final shoppingListItems = await _shoppingListService.getShoppingListItems(
+        widget.householdId,
+      );
       if (mounted) {
         setState(() {
-          _itemsInCart = Set<String>.from(shoppingListItems.map((item) => item['id']?.toString() ?? ''));
+          _itemsInCart = Set<String>.from(
+            shoppingListItems.map((item) => item['id']?.toString() ?? ''),
+          );
         });
       }
     } catch (e) {
@@ -496,11 +584,13 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   }
 
   Future<void> _toggleCartStatus(Map<String, dynamic> recommendation) async {
-    final String itemId = recommendation['itemId'] ?? 'custom_${DateTime.now().millisecondsSinceEpoch}';
+    final String itemId =
+        recommendation['itemId'] ??
+        'custom_${DateTime.now().millisecondsSinceEpoch}';
     final String itemName = recommendation['itemName'] ?? 'Unknown Item';
-    
+
     print('🔄 Toggling cart status for: $itemName (ID: $itemId)');
-    
+
     final bool isCurrentlyInCart = _itemsInCart.contains(itemId);
 
     try {
@@ -516,36 +606,50 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   }
 
   Future<void> _addToCart(Map<String, dynamic> recommendation) async {
-    final String itemId = recommendation['itemId'] ?? 'custom_${DateTime.now().millisecondsSinceEpoch}';
+    final String itemId =
+        recommendation['itemId'] ??
+        'custom_${DateTime.now().millisecondsSinceEpoch}';
     final String itemName = recommendation['itemName'] ?? 'Unknown Item';
-    
+    final String type = recommendation['type'] as String? ?? '';
+    final String priority = recommendation['priority'] as String? ?? 'medium';
+
     print('🛒 Adding to cart: $itemName (ID: $itemId)');
-    
+
     setState(() {
       _itemsInCart.add(itemId);
       _smartRecommendations.removeWhere((rec) => rec['itemId'] == itemId);
     });
 
     try {
-      final result = await _recommendationService.addRecommendationToShoppingList(
-        householdId: widget.householdId,
-        recommendation: recommendation,
-      );
+      final result = await _recommendationService
+          .addRecommendationToShoppingList(
+            householdId: widget.householdId,
+            recommendation: recommendation,
+          );
 
       if (result['success'] == true) {
         _showSuccessSnackbar('$itemName added to cart');
         print('✅ Successfully added to cart: $itemName');
-        
+
         _loadShoppingListCount();
-        
+
         final quantity = 1;
         widget.onAddToShoppingList(itemName, quantity, itemId);
 
-        // Remove any notifications for this item
+        // Clear this item from notification tracking
+        final notificationKey = '${itemId}_${type}_$priority';
+        _processedNotificationKeys.remove(notificationKey);
+        _notificationService.clearProcessedRecommendation(
+          itemId,
+          type,
+          priority,
+        );
+
+        // Remove any existing notifications for this item
         _notificationService.notifications
-          .where((n) => n.itemId == itemId)
-          .toList()
-          .forEach((n) => _notificationService.dismissNotification(n.id));
+            .where((n) => n.itemId == itemId)
+            .toList()
+            .forEach((n) => _notificationService.dismissNotification(n.id));
       } else {
         _showErrorSnackbar('Failed to add $itemName: ${result['error']}');
         setState(() {
@@ -565,10 +669,13 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   Future<void> _removeFromCart(String itemId) async {
     print('🗑️ Removing from cart: $itemId');
-    
+
     try {
-      final result = await _shoppingListService.removeFromShoppingList(widget.householdId, itemId);
-      
+      final result = await _shoppingListService.removeFromShoppingList(
+        widget.householdId,
+        itemId,
+      );
+
       if (result['success'] == true) {
         setState(() {
           _itemsInCart.remove(itemId);
@@ -594,7 +701,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           children: [
             _buildHeader(),
             const SizedBox(height: 16),
-            
+
             if (_hasError) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
@@ -609,34 +716,31 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                 ),
               ),
             ],
-            
+
             _isRecommendationsLoading
                 ? _buildRecommendationsLoading()
                 : _hasError
-                    ? _buildErrorState()
-                    : _smartRecommendations.isEmpty
-                        ? _buildNoRecommendations()
-                        : _buildDashboardRecommendations(),
+                ? _buildErrorState()
+                : _smartRecommendations.isEmpty
+                ? _buildNoRecommendations()
+                : _buildDashboardRecommendations(),
           ],
         ),
 
         // Notifications Panel
         if (_showNotificationsPanel)
-          Positioned(
-            top: 80,
-            right: 16,
-            child: _buildNotificationsPanel(),
-          ),
+          Positioned(top: 80, right: 16, child: _buildNotificationsPanel()),
       ],
     );
   }
 
   Widget _buildHeader() {
-    final urgentCount = _smartRecommendations.where((rec) => 
-      rec['priority'] == 'high').length;
+    final urgentCount = _smartRecommendations
+        .where((rec) => rec['priority'] == 'high')
+        .length;
     final displayedCount = _smartRecommendations.length;
     final inCartCount = _itemsInCart.length;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -657,27 +761,29 @@ class _RecommendationSectionState extends State<RecommendationSection> {
               ],
             ),
             const Spacer(),
-            
+
             // Notifications Icon with Badge
             Stack(
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: _notifications.isNotEmpty 
+                    color: _notifications.isNotEmpty
                         ? widget.warningColor.withOpacity(0.1)
                         : widget.primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: IconButton(
                     icon: Icon(
-                      _notifications.isNotEmpty 
-                          ? Icons.notifications_active_rounded 
+                      _notifications.isNotEmpty
+                          ? Icons.notifications_active_rounded
                           : Icons.notifications_rounded,
                       size: 22,
                     ),
                     onPressed: _toggleNotificationsPanel,
                     tooltip: '${_notifications.length} notifications',
-                    color: _notifications.isNotEmpty ? widget.warningColor : widget.primaryColor,
+                    color: _notifications.isNotEmpty
+                        ? widget.warningColor
+                        : widget.primaryColor,
                   ),
                 ),
                 if (_notifications.isNotEmpty)
@@ -707,9 +813,9 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                   ),
               ],
             ),
-            
+
             const SizedBox(width: 8),
-            
+
             // Shopping Cart Icon with Badge
             Stack(
               children: [
@@ -754,7 +860,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
             ),
           ],
         ),
-        
+
         if (_smartRecommendations.isNotEmpty && !_isRecommendationsLoading)
           Container(
             margin: const EdgeInsets.only(top: 12),
@@ -786,35 +892,48 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                       ],
                     ),
                   ),
-                
+
                 if (urgentCount > 0) const SizedBox(width: 12),
-                
+
                 // Cart status indicator
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: inCartCount > 0 ? widget.successColor.withOpacity(0.1) : widget.surfaceColor,
+                    color: inCartCount > 0
+                        ? widget.successColor.withOpacity(0.1)
+                        : widget.surfaceColor,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: inCartCount > 0 ? widget.successColor.withOpacity(0.3) : widget.primaryColor.withOpacity(0.2),
+                      color: inCartCount > 0
+                          ? widget.successColor.withOpacity(0.3)
+                          : widget.primaryColor.withOpacity(0.2),
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        inCartCount > 0 ? Icons.shopping_cart_checkout_rounded : Icons.auto_awesome_rounded, 
-                        size: 14, 
-                        color: inCartCount > 0 ? widget.successColor : widget.primaryColor
+                        inCartCount > 0
+                            ? Icons.shopping_cart_checkout_rounded
+                            : Icons.auto_awesome_rounded,
+                        size: 14,
+                        color: inCartCount > 0
+                            ? widget.successColor
+                            : widget.primaryColor,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        inCartCount > 0 
-                            ? '$inCartCount in cart' 
+                        inCartCount > 0
+                            ? '$inCartCount in cart'
                             : '$displayedCount recommendations',
                         style: TextStyle(
                           fontSize: 12,
-                          color: inCartCount > 0 ? widget.successColor : widget.textSecondary,
+                          color: inCartCount > 0
+                              ? widget.successColor
+                              : widget.textSecondary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -863,7 +982,11 @@ class _RecommendationSectionState extends State<RecommendationSection> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.notifications_rounded, color: widget.primaryColor, size: 20),
+                  Icon(
+                    Icons.notifications_rounded,
+                    color: widget.primaryColor,
+                    size: 20,
+                  ),
                   SizedBox(width: 8),
                   Text(
                     'Inventory Alerts',
@@ -901,7 +1024,11 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                 padding: EdgeInsets.all(32),
                 child: Column(
                   children: [
-                    Icon(Icons.notifications_off_rounded, size: 48, color: widget.textLight),
+                    Icon(
+                      Icons.notifications_off_rounded,
+                      size: 48,
+                      color: widget.textLight,
+                    ),
                     SizedBox(height: 12),
                     Text(
                       'No Alerts',
@@ -913,10 +1040,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                     SizedBox(height: 4),
                     Text(
                       'You\'re all caught up!',
-                      style: TextStyle(
-                        color: widget.textLight,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: widget.textLight, fontSize: 12),
                     ),
                   ],
                 ),
@@ -948,10 +1072,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           padding: EdgeInsets.all(16),
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(
-                color: widget.backgroundColor,
-                width: 1,
-              ),
+              bottom: BorderSide(color: widget.backgroundColor, width: 1),
             ),
           ),
           child: Row(
@@ -990,9 +1111,14 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                           ),
                         ),
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: notification.getColor(context).withOpacity(0.1),
+                            color: notification
+                                .getColor(context)
+                                .withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -1019,17 +1145,15 @@ class _RecommendationSectionState extends State<RecommendationSection> {
                     SizedBox(height: 8),
                     Text(
                       _formatTimeAgo(notification.timestamp),
-                      style: TextStyle(
-                        color: widget.textLight,
-                        fontSize: 10,
-                      ),
+                      style: TextStyle(color: widget.textLight, fontSize: 10),
                     ),
                   ],
                 ),
               ),
               IconButton(
                 icon: Icon(Icons.close_rounded, size: 16),
-                onPressed: () => _notificationService.dismissNotification(notification.id),
+                onPressed: () =>
+                    _notificationService.dismissNotification(notification.id),
                 padding: EdgeInsets.zero,
                 constraints: BoxConstraints.tightFor(width: 24, height: 24),
               ),
@@ -1042,13 +1166,13 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   void _handleNotificationAction(InventoryNotification notification) {
     _notificationService.dismissNotification(notification.id);
-    
+
     if (notification.actionData != null) {
       _handleRecommendationAction(notification.actionData!);
     } else {
       widget.onNavigateToItem(notification.itemId);
     }
-    
+
     setState(() {
       _showNotificationsPanel = false;
     });
@@ -1057,17 +1181,21 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   String _formatTimeAgo(DateTime timestamp) {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
-    
+
     if (difference.inMinutes < 1) return 'Just now';
     if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
     if (difference.inHours < 24) return '${difference.inHours}h ago';
     return '${difference.inDays}d ago';
   }
 
-  // ... (keep all the existing _buildStateWidget, _buildRecommendationsLoading, 
-  // _buildErrorState, _buildNoRecommendations, _buildDashboardRecommendations methods)
-
-  Widget _buildStateWidget(String title, String subtitle, IconData icon, Color iconColor, {String? actionText, VoidCallback? onAction}) {
+  Widget _buildStateWidget(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color iconColor, {
+    String? actionText,
+    VoidCallback? onAction,
+  }) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1119,7 +1247,10 @@ class _RecommendationSectionState extends State<RecommendationSection> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.primaryColor,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1170,10 +1301,30 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           spacing: 12,
           runSpacing: 12,
           children: [
-            _buildStatusChip('Stock Levels', 'Optimal', widget.successColor, Icons.inventory_2_rounded),
-            _buildStatusChip('Expiry Dates', 'No Issues', widget.successColor, Icons.calendar_today_rounded),
-            _buildStatusChip('Consumption', 'Stable', widget.successColor, Icons.timeline_rounded),
-            _buildStatusChip('Budget', 'On Track', widget.successColor, Icons.attach_money_rounded),
+            _buildStatusChip(
+              'Stock Levels',
+              'Optimal',
+              widget.successColor,
+              Icons.inventory_2_rounded,
+            ),
+            _buildStatusChip(
+              'Expiry Dates',
+              'No Issues',
+              widget.successColor,
+              Icons.calendar_today_rounded,
+            ),
+            _buildStatusChip(
+              'Consumption',
+              'Stable',
+              widget.successColor,
+              Icons.timeline_rounded,
+            ),
+            _buildStatusChip(
+              'Budget',
+              'On Track',
+              widget.successColor,
+              Icons.attach_money_rounded,
+            ),
           ],
         ),
       ],
@@ -1181,26 +1332,31 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   }
 
   Widget _buildDashboardRecommendations() {
-    final displayedRecommendations = _smartRecommendations.take(widget.maxDisplayCount).toList();
-    final hasMoreRecommendations = _smartRecommendations.length > widget.maxDisplayCount;
-    
+    final displayedRecommendations = _smartRecommendations
+        .take(widget.maxDisplayCount)
+        .toList();
+    final hasMoreRecommendations =
+        _smartRecommendations.length > widget.maxDisplayCount;
+
     return Column(
       children: [
-        ...displayedRecommendations.map((recommendation) => 
-          _DashboardRecommendationItem(
-            recommendation: recommendation,
-            onTap: () => _handleRecommendationAction(recommendation),
-            onToggleCart: () => _toggleCartStatus(recommendation),
-            isInCart: _itemsInCart.contains(recommendation['itemId']),
-            textPrimary: widget.textPrimary,
-            textSecondary: widget.textSecondary,
-            textLight: widget.textLight,
-            primaryColor: widget.primaryColor,
-            successColor: widget.successColor,
-            errorColor: widget.errorColor,
-          )
-        ).toList(),
-        
+        ...displayedRecommendations
+            .map(
+              (recommendation) => _DashboardRecommendationItem(
+                recommendation: recommendation,
+                onTap: () => _handleRecommendationAction(recommendation),
+                onToggleCart: () => _toggleCartStatus(recommendation),
+                isInCart: _itemsInCart.contains(recommendation['itemId']),
+                textPrimary: widget.textPrimary,
+                textSecondary: widget.textSecondary,
+                textLight: widget.textLight,
+                primaryColor: widget.primaryColor,
+                successColor: widget.successColor,
+                errorColor: widget.errorColor,
+              ),
+            )
+            .toList(),
+
         if (hasMoreRecommendations) ...[
           const SizedBox(height: 16),
           Container(
@@ -1215,7 +1371,10 @@ class _RecommendationSectionState extends State<RecommendationSection> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.primaryColor.withOpacity(0.1),
                 foregroundColor: widget.primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1228,7 +1387,12 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     );
   }
 
-  Widget _buildStatusChip(String label, String value, Color color, IconData icon) {
+  Widget _buildStatusChip(
+    String label,
+    String value,
+    Color color,
+    IconData icon,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -1253,10 +1417,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 4),
           Text(
@@ -1276,7 +1437,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     final String? action = recommendation['action'] as String?;
     final String? itemId = recommendation['itemId'] as String?;
     final String? itemName = recommendation['itemName'] as String?;
-    
+
     if (itemId == null) {
       _showErrorSnackbar('Invalid recommendation: missing item ID');
       return;
@@ -1288,11 +1449,19 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         _showRestockDialog(itemName ?? 'Unknown Item', itemId);
         break;
       case 'use_soon':
-        _showExpiryWarning(itemName ?? 'Unknown Item', recommendation['daysUntilExpiry'] ?? recommendation['expiryRiskLevel']);
+        _showExpiryWarning(
+          itemName ?? 'Unknown Item',
+          recommendation['daysUntilExpiry'] ??
+              recommendation['expiryRiskLevel'],
+        );
         break;
       case 'plan_restock':
       case 'buy_now':
-        _showPredictionDetails(itemName ?? 'Unknown Item', recommendation['daysRemaining'] ?? recommendation['stockoutProbability']);
+        _showPredictionDetails(
+          itemName ?? 'Unknown Item',
+          recommendation['daysRemaining'] ??
+              recommendation['stockoutProbability'],
+        );
         break;
       case 'monitor':
       case 'adjust_usage':
@@ -1300,7 +1469,10 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         widget.onNavigateToItem(itemId);
         break;
       case 'reduce_stock':
-        _showOverstockWarning(itemName ?? 'Unknown Item', recommendation['excessQuantity'] ?? 5);
+        _showOverstockWarning(
+          itemName ?? 'Unknown Item',
+          recommendation['excessQuantity'] ?? 5,
+        );
         break;
       case 'rebalance_budget':
         _showBudgetRebalanceTip();
@@ -1335,10 +1507,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
             const SizedBox(height: 8),
             Text(
               'Based on your consumption patterns and current stock levels.',
-              style: TextStyle(
-                fontSize: 12,
-                color: widget.textSecondary,
-              ),
+              style: TextStyle(fontSize: 12, color: widget.textSecondary),
             ),
           ],
         ),
@@ -1349,10 +1518,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           ),
           ElevatedButton(
             onPressed: () async {
-              _addToCart({
-                'itemId': itemId,
-                'itemName': itemName,
-              });
+              _addToCart({'itemId': itemId, 'itemName': itemName});
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
@@ -1368,11 +1534,18 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   void _showExpiryWarning(String itemName, dynamic expiryInfo) {
     String message;
     if (expiryInfo is int) {
-      message = expiryInfo == 0 
-          ? 'This item expires today! Use it immediately to avoid waste.'
-          : 'This item expires in $expiryInfo days. Consider using it soon to prevent expiration.';
+      if (expiryInfo <= 0) {
+        message = '$itemName has expired! Please dispose of it safely.';
+      } else {
+        message = expiryInfo == 1
+            ? '$itemName expires tomorrow! Use it today to avoid waste.'
+            : '$itemName expires in $expiryInfo days.';
+      }
+    } else if (expiryInfo is String &&
+        expiryInfo.toLowerCase().contains('expired')) {
+      message = '$itemName has expired! Please dispose of it safely.';
     } else {
-      message = 'This item has a high expiry risk. Consider using it soon.';
+      message = '$itemName has a high expiry risk.';
     }
 
     showDialog(
@@ -1380,13 +1553,33 @@ class _RecommendationSectionState extends State<RecommendationSection> {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: widget.warningColor),
+            Icon(
+              (expiryInfo is int && expiryInfo <= 0)
+                  ? Icons.error_rounded
+                  : Icons.warning_amber_rounded,
+              color: (expiryInfo is int && expiryInfo <= 0)
+                  ? widget.errorColor
+                  : widget.warningColor,
+            ),
             const SizedBox(width: 8),
-            Text('$itemName Expiring'),
+            Text(
+              (expiryInfo is int && expiryInfo <= 0)
+                  ? '$itemName Expired'
+                  : '$itemName Expiring',
+            ),
           ],
         ),
         content: Text(message),
         actions: [
+          if (expiryInfo is int && expiryInfo <= 0)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Optionally mark item as disposed
+                _showDisposeConfirmation(itemName);
+              },
+              child: Text('Mark as Disposed'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('OK'),
@@ -1396,12 +1589,41 @@ class _RecommendationSectionState extends State<RecommendationSection> {
     );
   }
 
+  void _showDisposeConfirmation(String itemName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Dispose $itemName?'),
+        content: Text(
+          'Would you like to mark $itemName as disposed in your inventory?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showSuccessSnackbar('$itemName marked as disposed');
+              // Here you would typically call a service to update the inventory
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: widget.errorColor),
+            child: const Text('Dispose Item'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showPredictionDetails(String itemName, dynamic predictionInfo) {
     String message;
     if (predictionInfo is double) {
-      message = 'Based on consumption patterns, this item will run out in ${predictionInfo.toStringAsFixed(1)} days. Consider restocking soon to avoid running out.';
+      message =
+          'Based on consumption patterns, this item will run out in ${predictionInfo.toStringAsFixed(1)} days. Consider restocking soon to avoid running out.';
     } else {
-      message = 'This item is predicted to run out soon. Consider restocking to maintain optimal inventory levels.';
+      message =
+          'This item is predicted to run out soon. Consider restocking to maintain optimal inventory levels.';
     }
 
     showDialog(
@@ -1436,7 +1658,9 @@ class _RecommendationSectionState extends State<RecommendationSection> {
             Text('$itemName Overstocked'),
           ],
         ),
-        content: Text('You have $excessQuantity more units than recommended. Consider using or donating the excess to optimize storage space and reduce waste.'),
+        content: Text(
+          'You have $excessQuantity more units than recommended. Consider using or donating the excess to optimize storage space and reduce waste.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1453,12 +1677,17 @@ class _RecommendationSectionState extends State<RecommendationSection> {
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(Icons.account_balance_wallet_rounded, color: widget.primaryColor),
+            Icon(
+              Icons.account_balance_wallet_rounded,
+              color: widget.primaryColor,
+            ),
             const SizedBox(width: 8),
             const Text('Budget Rebalancing Tip'),
           ],
         ),
-        content: const Text('Consider shifting some of your budget from well-stocked categories to categories that are running low for better inventory balance and cost optimization.'),
+        content: const Text(
+          'Consider shifting some of your budget from well-stocked categories to categories that are running low for better inventory balance and cost optimization.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1470,9 +1699,11 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   }
 
   void _showSpendingOptimizationTip(dynamic savings) {
-    String message = 'You can optimize your spending by timing your purchases better and taking advantage of bulk discounts.';
+    String message =
+        'You can optimize your spending by timing your purchases better and taking advantage of bulk discounts.';
     if (savings != null) {
-      message = 'You could save up to ${savings.toStringAsFixed(0)}% by optimizing your purchase timing and considering alternative products.';
+      message =
+          'You could save up to ${savings.toStringAsFixed(0)}% by optimizing your purchase timing and considering alternative products.';
     }
 
     showDialog(
@@ -1507,7 +1738,9 @@ class _RecommendationSectionState extends State<RecommendationSection> {
             const Text('Sustainability Tip'),
           ],
         ),
-        content: const Text('Consider bulk purchases, local products, and reducing food waste to improve your sustainability score and environmental impact.'),
+        content: const Text(
+          'Consider bulk purchases, local products, and reducing food waste to improve your sustainability score and environmental impact.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1530,9 +1763,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         ),
         backgroundColor: widget.successColor,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -1550,9 +1781,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         ),
         backgroundColor: widget.errorColor,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 4),
       ),
     );
@@ -1570,9 +1799,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
         ),
         backgroundColor: widget.accentColor,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -1580,24 +1807,26 @@ class _RecommendationSectionState extends State<RecommendationSection> {
 
   Future<void> _debugTestShoppingList() async {
     print('🐛 Starting debug test...');
-    
-    final diagnosis = await _recommendationService.diagnoseShoppingListIssue(widget.householdId);
+
+    final diagnosis = await _recommendationService.diagnoseShoppingListIssue(
+      widget.householdId,
+    );
     print('🔍 Diagnosis: $diagnosis');
-    
+
     final testResult = await _recommendationService.debugAddToShoppingList(
       householdId: widget.householdId,
       itemName: 'Debug Test Milk',
       itemId: 'debug_test_${DateTime.now().millisecondsSinceEpoch}',
     );
-    
+
     print('🐛 Debug test result: $testResult');
-    
+
     if (testResult['success'] == true) {
       _showSuccessSnackbar('Debug test passed! Check console for details.');
     } else {
       _showErrorSnackbar('Debug test failed: ${testResult['error']}');
     }
-    
+
     _loadShoppingListCount();
   }
 }
@@ -1644,10 +1873,14 @@ class _DashboardRecommendationItem extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isInCart ? successColor.withOpacity(0.1) : color.withOpacity(0.05),
+              color: isInCart
+                  ? successColor.withOpacity(0.1)
+                  : color.withOpacity(0.05),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isInCart ? successColor.withOpacity(0.3) : color.withOpacity(0.2),
+                color: isInCart
+                    ? successColor.withOpacity(0.3)
+                    : color.withOpacity(0.2),
                 width: isInCart ? 2 : 1.5,
               ),
             ),
@@ -1659,16 +1892,20 @@ class _DashboardRecommendationItem extends StatelessWidget {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: isInCart ? successColor.withOpacity(0.2) : color.withOpacity(0.1),
+                        color: isInCart
+                            ? successColor.withOpacity(0.2)
+                            : color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isInCart ? successColor.withOpacity(0.4) : color.withOpacity(0.3)
+                          color: isInCart
+                              ? successColor.withOpacity(0.4)
+                              : color.withOpacity(0.3),
                         ),
                       ),
                       child: Icon(
-                        isInCart ? Icons.check_circle_rounded : icon, 
-                        color: isInCart ? successColor : color, 
-                        size: 22
+                        isInCart ? Icons.check_circle_rounded : icon,
+                        color: isInCart ? successColor : color,
+                        size: 22,
                       ),
                     ),
                     if (priority == 'high')
@@ -1692,9 +1929,9 @@ class _DashboardRecommendationItem extends StatelessWidget {
                       ),
                   ],
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1715,7 +1952,10 @@ class _DashboardRecommendationItem extends StatelessWidget {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: color.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(6),
@@ -1773,5 +2013,5 @@ class _DashboardRecommendationItem extends StatelessWidget {
         ),
       ),
     );
-  } 
+  }
 }

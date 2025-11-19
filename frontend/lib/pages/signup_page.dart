@@ -12,10 +12,12 @@ class SignUpPage extends StatefulWidget {
   _SignUpPageState createState() => _SignUpPageState();
 }
 
-class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateMixin {
+class _SignUpPageState extends State<SignUpPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final TextEditingController confirmPasswordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
   final TextEditingController fullNameController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -27,12 +29,35 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
+  // Updated color scheme to match DashboardPage
+  static const Color primaryColor = Color(0xFF2D5D7C);
+  static const Color secondaryColor = Color(0xFF6270B1);
+  static const Color successColor = Color(0xFF10B981);
+  static const Color warningColor = Color(0xFFF59E0B);
+  static const Color errorColor = Color(0xFFEF4444);
+  static const Color backgroundColor = Color(0xFFF8FAFF);
+  static const Color cardColor = Color(0xFFFFFFFF);
+  static const Color textPrimary = Color(0xFF1E293B);
+  static const Color textSecondary = Color(0xFF64748B);
+  static const Color textLight = Color(0xFF94A3B8);
+
   // Enhanced password strength notifier
-  final ValueNotifier<PasswordStrength?> _passwordStrengthNotifier = ValueNotifier<PasswordStrength?>(null);
+  final ValueNotifier<PasswordStrength?> _passwordStrengthNotifier =
+      ValueNotifier<PasswordStrength?>(null);
   final List<String> _commonPasswords = [
-    'password', '123456', '12345678', '1234', 'qwerty', 'abc123', 
-    'password1', 'admin', 'welcome', 'monkey', 'letmein', 'shadow'
+    'password',
+    '123456',
+    '12345678',
+    '1234',
+    'qwerty',
+    'abc123',
+    'password1',
+    'admin',
+    'welcome',
+    'monkey',
+    'letmein',
+    'shadow',
   ];
 
   // Custom password validation rules
@@ -48,38 +73,30 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 1000),
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    
-    _slideAnimation = Tween<Offset>(
-      begin: Offset(0, 0.5),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOut,
-      ),
-    );
-    
+
+    _slideAnimation = Tween<Offset>(begin: Offset(0, 0.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
+
     _animationController.forward();
-    
+
     // Listen to password changes for strength checking
     passwordController.addListener(_updatePasswordStrength);
   }
 
   void _updatePasswordStrength() {
     final password = passwordController.text;
-    
+
     if (password.isEmpty) {
       _passwordStrengthNotifier.value = null;
       _resetPasswordValidation();
@@ -91,8 +108,12 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
     _passwordValidation['uppercase'] = RegExp(r'[A-Z]').hasMatch(password);
     _passwordValidation['lowercase'] = RegExp(r'[a-z]').hasMatch(password);
     _passwordValidation['numbers'] = RegExp(r'[0-9]').hasMatch(password);
-    _passwordValidation['special_chars'] = RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password);
-    _passwordValidation['not_common'] = !_commonPasswords.contains(password.toLowerCase());
+    _passwordValidation['special_chars'] = RegExp(
+      r'[!@#$%^&*(),.?":{}|<>]',
+    ).hasMatch(password);
+    _passwordValidation['not_common'] = !_commonPasswords.contains(
+      password.toLowerCase(),
+    );
 
     // Calculate custom strength score
     final strength = _calculateCustomPasswordStrength(password);
@@ -131,26 +152,27 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
       int char1 = password.codeUnitAt(i);
       int char2 = password.codeUnitAt(i + 1);
       int char3 = password.codeUnitAt(i + 2);
-      
+
       if (char2 == char1 + 1 && char3 == char2 + 1) {
         return true;
       }
     }
-    
+
     // Check for sequential letters (abc, def, etc.)
     final lowerPassword = password.toLowerCase();
     for (int i = 0; i < lowerPassword.length - 2; i++) {
       int char1 = lowerPassword.codeUnitAt(i);
       int char2 = lowerPassword.codeUnitAt(i + 1);
       int char3 = lowerPassword.codeUnitAt(i + 2);
-      
-      if (char1 >= 97 && char1 <= 122 && 
-          char2 == char1 + 1 && 
+
+      if (char1 >= 97 &&
+          char1 <= 122 &&
+          char2 == char1 + 1 &&
           char3 == char2 + 1) {
         return true;
       }
     }
-    
+
     return false;
   }
 
@@ -176,15 +198,15 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   Color _getPasswordStrengthColor(PasswordStrength? strength) {
     switch (strength) {
       case PasswordStrength.weak:
-        return Colors.red;
+        return errorColor;
       case PasswordStrength.medium:
-        return Colors.orange;
+        return warningColor;
       case PasswordStrength.strong:
-        return Colors.lightGreen;
+        return successColor;
       case PasswordStrength.secure:
-        return Colors.green;
+        return successColor;
       default:
-        return Colors.grey;
+        return textLight;
     }
   }
 
@@ -202,7 +224,10 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
     // Enhanced password strength validation
     final strength = _passwordStrengthNotifier.value;
     if (strength == PasswordStrength.weak || strength == null) {
-      _showDialog('Weak Password', 'Please choose a stronger password. Your password should include:\n\n• At least 8 characters\n• Uppercase and lowercase letters\n• Numbers\n• Special characters\n• Not a common password');
+      _showDialog(
+        'Weak Password',
+        'Please choose a stronger password. Your password should include:\n\n• At least 8 characters\n• Uppercase and lowercase letters\n• Numbers\n• Special characters\n• Not a common password',
+      );
       return;
     }
 
@@ -215,10 +240,8 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
       final password = passwordController.text.trim();
       final fullName = fullNameController.text.trim();
 
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       // Store user data in Firestore
       final String userId = userCredential.user!.uid;
@@ -231,8 +254,10 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
 
       // After successful signup, send email verification
       await userCredential.user!.sendEmailVerification();
-      _showDialog('Success', 'Sign-up successful! Please check your email to verify your account before logging in.');
-
+      _showDialog(
+        'Success',
+        'Sign-up successful! Please check your email to verify your account before logging in.',
+      );
     } on FirebaseAuthException catch (e) {
       _handleFirebaseAuthError(e);
     } catch (e) {
@@ -246,10 +271,11 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
 
   void _handleFirebaseAuthError(FirebaseAuthException e) {
     String errorMessage = 'An error occurred during sign-up.';
-    
+
     switch (e.code) {
       case 'weak-password':
-        errorMessage = 'The password provided is too weak. Please choose a stronger password.';
+        errorMessage =
+            'The password provided is too weak. Please choose a stronger password.';
         break;
       case 'email-already-in-use':
         errorMessage = 'An account already exists with this email address.';
@@ -258,7 +284,8 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
         errorMessage = 'The email address is not valid.';
         break;
       case 'operation-not-allowed':
-        errorMessage = 'Email/password accounts are not enabled. Please contact support.';
+        errorMessage =
+            'Email/password accounts are not enabled. Please contact support.';
         break;
       case 'network-request-failed':
         errorMessage = 'Network error. Please check your internet connection.';
@@ -266,7 +293,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
       default:
         errorMessage = e.message ?? errorMessage;
     }
-    
+
     _showDialog('Error', errorMessage);
   }
 
@@ -275,31 +302,33 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  title == 'Success' ? Icons.check_circle : Icons.error_outline, 
-                  color: title == 'Success' ? Color(0xFF4CAF50) : Colors.red, 
-                  size: 60
+                  title == 'Success' ? Icons.check_circle : Icons.error_outline,
+                  color: title == 'Success' ? successColor : errorColor,
+                  size: 60,
                 ),
                 SizedBox(height: 16),
                 Text(
-                  title, 
+                  title,
                   style: TextStyle(
-                    fontSize: 20, 
-                    fontWeight: FontWeight.bold, 
-                    color: Color(0xFF2D5D7C)
-                  )
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
                 ),
                 SizedBox(height: 16),
                 Text(
-                  message, 
-                  textAlign: TextAlign.center, 
-                  style: TextStyle(fontSize: 16)
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: textSecondary),
                 ),
                 SizedBox(height: 24),
                 SizedBox(
@@ -311,33 +340,52 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         Navigator.pushReplacement(
                           context,
                           PageRouteBuilder(
-                            pageBuilder: (context, animation, secondaryAnimation) => LoginPage(),
-                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                              var curve = Curves.easeInOut;
-                              var curveTween = CurveTween(curve: curve);
-                              var begin = Offset(1.0, 0.0);
-                              var end = Offset.zero;
-                              var tween = Tween(begin: begin, end: end).chain(curveTween);
-                              var offsetAnimation = animation.drive(tween);
+                            pageBuilder:
+                                (context, animation, secondaryAnimation) =>
+                                    LoginPage(),
+                            transitionsBuilder:
+                                (
+                                  context,
+                                  animation,
+                                  secondaryAnimation,
+                                  child,
+                                ) {
+                                  var curve = Curves.easeInOut;
+                                  var curveTween = CurveTween(curve: curve);
+                                  var begin = Offset(1.0, 0.0);
+                                  var end = Offset.zero;
+                                  var tween = Tween(
+                                    begin: begin,
+                                    end: end,
+                                  ).chain(curveTween);
+                                  var offsetAnimation = animation.drive(tween);
 
-                              return SlideTransition(
-                                position: offsetAnimation,
-                                child: child,
-                              );
-                            },
+                                  return SlideTransition(
+                                    position: offsetAnimation,
+                                    child: child,
+                                  );
+                                },
                             transitionDuration: Duration(milliseconds: 600),
                           ),
                         );
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: title == 'Success' ? Color(0xFF4CAF50) : Color(0xFF2D5D7C),
+                      backgroundColor: title == 'Success'
+                          ? successColor
+                          : primaryColor,
                       padding: EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     child: Text(
-                      title == 'Success' ? 'Continue to Login' : 'Try Again', 
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)
+                      title == 'Success' ? 'Continue to Login' : 'Try Again',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
@@ -352,7 +400,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFFE2E6E0),
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -364,7 +412,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    icon: Icon(Icons.arrow_back, color: Color(0xFF2D5D7C)),
+                    icon: Icon(Icons.arrow_back, color: primaryColor),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -377,7 +425,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
-                            color: Color(0xFF2D5D7C).withOpacity(0.15),
+                            color: primaryColor.withOpacity(0.15),
                             blurRadius: 20,
                             spreadRadius: 2,
                             offset: Offset(0, 8),
@@ -389,13 +437,17 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         height: 140,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [Color(0xFF2D5D7C), Color(0xFF4CAF50)],
+                            colors: [primaryColor, secondaryColor],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.inventory_2_outlined, size: 60, color: Colors.white),
+                        child: Icon(
+                          Icons.inventory_2_outlined,
+                          size: 60,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -407,13 +459,17 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                     position: _slideAnimation,
                     child: ShaderMask(
                       shaderCallback: (bounds) => LinearGradient(
-                        colors: [Color(0xFF2D5D7C), Color(0xFF4CAF50)],
+                        colors: [primaryColor, secondaryColor],
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
                       ).createShader(bounds),
                       child: Text(
                         'Create Account',
-                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -425,7 +481,11 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                     position: _slideAnimation,
                     child: Text(
                       'Join us to streamline your inventory management',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black.withOpacity(0.6)),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: textSecondary,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -440,8 +500,8 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         child: SlideTransition(
                           position: _slideAnimation,
                           child: _buildTextField(
-                            controller: fullNameController, 
-                            label: 'Full Name', 
+                            controller: fullNameController,
+                            label: 'Full Name',
                             icon: Icons.person_outline,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
@@ -461,15 +521,17 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         child: SlideTransition(
                           position: _slideAnimation,
                           child: _buildTextField(
-                            controller: emailController, 
-                            label: 'Email Address', 
-                            icon: Icons.email_outlined, 
+                            controller: emailController,
+                            label: 'Email Address',
+                            icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please enter your email';
                               }
-                              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                              if (!RegExp(
+                                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                              ).hasMatch(value)) {
                                 return 'Please enter a valid email address';
                               }
                               return null;
@@ -485,10 +547,12 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                           child: Column(
                             children: [
                               _buildPasswordField(
-                                controller: passwordController, 
-                                label: 'Password', 
-                                obscureText: _obscurePassword, 
-                                onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                                controller: passwordController,
+                                label: 'Password',
+                                obscureText: _obscurePassword,
+                                onToggle: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
                                     return 'Please enter a password';
@@ -496,9 +560,10 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                                   if (value.length < 6) {
                                     return 'Password must be at least 6 characters';
                                   }
-                                  
+
                                   // Enhanced strength validation
-                                  final strength = _passwordStrengthNotifier.value;
+                                  final strength =
+                                      _passwordStrengthNotifier.value;
                                   if (strength == PasswordStrength.weak) {
                                     return 'Please choose a stronger password';
                                   }
@@ -521,10 +586,13 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         child: SlideTransition(
                           position: _slideAnimation,
                           child: _buildPasswordField(
-                            controller: confirmPasswordController, 
-                            label: 'Confirm Password', 
-                            obscureText: _obscureConfirmPassword, 
-                            onToggle: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                            controller: confirmPasswordController,
+                            label: 'Confirm Password',
+                            obscureText: _obscureConfirmPassword,
+                            onToggle: () => setState(
+                              () => _obscureConfirmPassword =
+                                  !_obscureConfirmPassword,
+                            ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please confirm your password';
@@ -549,7 +617,9 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                           height: 56,
                           padding: EdgeInsets.all(12),
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4CAF50)),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              primaryColor,
+                            ),
                             strokeWidth: 3,
                           ),
                         ),
@@ -558,7 +628,12 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                         opacity: _fadeAnimation,
                         child: SlideTransition(
                           position: _slideAnimation,
-                          child: _buildElevatedButton(context, 'Create Account', _signUpWithEmailPassword, Color(0xFF4CAF50)),
+                          child: _buildElevatedButton(
+                            context,
+                            'Create Account',
+                            _signUpWithEmailPassword,
+                            primaryColor,
+                          ),
                         ),
                       ),
                 SizedBox(height: 40),
@@ -569,29 +644,51 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text("Already have an account? "),
+                        Text(
+                          "Already have an account? ",
+                          style: TextStyle(color: textSecondary),
+                        ),
                         GestureDetector(
                           onTap: () => Navigator.pushReplacement(
                             context,
                             PageRouteBuilder(
-                              pageBuilder: (context, animation, secondaryAnimation) => LoginPage(),
-                              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                var curve = Curves.easeInOut;
-                                var curveTween = CurveTween(curve: curve);
-                                var begin = Offset(-1.0, 0.0);
-                                var end = Offset.zero;
-                                var tween = Tween(begin: begin, end: end).chain(curveTween);
-                                var offsetAnimation = animation.drive(tween);
+                              pageBuilder:
+                                  (context, animation, secondaryAnimation) =>
+                                      LoginPage(),
+                              transitionsBuilder:
+                                  (
+                                    context,
+                                    animation,
+                                    secondaryAnimation,
+                                    child,
+                                  ) {
+                                    var curve = Curves.easeInOut;
+                                    var curveTween = CurveTween(curve: curve);
+                                    var begin = Offset(-1.0, 0.0);
+                                    var end = Offset.zero;
+                                    var tween = Tween(
+                                      begin: begin,
+                                      end: end,
+                                    ).chain(curveTween);
+                                    var offsetAnimation = animation.drive(
+                                      tween,
+                                    );
 
-                                return SlideTransition(
-                                  position: offsetAnimation,
-                                  child: child,
-                                );
-                              },
+                                    return SlideTransition(
+                                      position: offsetAnimation,
+                                      child: child,
+                                    );
+                                  },
                               transitionDuration: Duration(milliseconds: 600),
                             ),
                           ),
-                          child: Text('Log In', style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.w600)),
+                          child: Text(
+                            'Log In',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -613,7 +710,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
         if (strength == null || passwordController.text.isEmpty) {
           return SizedBox();
         }
-        
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -621,10 +718,14 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
               children: [
                 Expanded(
                   child: LinearProgressIndicator(
-                    value: strength == PasswordStrength.weak ? 0.25 :
-                           strength == PasswordStrength.medium ? 0.5 :
-                           strength == PasswordStrength.strong ? 0.75 : 1.0,
-                    backgroundColor: Colors.grey[300],
+                    value: strength == PasswordStrength.weak
+                        ? 0.25
+                        : strength == PasswordStrength.medium
+                        ? 0.5
+                        : strength == PasswordStrength.strong
+                        ? 0.75
+                        : 1.0,
+                    backgroundColor: textLight.withOpacity(0.3),
                     valueColor: AlwaysStoppedAnimation<Color>(
                       _getPasswordStrengthColor(strength),
                     ),
@@ -656,7 +757,7 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
         if (passwordController.text.isEmpty) {
           return SizedBox();
         }
-        
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -665,16 +766,34 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Colors.grey[600],
+                color: textSecondary,
               ),
             ),
             SizedBox(height: 4),
-            _buildRequirementItem('At least 8 characters', _passwordValidation['min_length']!),
-            _buildRequirementItem('Uppercase letter (A-Z)', _passwordValidation['uppercase']!),
-            _buildRequirementItem('Lowercase letter (a-z)', _passwordValidation['lowercase']!),
-            _buildRequirementItem('Number (0-9)', _passwordValidation['numbers']!),
-            _buildRequirementItem('Special character (!@#\$%)', _passwordValidation['special_chars']!),
-            _buildRequirementItem('Not a common password', _passwordValidation['not_common']!),
+            _buildRequirementItem(
+              'At least 8 characters',
+              _passwordValidation['min_length']!,
+            ),
+            _buildRequirementItem(
+              'Uppercase letter (A-Z)',
+              _passwordValidation['uppercase']!,
+            ),
+            _buildRequirementItem(
+              'Lowercase letter (a-z)',
+              _passwordValidation['lowercase']!,
+            ),
+            _buildRequirementItem(
+              'Number (0-9)',
+              _passwordValidation['numbers']!,
+            ),
+            _buildRequirementItem(
+              'Special character (!@#\$%)',
+              _passwordValidation['special_chars']!,
+            ),
+            _buildRequirementItem(
+              'Not a common password',
+              _passwordValidation['not_common']!,
+            ),
           ],
         );
       },
@@ -689,14 +808,14 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
           Icon(
             isMet ? Icons.check_circle : Icons.radio_button_unchecked,
             size: 16,
-            color: isMet ? Colors.green : Colors.grey,
+            color: isMet ? successColor : textLight,
           ),
           SizedBox(width: 6),
           Text(
             text,
             style: TextStyle(
               fontSize: 12,
-              color: isMet ? Colors.green : Colors.grey,
+              color: isMet ? successColor : textLight,
             ),
           ),
         ],
@@ -705,101 +824,127 @@ class _SignUpPageState extends State<SignUpPage> with SingleTickerProviderStateM
   }
 
   Widget _buildTextField({
-    required TextEditingController controller, 
-    required String label, 
-    required IconData icon, 
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(16), 
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05), 
-            blurRadius: 10, 
-            offset: Offset(0, 4)
-          )
-        ]
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
         validator: validator,
-        style: TextStyle(fontSize: 16),
+        style: TextStyle(fontSize: 16, color: textPrimary),
         decoration: InputDecoration(
-          labelText: label, 
-          prefixIcon: Icon(icon, color: Color(0xFF2D5D7C)), 
+          labelText: label,
+          labelStyle: TextStyle(color: textSecondary),
+          prefixIcon: Icon(icon, color: primaryColor),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16), 
-            borderSide: BorderSide.none
-          ), 
-          filled: true, 
-          fillColor: Colors.transparent
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: primaryColor, width: 2),
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
         ),
       ),
     );
   }
 
   Widget _buildPasswordField({
-    required TextEditingController controller, 
-    required String label, 
-    required bool obscureText, 
+    required TextEditingController controller,
+    required String label,
+    required bool obscureText,
     required VoidCallback onToggle,
     String? Function(String?)? validator,
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(16), 
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05), 
-            blurRadius: 10, 
-            offset: Offset(0, 4)
-          )
-        ]
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
         validator: validator,
-        style: TextStyle(fontSize: 16),
+        style: TextStyle(fontSize: 16, color: textPrimary),
         decoration: InputDecoration(
-          labelText: label, 
-          prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF2D5D7C)), 
+          labelText: label,
+          labelStyle: TextStyle(color: textSecondary),
+          prefixIcon: Icon(Icons.lock_outline, color: primaryColor),
           suffixIcon: IconButton(
             icon: Icon(
-              obscureText ? Icons.visibility_outlined : Icons.visibility_off_outlined, 
-              color: Color(0xFF2D5D7C)
-            ), 
-            onPressed: onToggle
-          ), 
+              obscureText
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              color: primaryColor,
+            ),
+            onPressed: onToggle,
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16), 
-            borderSide: BorderSide.none
-          ), 
-          filled: true, 
-          fillColor: Colors.transparent
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: primaryColor, width: 2),
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
         ),
       ),
     );
   }
 
-  Widget _buildElevatedButton(BuildContext context, String text, VoidCallback onPressed, Color color) {
+  Widget _buildElevatedButton(
+    BuildContext context,
+    String text,
+    VoidCallback onPressed,
+    Color color,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 58,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: color, 
-          elevation: 0, 
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
-          shadowColor: color.withOpacity(0.4)
+          backgroundColor: color,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          shadowColor: color.withOpacity(0.4),
         ),
-        child: Text(text, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }

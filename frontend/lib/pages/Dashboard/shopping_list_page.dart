@@ -37,7 +37,8 @@ class ShoppingListPage extends StatefulWidget {
   _ShoppingListPageState createState() => _ShoppingListPageState();
 }
 
-class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerProviderStateMixin {
+class _ShoppingListPageState extends State<ShoppingListPage>
+    with SingleTickerProviderStateMixin {
   final ShoppingListService _shoppingListService = ShoppingListService();
   List<Map<String, dynamic>> _shoppingItems = [];
   bool _isLoading = false;
@@ -75,8 +76,10 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
     });
 
     try {
-      final items = await _shoppingListService.getShoppingList(widget.householdId);
-      
+      final items = await _shoppingListService.getShoppingList(
+        widget.householdId,
+      );
+
       if (mounted) {
         setState(() {
           _shoppingItems = items;
@@ -98,17 +101,17 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
     double totalCost = 0.0;
     int totalItems = 0;
     int completedItems = 0;
-    
+
     for (final item in _shoppingItems) {
       final quantity = item['quantity'] as int? ?? 1;
       final price = (item['estimatedPrice'] as num?)?.toDouble() ?? 0.0;
       final completed = item['completed'] == true;
-      
+
       totalCost += quantity * price;
       totalItems += quantity;
       if (completed) completedItems += 1;
     }
-    
+
     setState(() {
       _totalEstimatedCost = totalCost;
       _totalItems = totalItems;
@@ -118,7 +121,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
 
   Future<void> _updateItemQuantity(String itemId, int newQuantity) async {
     print('🔄 Updating quantity for item $itemId to $newQuantity');
-    
+
     if (newQuantity <= 0) {
       await _removeItem(itemId);
       return;
@@ -126,8 +129,8 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
 
     try {
       final result = await _shoppingListService.updateItemQuantity(
-        widget.householdId, 
-        itemId, 
+        widget.householdId,
+        itemId,
         newQuantity,
       );
 
@@ -145,7 +148,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
 
   Future<void> _removeItem(String itemId) async {
     print('🗑️ Removing item: $itemId');
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -165,22 +168,25 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: widget.textSecondary)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: widget.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
-                final result = await _shoppingListService.removeFromShoppingList(
-                  widget.householdId, 
-                  itemId,
-                );
+                final result = await _shoppingListService
+                    .removeFromShoppingList(widget.householdId, itemId);
 
                 if (result['success'] == true) {
                   await _loadShoppingList();
                   _showSuccessSnackbar('Item removed from list');
                 } else {
-                  _showErrorSnackbar('Failed to remove item: ${result['error']}');
+                  _showErrorSnackbar(
+                    'Failed to remove item: ${result['error']}',
+                  );
                 }
               } catch (e) {
                 print('❌ Error removing item: $e');
@@ -223,21 +229,30 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: widget.textSecondary)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: widget.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
               print('🧹 Clearing completed items...');
-              
+
               try {
-                final result = await _shoppingListService.clearCompletedItems(widget.householdId);
-                
+                final result = await _shoppingListService.clearCompletedItems(
+                  widget.householdId,
+                );
+
                 if (result['success'] == true) {
                   await _loadShoppingList();
-                  _showSuccessSnackbar('Cleared ${result['clearedCount']} completed items');
+                  _showSuccessSnackbar(
+                    'Cleared ${result['clearedCount']} completed items',
+                  );
                 } else {
-                  _showErrorSnackbar('Failed to clear completed items: ${result['error']}');
+                  _showErrorSnackbar(
+                    'Failed to clear completed items: ${result['error']}',
+                  );
                 }
               } catch (e) {
                 print('❌ Error clearing completed items: $e');
@@ -257,10 +272,10 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
 
   Future<void> _markItemAsPurchased(String itemId) async {
     print('🛍️ Marking item as purchased: $itemId');
-    
+
     try {
       final result = await _shoppingListService.markItemAsPurchased(
-        widget.householdId, 
+        widget.householdId,
         itemId,
       );
 
@@ -268,7 +283,9 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
         await _loadShoppingList();
         _showSuccessSnackbar('Item marked as purchased!');
       } else {
-        _showErrorSnackbar('Failed to mark item as purchased: ${result['error']}');
+        _showErrorSnackbar(
+          'Failed to mark item as purchased: ${result['error']}',
+        );
       }
     } catch (e) {
       print('❌ Error marking item as purchased: $e');
@@ -278,11 +295,11 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
 
   Future<void> _uncompleteItem(String itemId) async {
     print('↩️ Un-completing item: $itemId');
-    
+
     try {
       final result = await _shoppingListService.toggleItemStatus(
-        widget.householdId, 
-        itemId, 
+        widget.householdId,
+        itemId,
         false,
       );
 
@@ -498,10 +515,10 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
             child: _isLoading
                 ? _buildEnhancedLoadingState()
                 : _hasError
-                    ? _buildEnhancedErrorState()
-                    : _shoppingItems.isEmpty
-                        ? _buildEnhancedEmptyState()
-                        : _buildEnhancedShoppingList(),
+                ? _buildEnhancedErrorState()
+                : _shoppingItems.isEmpty
+                ? _buildEnhancedEmptyState()
+                : _buildEnhancedShoppingList(),
           ),
         ],
       ),
@@ -541,15 +558,17 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
           borderRadius: BorderRadius.circular(12),
         ),
         child: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, 
-                    size: 20, color: widget.primaryColor),
+          icon: Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: widget.primaryColor,
+          ),
           onPressed: () => Navigator.pop(context),
           splashRadius: 20,
         ),
       ),
       actions: [
-        if (_completedItems > 0)
-          _buildEnhancedClearCompletedButton(),
+        if (_completedItems > 0) _buildEnhancedClearCompletedButton(),
         Container(
           margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -557,8 +576,11 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
             borderRadius: BorderRadius.circular(12),
           ),
           child: IconButton(
-            icon: Icon(Icons.refresh_rounded, 
-                      size: 20, color: widget.primaryColor),
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 20,
+              color: widget.primaryColor,
+            ),
             onPressed: _loadShoppingList,
             tooltip: 'Refresh List',
             splashRadius: 20,
@@ -578,8 +600,11 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
       child: Stack(
         children: [
           IconButton(
-            icon: Icon(Icons.check_circle_outline_rounded, 
-                      size: 20, color: widget.successColor),
+            icon: Icon(
+              Icons.check_circle_outline_rounded,
+              size: 20,
+              color: widget.successColor,
+            ),
             onPressed: _clearCompletedItems,
             tooltip: 'Clear Completed Items',
             splashRadius: 20,
@@ -619,7 +644,9 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
   }
 
   Widget _buildEnhancedHeaderStats() {
-    final completionPercentage = _shoppingItems.isNotEmpty ? (_completedItems / _shoppingItems.length) * 100 : 0;
+    final completionPercentage = _shoppingItems.isNotEmpty
+        ? (_completedItems / _shoppingItems.length) * 100
+        : 0;
 
     return Container(
       width: double.infinity,
@@ -628,10 +655,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            widget.surfaceColor,
-            widget.surfaceColor.withOpacity(0.9),
-          ],
+          colors: [widget.surfaceColor, widget.surfaceColor.withOpacity(0.9)],
         ),
         borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(32),
@@ -716,7 +740,9 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
                       ),
                     ),
                     Text(
-                      completionPercentage >= 100 ? 'Completed! 🎉' : 'Keep going! 💪',
+                      completionPercentage >= 100
+                          ? 'Completed! 🎉'
+                          : 'Keep going! 💪',
                       style: TextStyle(
                         fontSize: 12,
                         color: widget.textLight,
@@ -729,7 +755,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // Enhanced Stats cards with better spacing
           Row(
             children: [
@@ -769,7 +795,13 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
     );
   }
 
-  Widget _buildEnhancedStatCard(String label, String value, IconData icon, Color color, int index) {
+  Widget _buildEnhancedStatCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    int index,
+  ) {
     return AnimatedContainer(
       duration: Duration(milliseconds: 600 + (index * 200)),
       curve: Curves.easeOutBack,
@@ -778,10 +810,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            color.withOpacity(0.15),
-            color.withOpacity(0.05),
-          ],
+          colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withOpacity(0.2), width: 1),
@@ -803,10 +832,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  color.withOpacity(0.2),
-                  color.withOpacity(0.1),
-                ],
+                colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
               ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: color.withOpacity(0.3), width: 1.5),
@@ -872,7 +898,9 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
                     width: 120,
                     height: 120,
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(widget.primaryColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        widget.primaryColor,
+                      ),
                       strokeWidth: 3,
                       strokeCap: StrokeCap.round,
                     ),
@@ -974,7 +1002,9 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      side: BorderSide(color: widget.textSecondary.withOpacity(0.3)),
+                      side: BorderSide(
+                        color: widget.textSecondary.withOpacity(0.3),
+                      ),
                     ),
                     child: Text(
                       'Go Back',
@@ -1078,10 +1108,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
                 icon: Icon(Icons.add_rounded, size: 22),
                 label: Text(
                   'Add Your First Item',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -1089,7 +1116,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
             TextButton(
               onPressed: _showQuickAddOptions,
               child: Text(
-                'or browse quick add options',
+                'or Browse Quick Add Options',
                 style: TextStyle(
                   color: widget.primaryColor,
                   fontWeight: FontWeight.w600,
@@ -1103,8 +1130,12 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
   }
 
   Widget _buildEnhancedShoppingList() {
-    final pendingItems = _shoppingItems.where((item) => item['completed'] != true).toList();
-    final completedItems = _shoppingItems.where((item) => item['completed'] == true).toList();
+    final pendingItems = _shoppingItems
+        .where((item) => item['completed'] != true)
+        .toList();
+    final completedItems = _shoppingItems
+        .where((item) => item['completed'] == true)
+        .toList();
 
     return RefreshIndicator(
       backgroundColor: widget.surfaceColor,
@@ -1129,11 +1160,18 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: _EnhancedShoppingListItem(
                     item: pendingItems[index],
-                    onQuantityChanged: (newQuantity) => _updateItemQuantity(pendingItems[index]['id'], newQuantity),
-                    onPurchased: () => _markItemAsPurchased(pendingItems[index]['id']),
+                    onQuantityChanged: (newQuantity) => _updateItemQuantity(
+                      pendingItems[index]['id'],
+                      newQuantity,
+                    ),
+                    onPurchased: () =>
+                        _markItemAsPurchased(pendingItems[index]['id']),
                     onRemove: () => _removeItem(pendingItems[index]['id']),
                     primaryColor: widget.primaryColor,
                     successColor: widget.successColor,
@@ -1165,10 +1203,14 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: _EnhancedCompletedShoppingListItem(
                     item: completedItems[index],
-                    onRestore: () => _uncompleteItem(completedItems[index]['id']),
+                    onRestore: () =>
+                        _uncompleteItem(completedItems[index]['id']),
                     onRemove: () => _removeItem(completedItems[index]['id']),
                     primaryColor: widget.primaryColor,
                     successColor: widget.successColor,
@@ -1186,15 +1228,18 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
 
           // Empty state for when there are no items in a section
           if (pendingItems.isEmpty && completedItems.isEmpty)
-            const SliverToBoxAdapter(
-              child: SizedBox.shrink(),
-            ),
+            const SliverToBoxAdapter(child: SizedBox.shrink()),
         ],
       ),
     );
   }
 
-  Widget _buildEnhancedSectionHeader(String title, int count, String subtitle, Color color) {
+  Widget _buildEnhancedSectionHeader(
+    String title,
+    int count,
+    String subtitle,
+    Color color,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1245,10 +1290,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
           padding: const EdgeInsets.only(left: 16),
           child: Text(
             subtitle,
-            style: TextStyle(
-              fontSize: 14,
-              color: widget.textLight,
-            ),
+            style: TextStyle(fontSize: 14, color: widget.textLight),
           ),
         ),
       ],
@@ -1263,9 +1305,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> with SingleTickerPr
       icon: const Icon(Icons.add_rounded),
       label: const Text('Add Item'),
       heroTag: 'add_item',
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       elevation: 4,
       highlightElevation: 8,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1364,10 +1404,11 @@ class _EnhancedShoppingListItem extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  __EnhancedShoppingListItemState createState() => __EnhancedShoppingListItemState();
+  __EnhancedShoppingListItemState createState() =>
+      __EnhancedShoppingListItemState();
 }
 
-class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem> 
+class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
@@ -1410,7 +1451,8 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
   Widget build(BuildContext context) {
     final int quantity = widget.item['quantity'] as int? ?? 1;
     final String category = widget.item['category'] as String? ?? 'Other';
-    final double estimatedPrice = (widget.item['estimatedPrice'] as num?)?.toDouble() ?? 0.0;
+    final double estimatedPrice =
+        (widget.item['estimatedPrice'] as num?)?.toDouble() ?? 0.0;
     final double totalCost = quantity * estimatedPrice;
     final bool hasPrice = estimatedPrice > 0;
 
@@ -1420,7 +1462,7 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          boxShadow: _isPressed 
+          boxShadow: _isPressed
               ? []
               : [
                   BoxShadow(
@@ -1507,16 +1549,27 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
                           children: [
                             // Enhanced Category badge
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    _getCategoryColor(category).withOpacity(0.15),
-                                    _getCategoryColor(category).withOpacity(0.05),
+                                    _getCategoryColor(
+                                      category,
+                                    ).withOpacity(0.15),
+                                    _getCategoryColor(
+                                      category,
+                                    ).withOpacity(0.05),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: _getCategoryColor(category).withOpacity(0.3)),
+                                border: Border.all(
+                                  color: _getCategoryColor(
+                                    category,
+                                  ).withOpacity(0.3),
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -1533,17 +1586,20 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
                                       fontSize: 8,
                                       color: _getCategoryColor(category),
                                       fontWeight: FontWeight.w600,
-                          
+
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            
+
                             if (hasPrice)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
@@ -1552,30 +1608,32 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
                                     ],
                                   ),
                                   borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: widget.primaryColor.withOpacity(0.3)),
+                                  border: Border.all(
+                                    color: widget.primaryColor.withOpacity(0.3),
+                                  ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                          'RM', // Replace icon with "RM"
-                                          style: TextStyle(
-                                            fontSize: 14, // Adjust size as needed
-                                            color: widget.primaryColor,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          totalCost.toStringAsFixed(2),
-                                          style: TextStyle(
-                                           fontSize: 12,
-                                           color: widget.primaryColor,
-                                           fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    )
+                                  children: [
+                                    Text(
+                                      'RM', // Replace icon with "RM"
+                                      style: TextStyle(
+                                        fontSize: 14, // Adjust size as needed
+                                        color: widget.primaryColor,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      totalCost.toStringAsFixed(2),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: widget.primaryColor,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                           ],
                         ),
@@ -1595,13 +1653,16 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
                         ],
                       ),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: widget.primaryColor.withOpacity(0.2)),
+                      border: Border.all(
+                        color: widget.primaryColor.withOpacity(0.2),
+                      ),
                     ),
                     child: Row(
                       children: [
                         _QuantityButton(
                           icon: Icons.remove_rounded,
-                          onPressed: () => widget.onQuantityChanged(quantity - 1),
+                          onPressed: () =>
+                              widget.onQuantityChanged(quantity - 1),
                           color: widget.primaryColor,
                         ),
                         Container(
@@ -1618,7 +1679,8 @@ class __EnhancedShoppingListItemState extends State<_EnhancedShoppingListItem>
                         ),
                         _QuantityButton(
                           icon: Icons.add_rounded,
-                          onPressed: () => widget.onQuantityChanged(quantity + 1),
+                          onPressed: () =>
+                              widget.onQuantityChanged(quantity + 1),
                           color: widget.primaryColor,
                         ),
                       ],
@@ -1732,7 +1794,8 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final int quantity = item['quantity'] as int? ?? 1;
-    final double estimatedPrice = (item['estimatedPrice'] as num?)?.toDouble() ?? 0.0;
+    final double estimatedPrice =
+        (item['estimatedPrice'] as num?)?.toDouble() ?? 0.0;
     final double totalCost = quantity * estimatedPrice;
     final bool hasPrice = estimatedPrice > 0;
 
@@ -1794,7 +1857,11 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Icon(Icons.check_rounded, size: 20, color: Colors.white),
+                  child: Icon(
+                    Icons.check_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 16),
 
@@ -1819,7 +1886,10 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                         children: [
                           // Purchase info
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: successColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(6),
@@ -1827,7 +1897,11 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.schedule_rounded, size: 12, color: successColor),
+                                Icon(
+                                  Icons.schedule_rounded,
+                                  size: 12,
+                                  color: successColor,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Purchased',
@@ -1842,7 +1916,10 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                           ),
                           if (hasPrice)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: successColor.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(6),
@@ -1850,7 +1927,11 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.attach_money_rounded, size: 12, color: successColor),
+                                  Icon(
+                                    Icons.attach_money_rounded,
+                                    size: 12,
+                                    color: successColor,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     totalCost.toStringAsFixed(2),
@@ -1873,10 +1954,16 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
 
                 // Enhanced Quantity display
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [successColor.withOpacity(0.15), successColor.withOpacity(0.08)],
+                      colors: [
+                        successColor.withOpacity(0.15),
+                        successColor.withOpacity(0.08),
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -1915,7 +2002,11 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                         value: 'restore',
                         child: Row(
                           children: [
-                            Icon(Icons.refresh_rounded, size: 18, color: primaryColor),
+                            Icon(
+                              Icons.refresh_rounded,
+                              size: 18,
+                              color: primaryColor,
+                            ),
                             const SizedBox(width: 8),
                             const Text('Move back to list'),
                           ],
@@ -1925,7 +2016,11 @@ class _EnhancedCompletedShoppingListItem extends StatelessWidget {
                         value: 'remove',
                         child: Row(
                           children: [
-                            Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              size: 18,
+                              color: Colors.red,
+                            ),
                             const SizedBox(width: 8),
                             const Text('Remove permanently'),
                           ],
@@ -2049,7 +2144,10 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [widget.primaryColor.withOpacity(0.1), widget.primaryColor.withOpacity(0.05)],
+                    colors: [
+                      widget.primaryColor.withOpacity(0.1),
+                      widget.primaryColor.withOpacity(0.05),
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -2062,13 +2160,20 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                       height: 44,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [widget.primaryColor, widget.primaryColor.withOpacity(0.8)],
+                          colors: [
+                            widget.primaryColor,
+                            widget.primaryColor.withOpacity(0.8),
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Icon(Icons.add_rounded, color: Colors.white, size: 24),
+                      child: Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -2082,7 +2187,10 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.close_rounded, color: widget.textSecondary),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: widget.textSecondary,
+                      ),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -2105,14 +2213,21 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                 controller: _nameController,
                 decoration: InputDecoration(
                   hintText: 'e.g., Organic Milk, Whole Wheat Bread...',
-                  hintStyle: TextStyle(color: widget.textSecondary.withOpacity(0.6)),
+                  hintStyle: TextStyle(
+                    color: widget.textSecondary.withOpacity(0.6),
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: widget.textSecondary.withOpacity(0.2)),
+                    borderSide: BorderSide(
+                      color: widget.textSecondary.withOpacity(0.2),
+                    ),
                   ),
                   filled: true,
                   fillColor: widget.surfaceColor.withOpacity(0.8),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                 ),
                 style: TextStyle(color: widget.textPrimary, fontSize: 16),
                 validator: (value) {
@@ -2147,11 +2262,16 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                           decoration: InputDecoration(
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(color: widget.textSecondary.withOpacity(0.2)),
+                              borderSide: BorderSide(
+                                color: widget.textSecondary.withOpacity(0.2),
+                              ),
                             ),
                             filled: true,
                             fillColor: widget.surfaceColor.withOpacity(0.8),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
                           ),
                           items: _categories.map((category) {
                             return DropdownMenuItem(
@@ -2193,14 +2313,21 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                             hintText: '0.00',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide(color: widget.textSecondary.withOpacity(0.2)),
+                              borderSide: BorderSide(
+                                color: widget.textSecondary.withOpacity(0.2),
+                              ),
                             ),
                             filled: true,
                             fillColor: widget.surfaceColor.withOpacity(0.8),
                             prefixText: 'RM ',
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
                           ),
-                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           validator: (value) {
                             if (value != null && value.isNotEmpty) {
                               final price = double.tryParse(value);
@@ -2225,7 +2352,9 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                 decoration: BoxDecoration(
                   color: widget.primaryColor.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: widget.primaryColor.withOpacity(0.1)),
+                  border: Border.all(
+                    color: widget.primaryColor.withOpacity(0.1),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -2241,12 +2370,17 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                     Container(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [widget.primaryColor.withOpacity(0.1), widget.primaryColor.withOpacity(0.05)],
+                          colors: [
+                            widget.primaryColor.withOpacity(0.1),
+                            widget.primaryColor.withOpacity(0.05),
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: widget.primaryColor.withOpacity(0.2)),
+                        border: Border.all(
+                          color: widget.primaryColor.withOpacity(0.2),
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -2311,7 +2445,9 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        side: BorderSide(color: widget.textSecondary.withOpacity(0.3)),
+                        side: BorderSide(
+                          color: widget.textSecondary.withOpacity(0.3),
+                        ),
                       ),
                       child: Text(
                         'Cancel',
@@ -2328,10 +2464,10 @@ class __EnhancedAddItemDialogState extends State<_EnhancedAddItemDialog> {
                     child: ElevatedButton(
                       onPressed: () {
                         if (_formKey.currentState!.validate()) {
-                          final price = _priceController.text.isEmpty 
-                              ? 0.0 
+                          final price = _priceController.text.isEmpty
+                              ? 0.0
                               : double.tryParse(_priceController.text) ?? 0.0;
-                          
+
                           widget.onAddItem(
                             _nameController.text.trim(),
                             _quantity,
