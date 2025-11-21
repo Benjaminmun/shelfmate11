@@ -1,3 +1,4 @@
+// dashboard_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,7 @@ import 'dart:async';
 import 'activity_pages.dart';
 import 'recommendation_section.dart';
 import 'shopping_list_page.dart';
+import '../../services/shopping_list_service.dart'; // Add this import
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -765,6 +767,8 @@ class _DashboardPageState extends State<DashboardPage>
   final HouseholdServiceController _householdServiceController =
       HouseholdServiceController();
   final DashboardService _dashboardService = DashboardService();
+  final ShoppingListService _shoppingListService =
+      ShoppingListService(); // Add this
 
   // Enhanced color scheme with gradients
   final Color _primaryColor = Color(0xFF2D5D7C);
@@ -870,6 +874,8 @@ class _DashboardPageState extends State<DashboardPage>
 
               // Load activity stats
               _loadActivityStats();
+              // Load shopping list count
+              _loadShoppingListCount();
 
               // Start animations when first data arrives
               if (!_animationController.isAnimating) {
@@ -919,6 +925,22 @@ class _DashboardPageState extends State<DashboardPage>
       setState(() {
         _activityStats = stats;
       });
+    }
+  }
+
+  // 🆕 Load Shopping List Count Method
+  Future<void> _loadShoppingListCount() async {
+    try {
+      final count = await _shoppingListService.getShoppingListCount(
+        _currentHouseholdId,
+      );
+      if (mounted) {
+        setState(() {
+          _shoppingListCount = count;
+        });
+      }
+    } catch (e) {
+      print('Error loading shopping list count: $e');
     }
   }
 
@@ -1068,25 +1090,35 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       centerTitle: true,
       actions: [
-        // 🆕 Shopping Cart Icon with Badge
+        // 🆕 Shopping Cart Icon with Badge - Updated to show count like AllRecommendationsPage
         Stack(
           children: [
-            IconButton(
-              icon: Icon(Icons.shopping_cart_rounded, size: 24),
-              tooltip: 'Shopping List',
-              onPressed: _navigateToShoppingList,
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                icon: Icon(Icons.shopping_cart_rounded, size: 22),
+                tooltip: 'Shopping List',
+                onPressed: _navigateToShoppingList,
+                color: Colors.white,
+              ),
             ),
             if (_shoppingListCount > 0)
               Positioned(
-                right: 8,
-                top: 8,
+                right: 6,
+                top: 6,
                 child: Container(
-                  padding: EdgeInsets.all(2),
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: Colors.red,
                     shape: BoxShape.circle,
                   ),
-                  constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
                   child: Text(
                     _shoppingListCount > 99 ? '99+' : '$_shoppingListCount',
                     style: TextStyle(
@@ -1100,6 +1132,7 @@ class _DashboardPageState extends State<DashboardPage>
               ),
           ],
         ),
+        const SizedBox(width: 8),
         // Settings Button
         PopupMenuButton<String>(
           icon: Icon(Icons.settings_rounded, size: 24),
@@ -1537,6 +1570,8 @@ class _DashboardPageState extends State<DashboardPage>
         backgroundColor: _successColor,
       ),
     );
+    // Refresh shopping list count after adding item
+    _loadShoppingListCount();
   }
 
   void _navigateToItem(String itemId) {
@@ -1571,20 +1606,6 @@ class _DashboardPageState extends State<DashboardPage>
       _loadShoppingListCount();
       _refreshData();
     });
-  }
-
-  // 🆕 Load Shopping List Count
-  Future<void> _loadShoppingListCount() async {
-    // This method would typically call your shopping list service
-    // to get the current count of items in the shopping list
-    try {
-      // Example implementation - replace with your actual service call
-      // final count = await ShoppingListService().getShoppingListCount(_currentHouseholdId);
-      // setState(() { _shoppingListCount = count; });
-      print('Loading shopping list count...');
-    } catch (e) {
-      print('Error loading shopping list count: $e');
-    }
   }
 
   // 🆕 Refresh Data Method
