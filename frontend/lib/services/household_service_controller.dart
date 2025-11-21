@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../pages/Dashboard/dashboard_page.dart';
 import '../pages/Dashboard/member_dashboard_page.dart';
-import '../pages/Dashboard/editor_dashboard_page.dart'; // ADD THIS IMPORT
+import '../pages/Dashboard/editor_dashboard_page.dart';
 import '../pages/login_page.dart';
 
 class PaginationResult {
@@ -30,7 +30,7 @@ class HouseholdServiceController {
   // Get user role for a specific household - checks both locations
   Future<String> getUserRole(String householdId) async {
     if (currentUser == null) return 'member';
-    
+
     try {
       // First check the main household members collection (source of truth)
       final householdMemberDoc = await _firestore
@@ -39,11 +39,11 @@ class HouseholdServiceController {
           .collection('members')
           .doc(currentUser!.uid)
           .get();
-      
+
       if (householdMemberDoc.exists) {
         return householdMemberDoc.data()?['userRole'] ?? 'member';
       }
-      
+
       // Fallback to user's personal collection
       final userHouseholdDoc = await _firestore
           .collection('users')
@@ -51,7 +51,7 @@ class HouseholdServiceController {
           .collection('households')
           .doc(householdId)
           .get();
-          
+
       return userHouseholdDoc.data()?['userRole'] ?? 'member';
     } catch (e) {
       debugPrint('Error getting user role: $e');
@@ -107,15 +107,17 @@ class HouseholdServiceController {
     }
 
     String householdName = '';
-    
+
     // Use a Completer to get the result from the dialog
     final completer = Completer<Map<String, dynamic>>();
-    
+
     showDialog(
       context: context,
       builder: (BuildContext ctx) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -135,7 +137,8 @@ class HouseholdServiceController {
                   decoration: InputDecoration(
                     labelText: 'Household Name',
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.grey[50],
                   ),
@@ -148,10 +151,15 @@ class HouseholdServiceController {
                     TextButton(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        completer.complete({'success': false, 'error': 'Cancelled'});
+                        completer.complete({
+                          'success': false,
+                          'error': 'Cancelled',
+                        });
                       },
-                      child: const Text('Cancel',
-                          style: TextStyle(color: Colors.grey)),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
@@ -175,12 +183,15 @@ class HouseholdServiceController {
                           });
 
                           // Add user as member with creator role
-                          await docRef.collection('members').doc(currentUser!.uid).set({
-                            'userId': currentUser!.uid,
-                            'joinedAt': FieldValue.serverTimestamp(),
-                            'userRole': 'creator',
-                            'email': currentUser!.email,
-                          });
+                          await docRef
+                              .collection('members')
+                              .doc(currentUser!.uid)
+                              .set({
+                                'userId': currentUser!.uid,
+                                'joinedAt': FieldValue.serverTimestamp(),
+                                'userRole': 'creator',
+                                'email': currentUser!.email,
+                              });
 
                           // Create user household reference
                           await _firestore
@@ -189,13 +200,13 @@ class HouseholdServiceController {
                               .collection('households')
                               .doc(docRef.id)
                               .set({
-                            'householdName': householdName,
-                            'createdAt': FieldValue.serverTimestamp(),
-                            'householdId': docRef.id,
-                            'invitationCode': invitationCode,
-                            'userRole': 'creator',
-                            'joinedAt': FieldValue.serverTimestamp(),
-                          });
+                                'householdName': householdName,
+                                'createdAt': FieldValue.serverTimestamp(),
+                                'householdId': docRef.id,
+                                'invitationCode': invitationCode,
+                                'userRole': 'creator',
+                                'joinedAt': FieldValue.serverTimestamp(),
+                              });
 
                           Navigator.pop(ctx);
 
@@ -210,16 +221,23 @@ class HouseholdServiceController {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                  'Household "$householdName" created successfully'),
+                                'Household "$householdName" created successfully',
+                              ),
                               backgroundColor: const Color(0xFF4CAF50),
                             ),
                           );
 
-                          _showInvitationDialog(context, invitationCode, householdName);
-                          
+                          _showInvitationDialog(
+                            context,
+                            invitationCode,
+                            householdName,
+                          );
                         } catch (e) {
                           Navigator.pop(ctx);
-                          completer.complete({'success': false, 'error': e.toString()});
+                          completer.complete({
+                            'success': false,
+                            'error': e.toString(),
+                          });
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error creating household: $e'),
@@ -231,7 +249,8 @@ class HouseholdServiceController {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF4CAF50),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: const Text('Create'),
                     ),
@@ -248,7 +267,10 @@ class HouseholdServiceController {
   }
 
   // Join household with invitation code
-  Future<void> joinHousehold(BuildContext context, String invitationCode) async {
+  Future<void> joinHousehold(
+    BuildContext context,
+    String invitationCode,
+  ) async {
     if (currentUser == null) return;
 
     try {
@@ -270,7 +292,8 @@ class HouseholdServiceController {
 
       final householdDoc = querySnapshot.docs.first;
       final householdData = householdDoc.data();
-      final householdName = householdData['householdName'] ?? 'Unknown Household';
+      final householdName =
+          householdData['householdName'] ?? 'Unknown Household';
       final householdId = householdDoc.id;
       final ownerId = householdData['ownerId'];
 
@@ -335,7 +358,7 @@ class HouseholdServiceController {
       );
 
       Navigator.of(context).pop();
-      
+
       // Navigate to appropriate dashboard based on role
       await selectHousehold(householdName, context, householdId);
     } catch (e) {
@@ -367,10 +390,7 @@ class HouseholdServiceController {
           .delete();
 
       // Delete the main household document (security rules will prevent if not owner)
-      await _firestore
-          .collection('households')
-          .doc(householdId)
-          .delete();
+      await _firestore.collection('households').doc(householdId).delete();
     } catch (e) {
       debugPrint('Error deleting household: $e');
       rethrow;
@@ -378,7 +398,9 @@ class HouseholdServiceController {
   }
 
   // Get all members from the household
-  Future<List<Map<String, dynamic>>> getHouseholdMembers(String householdId) async {
+  Future<List<Map<String, dynamic>>> getHouseholdMembers(
+    String householdId,
+  ) async {
     if (currentUser == null) return [];
 
     try {
@@ -401,18 +423,16 @@ class HouseholdServiceController {
           .orderBy('joinedAt')
           .get();
 
-      return snapshot.docs
-          .map((doc) {
-            final data = doc.data();
-            return {
-              'id': doc.id,
-              'userId': data['userId'],
-              'email': data['email'],
-              'userRole': data['userRole'],
-              'joinedAt': data['joinedAt'],
-            };
-          })
-          .toList();
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'userId': data['userId'],
+          'email': data['email'],
+          'userRole': data['userRole'],
+          'joinedAt': data['joinedAt'],
+        };
+      }).toList();
     } catch (e) {
       debugPrint('Error fetching household members: $e');
       return [];
@@ -458,8 +478,9 @@ class HouseholdServiceController {
         members.add(data);
       }
 
-      DocumentSnapshot? lastDoc = 
-          querySnapshot.docs.isNotEmpty ? querySnapshot.docs.last : null;
+      DocumentSnapshot? lastDoc = querySnapshot.docs.isNotEmpty
+          ? querySnapshot.docs.last
+          : null;
 
       return PaginationResult(
         members: members,
@@ -501,7 +522,11 @@ class HouseholdServiceController {
   }
 
   // Update member role (only for owners)
-  Future<void> updateMemberRole(String householdId, String userId, String newRole) async {
+  Future<void> updateMemberRole(
+    String householdId,
+    String userId,
+    String newRole,
+  ) async {
     try {
       // Check if current user is the owner
       final currentUserRole = await getUserRole(householdId);
@@ -549,18 +574,26 @@ class HouseholdServiceController {
   String _generateInvitationCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
-    return String.fromCharCodes(Iterable.generate(
-      6,
-      (_) => chars.codeUnitAt(random.nextInt(chars.length)),
-    ));
+    return String.fromCharCodes(
+      Iterable.generate(
+        6,
+        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+      ),
+    );
   }
 
-  void _showInvitationDialog(BuildContext context, String invitationCode, String householdName) {
+  void _showInvitationDialog(
+    BuildContext context,
+    String invitationCode,
+    String householdName,
+  ) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -578,10 +611,7 @@ class HouseholdServiceController {
                 Text(
                   'Share this code with family members to join your household:',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[700],
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey[700]),
                 ),
                 SizedBox(height: 20),
                 Container(
@@ -638,16 +668,21 @@ class HouseholdServiceController {
   }
 
   void _shareInvitationCode(String invitationCode, String householdName) {
-    final shareText = 'Join my household "$householdName" on HomeHub! Use code: $invitationCode';
+    final shareText =
+        'Join my household "$householdName" on HomeHub! Use code: $invitationCode';
     Share.share(shareText);
   }
 
   // UPDATED: Role-based navigation with editor support
-  Future<void> selectHousehold(String householdName, BuildContext context, String householdId) async {
+  Future<void> selectHousehold(
+    String householdName,
+    BuildContext context,
+    String householdId,
+  ) async {
     try {
       // Get the user's role for this household
       final userRole = await getUserRole(householdId);
-      
+
       // Navigate to appropriate dashboard based on role
       switch (userRole) {
         case 'creator':
@@ -709,9 +744,9 @@ class HouseholdServiceController {
         (_) => false,
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Logout failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Logout failed: $e")));
     }
   }
 
@@ -722,7 +757,9 @@ class HouseholdServiceController {
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -740,9 +777,7 @@ class HouseholdServiceController {
                 Text(
                   'Enter the invitation code provided by the household owner:',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                  ),
+                  style: TextStyle(color: Colors.grey[700]),
                 ),
                 SizedBox(height: 20),
                 TextField(
@@ -773,7 +808,10 @@ class HouseholdServiceController {
                     ElevatedButton(
                       onPressed: () {
                         if (codeController.text.isNotEmpty) {
-                          joinHousehold(context, codeController.text.toUpperCase());
+                          joinHousehold(
+                            context,
+                            codeController.text.toUpperCase(),
+                          );
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -795,7 +833,7 @@ class HouseholdServiceController {
   // Sync user role between main household and user collection
   Future<void> syncUserRole(String householdId) async {
     if (currentUser == null) return;
-    
+
     try {
       // Get role from main household collection
       final householdMemberDoc = await _firestore
@@ -804,19 +842,17 @@ class HouseholdServiceController {
           .collection('members')
           .doc(currentUser!.uid)
           .get();
-      
+
       if (householdMemberDoc.exists) {
         final role = householdMemberDoc.data()?['userRole'] ?? 'member';
-        
+
         // Update user's personal collection
         await _firestore
             .collection('users')
             .doc(currentUser!.uid)
             .collection('households')
             .doc(householdId)
-            .update({
-              'userRole': role,
-            });
+            .update({'userRole': role});
       }
     } catch (e) {
       debugPrint('Error syncing user role: $e');
@@ -826,14 +862,14 @@ class HouseholdServiceController {
   // Repair role inconsistencies
   Future<void> repairRoleInconsistencies() async {
     if (currentUser == null) return;
-    
+
     try {
       final userHouseholds = await _firestore
           .collection('users')
           .doc(currentUser!.uid)
           .collection('households')
           .get();
-      
+
       for (var householdDoc in userHouseholds.docs) {
         final householdId = householdDoc.id;
         await syncUserRole(householdId);
@@ -861,7 +897,9 @@ class HouseholdServiceController {
           .get();
 
       // Get recent activities count (last 7 days)
-      final weekAgo = Timestamp.fromDate(DateTime.now().subtract(Duration(days: 7)));
+      final weekAgo = Timestamp.fromDate(
+        DateTime.now().subtract(Duration(days: 7)),
+      );
       final activitiesSnapshot = await _firestore
           .collection('households')
           .doc(householdId)
@@ -874,9 +912,15 @@ class HouseholdServiceController {
         'inventoryCount': inventorySnapshot.docs.length,
         'recentActivities': activitiesSnapshot.docs.length,
         'roles': {
-          'creator': membersSnapshot.docs.where((doc) => doc['userRole'] == 'creator').length,
-          'editor': membersSnapshot.docs.where((doc) => doc['userRole'] == 'editor').length,
-          'member': membersSnapshot.docs.where((doc) => doc['userRole'] == 'member').length,
+          'creator': membersSnapshot.docs
+              .where((doc) => doc['userRole'] == 'creator')
+              .length,
+          'editor': membersSnapshot.docs
+              .where((doc) => doc['userRole'] == 'editor')
+              .length,
+          'member': membersSnapshot.docs
+              .where((doc) => doc['userRole'] == 'member')
+              .length,
         },
       };
     } catch (e) {

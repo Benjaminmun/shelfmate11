@@ -9,23 +9,25 @@ class InventoryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final DashboardService _dashboardService = DashboardService();
-  
+
   bool _isReadOnly = false;
-  
+
   static Future<void> enableOfflineSync() async {
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
   }
-  
+
   void setReadOnly(bool readOnly) {
     _isReadOnly = readOnly;
   }
-  
+
   void _checkReadOnly() {
     if (_isReadOnly) {
-      throw Exception('Inventory service is in read-only mode. Modification operations are not allowed.');
+      throw Exception(
+        'Inventory service is in read-only mode. Modification operations are not allowed.',
+      );
     }
   }
 
@@ -39,33 +41,35 @@ class InventoryService {
     if (user == null) {
       return {'userName': 'Unknown', 'fullName': 'Unknown User'};
     }
-    
+
     try {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         final data = userDoc.data();
-        final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
-        final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
-        
-        return {
-          'userName': userName,
-          'fullName': fullName,
-        };
+        final userName =
+            data?['userName'] as String? ??
+            user.displayName ??
+            user.email?.split('@').first ??
+            'Unknown';
+        final fullName =
+            data?['fullName'] as String? ??
+            data?['displayName'] as String? ??
+            userName;
+
+        return {'userName': userName, 'fullName': fullName};
       }
     } catch (e) {
       print('Error fetching user info: $e');
     }
-    
+
     // Fallback to Firebase Auth display name
-    final fallbackName = user.displayName ?? user.email?.split('@').first ?? 'Unknown';
-    return {
-      'userName': fallbackName,
-      'fullName': fallbackName,
-    };
+    final fallbackName =
+        user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+    return {'userName': fallbackName, 'fullName': fallbackName};
   }
 
   // ========== AUDIT LOGGING METHODS ==========
-  
+
   Future<void> _logInventoryChange(
     String householdId,
     String itemId,
@@ -84,9 +88,11 @@ class InventoryService {
     // Fetch item details for the audit log
     String itemName = 'Unknown Item';
     String itemImageUrl = '';
-    
+
     try {
-      final itemDoc = await _getInventoryCollection(householdId).doc(itemId).get();
+      final itemDoc = await _getInventoryCollection(
+        householdId,
+      ).doc(itemId).get();
       if (itemDoc.exists) {
         final itemData = itemDoc.data() as Map<String, dynamic>?;
         itemName = itemData?['name'] ?? 'Unknown Item';
@@ -122,7 +128,7 @@ class InventoryService {
   }
 
   // ========== PRODUCTS COLLECTION (GLOBAL) ==========
-  
+
   Future<bool> doesProductExist(String barcode) async {
     try {
       final doc = await _firestore.collection('products').doc(barcode).get();
@@ -146,9 +152,12 @@ class InventoryService {
     }
   }
 
-  Future<void> addProductToGlobal(String barcode, Map<String, dynamic> productData) async {
+  Future<void> addProductToGlobal(
+    String barcode,
+    Map<String, dynamic> productData,
+  ) async {
     _checkReadOnly();
-    
+
     try {
       await _firestore.collection('products').doc(barcode).set({
         ...productData,
@@ -164,9 +173,12 @@ class InventoryService {
   }
 
   // NEW: Method to update local image path for a product
-  Future<void> updateProductLocalImage(String barcode, String localImagePath) async {
+  Future<void> updateProductLocalImage(
+    String barcode,
+    String localImagePath,
+  ) async {
     _checkReadOnly();
-    
+
     try {
       await _firestore.collection('products').doc(barcode).update({
         'localImagePath': localImagePath,
@@ -180,7 +192,9 @@ class InventoryService {
   }
 
   // NEW: Method to get products with local images
-  Future<List<Map<String, dynamic>>> getProductsWithLocalImages(String householdId) async {
+  Future<List<Map<String, dynamic>>> getProductsWithLocalImages(
+    String householdId,
+  ) async {
     try {
       final snapshot = await _firestore
           .collection('products')
@@ -189,10 +203,7 @@ class InventoryService {
 
       return snapshot.docs.map((doc) {
         final data = doc.data();
-        return {
-          'id': doc.id,
-          ...data,
-        };
+        return {'id': doc.id, ...data};
       }).toList();
     } catch (e) {
       print('Error getting products with local images: $e');
@@ -201,7 +212,7 @@ class InventoryService {
   }
 
   // ========== HOUSEHOLD INVENTORY COLLECTION ==========
-  
+
   CollectionReference _getInventoryCollection(String householdId) {
     if (householdId.isEmpty) {
       throw Exception('Household ID cannot be empty');
@@ -214,20 +225,20 @@ class InventoryService {
 
   Future<String> addItem(String householdId, InventoryItem item) async {
     _checkReadOnly();
-    
+
     if (householdId.isEmpty) {
       throw Exception('Household ID cannot be empty');
     }
-    
+
     final userInfo = await _getUserDisplayInfo();
     final addedByUserName = userInfo['userName']!;
     final addedByFullName = userInfo['fullName']!;
-    
+
     final Map<String, dynamic> itemData = item.toMap();
     itemData['addedByUserName'] = addedByUserName;
     itemData['addedByFullName'] = addedByFullName; // Store full name
     itemData['addedByUserId'] = _getUserId();
-    
+
     // If item has a barcode, ensure it exists in global products
     if (item.barcode != null && item.barcode!.isNotEmpty) {
       final productExists = await doesProductExist(item.barcode!);
@@ -238,17 +249,19 @@ class InventoryService {
           'brand': item.supplier ?? '',
           'description': item.description,
           'imageUrl': item.imageUrl,
-          'localImagePath': item.localImagePath ?? '', // Include local image path
+          'localImagePath':
+              item.localImagePath ?? '', // Include local image path
         });
-      } else if (item.localImagePath != null && item.localImagePath!.isNotEmpty) {
+      } else if (item.localImagePath != null &&
+          item.localImagePath!.isNotEmpty) {
         // Update existing product with local image path
         await updateProductLocalImage(item.barcode!, item.localImagePath!);
       }
     }
-    
+
     var collection = _getInventoryCollection(householdId);
     var docRef = await collection.add(itemData);
-    
+
     // Log the addition to activities
     await _dashboardService.logActivity(
       householdId,
@@ -258,7 +271,7 @@ class InventoryService {
       userName: addedByUserName,
       fullName: addedByFullName, // Include full name
     );
-    
+
     // Log the addition to audit logs
     await _logInventoryChange(
       householdId,
@@ -269,18 +282,18 @@ class InventoryService {
       addedByUserName,
       addedByFullName, // Include full name
     );
-    
+
     return docRef.id;
   }
 
   Future<String> addItemWithErrorHandling(
-    String householdId, 
+    String householdId,
     InventoryItem item,
     BuildContext context,
   ) async {
     try {
       final id = await addItem(householdId, item);
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -289,11 +302,11 @@ class InventoryService {
           ),
         );
       }
-      
+
       return id;
     } catch (e) {
       print('Error adding item: $e');
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -308,7 +321,7 @@ class InventoryService {
 
   Future<void> updateItem(String householdId, InventoryItem item) async {
     _checkReadOnly();
-    
+
     if (householdId.isEmpty || item.id == null || item.id!.isEmpty) {
       throw Exception('Invalid parameters for update');
     }
@@ -316,9 +329,10 @@ class InventoryService {
     // Fetch existing item before updating
     var docRef = _getInventoryCollection(householdId).doc(item.id);
     final existingItem = await docRef.get();
-    
+
     if (existingItem.exists) {
-      final Map<String, dynamic> existingData = existingItem.data() as Map<String, dynamic>;
+      final Map<String, dynamic> existingData =
+          existingItem.data() as Map<String, dynamic>;
 
       // Get user display info for audit logging
       final userInfo = await _getUserDisplayInfo();
@@ -333,8 +347,10 @@ class InventoryService {
       updateData['updatedAt'] = FieldValue.serverTimestamp();
 
       // If item has a barcode and local image, update the global product
-      if (item.barcode != null && item.barcode!.isNotEmpty && 
-          item.localImagePath != null && item.localImagePath!.isNotEmpty) {
+      if (item.barcode != null &&
+          item.barcode!.isNotEmpty &&
+          item.localImagePath != null &&
+          item.localImagePath!.isNotEmpty) {
         await updateProductLocalImage(item.barcode!, item.localImagePath!);
       }
 
@@ -350,15 +366,17 @@ class InventoryService {
 
       // If there are any changes, log them to audit logs
       for (var field in updateData.keys) {
-        if (field != 'updatedByUserId' && field != 'updatedByUserName' && 
-            field != 'updatedByFullName' && field != 'updatedAt' && 
+        if (field != 'updatedByUserId' &&
+            field != 'updatedByUserName' &&
+            field != 'updatedByFullName' &&
+            field != 'updatedAt' &&
             existingData[field] != updateData[field]) {
           await _logInventoryChange(
             householdId,
             item.id!,
             field,
             existingData[field], // old value
-            updateData[field],    // new value
+            updateData[field], // new value
             updatedByUserName,
             updatedByFullName, // Include full name
           );
@@ -371,13 +389,13 @@ class InventoryService {
   }
 
   Future<void> updateItemWithErrorHandling(
-    String householdId, 
+    String householdId,
     InventoryItem item,
     BuildContext context,
   ) async {
     try {
       await updateItem(householdId, item);
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -388,7 +406,7 @@ class InventoryService {
       }
     } catch (e) {
       print('Error updating item: $e');
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -403,15 +421,17 @@ class InventoryService {
 
   Future<void> deleteItem(String householdId, String itemId) async {
     _checkReadOnly();
-    
+
     if (householdId.isEmpty || itemId.isEmpty) {
       throw Exception('Household ID or Item ID cannot be empty');
     }
-    
+
     // Fetch item details before deletion for logging
     String itemName = 'Unknown Item';
     try {
-      final itemDoc = await _getInventoryCollection(householdId).doc(itemId).get();
+      final itemDoc = await _getInventoryCollection(
+        householdId,
+      ).doc(itemId).get();
       if (itemDoc.exists) {
         final itemData = itemDoc.data() as Map<String, dynamic>?;
         itemName = itemData?['name'] ?? 'Unknown Item';
@@ -419,12 +439,12 @@ class InventoryService {
     } catch (e) {
       print('Error fetching item details for deletion log: $e');
     }
-    
+
     // Get user display info
     final userInfo = await _getUserDisplayInfo();
     final updatedByUserName = userInfo['userName']!;
     final updatedByFullName = userInfo['fullName']!;
-    
+
     // Log the deletion to activities
     await _dashboardService.logActivity(
       householdId,
@@ -434,30 +454,30 @@ class InventoryService {
       userName: updatedByUserName,
       fullName: updatedByFullName, // Include full name
     );
-    
+
     // Log the deletion to audit logs
     await _logInventoryChange(
       householdId,
       itemId,
       'deleted',
       itemName, // old value - item existed
-      null,     // new value - item deleted
+      null, // new value - item deleted
       updatedByUserName,
       updatedByFullName, // Include full name
     );
-    
+
     var collection = _getInventoryCollection(householdId);
     return collection.doc(itemId).delete();
   }
 
   Future<void> deleteItemWithErrorHandling(
-    String householdId, 
+    String householdId,
     String itemId,
     BuildContext context,
   ) async {
     try {
       await deleteItem(householdId, itemId);
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -468,7 +488,7 @@ class InventoryService {
       }
     } catch (e) {
       print('Error deleting item: $e');
-      
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -482,7 +502,7 @@ class InventoryService {
   }
 
   // ========== AUDIT LOG QUERY METHODS ==========
-  
+
   Stream<QuerySnapshot> getAuditLogs(String householdId, String itemId) {
     if (householdId.isEmpty || itemId.isEmpty) {
       return Stream.error(Exception('Household ID or Item ID cannot be empty'));
@@ -522,17 +542,20 @@ class InventoryService {
   }
 
   // ========== EXISTING METHODS (UPDATED FOR FULL NAME SUPPORT) ==========
-  
-  Stream<QuerySnapshot> getItemsStream(String householdId, {
-    String sortField = 'name', 
-    bool sortAscending = true
+
+  Stream<QuerySnapshot> getItemsStream(
+    String householdId, {
+    String sortField = 'name',
+    bool sortAscending = true,
   }) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
     }
     try {
       var collection = _getInventoryCollection(householdId);
-      return collection.orderBy(sortField, descending: !sortAscending).snapshots();
+      return collection
+          .orderBy(sortField, descending: !sortAscending)
+          .snapshots();
     } catch (e) {
       return Stream.error(e);
     }
@@ -573,10 +596,10 @@ class InventoryService {
     if (householdId.isEmpty) {
       return [];
     }
-    
+
     try {
       final snapshot = await _getInventoryCollection(householdId).get();
-      
+
       final categories = snapshot.docs
           .map((doc) {
             final data = doc.data() as Map<String, dynamic>;
@@ -584,7 +607,7 @@ class InventoryService {
           })
           .toSet()
           .toList();
-      
+
       categories.sort();
       return categories;
     } catch (e) {
@@ -593,7 +616,10 @@ class InventoryService {
     }
   }
 
-  Stream<QuerySnapshot> getLowStockItemsStream(String householdId, {int threshold = 5}) {
+  Stream<QuerySnapshot> getLowStockItemsStream(
+    String householdId, {
+    int threshold = 5,
+  }) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
     }
@@ -608,9 +634,14 @@ class InventoryService {
     }
   }
 
-  Stream<QuerySnapshot> getItemsByCategoryStream(String householdId, String category) {
+  Stream<QuerySnapshot> getItemsByCategoryStream(
+    String householdId,
+    String category,
+  ) {
     if (householdId.isEmpty || category.isEmpty) {
-      return Stream.error(Exception('Household ID or Category cannot be empty'));
+      return Stream.error(
+        Exception('Household ID or Category cannot be empty'),
+      );
     }
     try {
       var collection = _getInventoryCollection(householdId);
@@ -643,10 +674,10 @@ class InventoryService {
     if (householdId.isEmpty) {
       return 0.0;
     }
-    
+
     try {
       final snapshot = await _getInventoryCollection(householdId).get();
-      
+
       double totalValue = 0.0;
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>;
@@ -654,7 +685,7 @@ class InventoryService {
         final price = (data['price'] ?? 0).toDouble();
         totalValue += quantity * price;
       }
-      
+
       return totalValue;
     } catch (e) {
       print('Error calculating total value: $e');
@@ -662,15 +693,18 @@ class InventoryService {
     }
   }
 
-  Stream<QuerySnapshot> getExpiringSoonItemsStream(String householdId, {int days = 7}) {
+  Stream<QuerySnapshot> getExpiringSoonItemsStream(
+    String householdId, {
+    int days = 7,
+  }) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
     }
-    
+
     try {
       final now = DateTime.now();
       final thresholdDate = now.add(Duration(days: days));
-      
+
       var collection = _getInventoryCollection(householdId);
       return collection
           .where('expiryDate', isGreaterThanOrEqualTo: now)
@@ -682,27 +716,31 @@ class InventoryService {
     }
   }
 
-  Future<void> updateItemQuantity(String householdId, String itemId, int newQuantity) async {
+  Future<void> updateItemQuantity(
+    String householdId,
+    String itemId,
+    int newQuantity,
+  ) async {
     _checkReadOnly();
-    
+
     if (householdId.isEmpty || itemId.isEmpty) {
       throw Exception('Household ID or Item ID cannot be empty');
     }
-    
+
     // Fetch existing item to get old quantity and name
     var docRef = _getInventoryCollection(householdId).doc(itemId);
     final existingItem = await docRef.get();
-    
+
     if (existingItem.exists) {
       final existingData = existingItem.data() as Map<String, dynamic>;
       final oldQuantity = existingData['quantity'] ?? 0;
       final itemName = existingData['name'] ?? 'Unknown Item';
-      
+
       // Get user display info
       final userInfo = await _getUserDisplayInfo();
       final updatedByUserName = userInfo['userName']!;
       final updatedByFullName = userInfo['fullName']!;
-      
+
       // Log low stock warning if applicable
       if (newQuantity < 5 && oldQuantity >= 5) {
         await _dashboardService.logActivity(
@@ -714,7 +752,7 @@ class InventoryService {
           fullName: updatedByFullName, // Include full name
         );
       }
-      
+
       var collection = _getInventoryCollection(householdId);
       final updateData = {
         'quantity': newQuantity,
@@ -723,7 +761,7 @@ class InventoryService {
         'updatedByUserName': updatedByUserName,
         'updatedByFullName': updatedByFullName, // Store full name
       };
-      
+
       // Log the quantity change to activities
       if (oldQuantity != newQuantity) {
         await _dashboardService.logActivity(
@@ -734,7 +772,7 @@ class InventoryService {
           userName: updatedByUserName,
           fullName: updatedByFullName, // Include full name
         );
-        
+
         // Log to audit logs
         await _logInventoryChange(
           householdId,
@@ -746,21 +784,22 @@ class InventoryService {
           updatedByFullName, // Include full name
         );
       }
-      
+
       return collection.doc(itemId).update(updateData);
     }
   }
 
-  Stream<QuerySnapshot> getItemsNeedingRestockStream(String householdId, {int threshold = 5}) {
+  Stream<QuerySnapshot> getItemsNeedingRestockStream(
+    String householdId, {
+    int threshold = 5,
+  }) {
     if (householdId.isEmpty) {
       return Stream.error(Exception('Household ID cannot be empty'));
     }
-    
+
     try {
       var collection = _getInventoryCollection(householdId);
-      return collection
-          .where('quantity', isLessThan: threshold)
-          .snapshots();
+      return collection.where('quantity', isLessThan: threshold).snapshots();
     } catch (e) {
       return Stream.error(e);
     }
@@ -776,11 +815,11 @@ class InventoryService {
     if (householdId.isEmpty) {
       throw Exception('Household ID cannot be empty');
     }
-    
+
     try {
-      Query query = _getInventoryCollection(householdId)
-          .orderBy(sortField, descending: !sortAscending)
-          .limit(limit);
+      Query query = _getInventoryCollection(
+        householdId,
+      ).orderBy(sortField, descending: !sortAscending).limit(limit);
 
       if (lastDocument != null) {
         query = query.startAfterDocument(lastDocument);
@@ -788,12 +827,17 @@ class InventoryService {
 
       final querySnapshot = await query.get();
       final items = querySnapshot.docs.map((doc) {
-        return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        return InventoryItem.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
       }).toList();
-      
+
       return {
         'items': items,
-        'lastDocument': querySnapshot.docs.isNotEmpty ? querySnapshot.docs.last : null,
+        'lastDocument': querySnapshot.docs.isNotEmpty
+            ? querySnapshot.docs.last
+            : null,
       };
     } catch (e) {
       print('Error getting paginated items: $e');
@@ -802,14 +846,19 @@ class InventoryService {
   }
 
   // NEW: Method to get inventory items with local images
-  Future<List<InventoryItem>> getItemsWithLocalImages(String householdId) async {
+  Future<List<InventoryItem>> getItemsWithLocalImages(
+    String householdId,
+  ) async {
     try {
-      final snapshot = await _getInventoryCollection(householdId)
-          .where('localImagePath', isNotEqualTo: '')
-          .get();
+      final snapshot = await _getInventoryCollection(
+        householdId,
+      ).where('localImagePath', isNotEqualTo: '').get();
 
       return snapshot.docs.map((doc) {
-        return InventoryItem.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        return InventoryItem.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
       }).toList();
     } catch (e) {
       print('Error getting items with local images: $e');
@@ -818,9 +867,13 @@ class InventoryService {
   }
 
   // NEW: Method to update local image path for an inventory item
-  Future<void> updateItemLocalImage(String householdId, String itemId, String localImagePath) async {
+  Future<void> updateItemLocalImage(
+    String householdId,
+    String itemId,
+    String localImagePath,
+  ) async {
     _checkReadOnly();
-    
+
     try {
       await _getInventoryCollection(householdId).doc(itemId).update({
         'localImagePath': localImagePath,

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:frontend/services/inventory_reccomendation_service.dart';
+import 'package:frontend/services/inventory_recomendation_service.dart';
 import '../../services/shopping_list_service.dart';
 import 'shopping_list_page.dart';
 
@@ -44,78 +43,71 @@ class AllRecommendationsPage extends StatefulWidget {
   _AllRecommendationsPageState createState() => _AllRecommendationsPageState();
 }
 
-class _AllRecommendationsPageState extends State<AllRecommendationsPage>
-    with SingleTickerProviderStateMixin {
+class _AllRecommendationsPageState extends State<AllRecommendationsPage> {
   final InventoryRecommendationService _recommendationService =
       InventoryRecommendationService();
   final ShoppingListService _shoppingListService = ShoppingListService();
 
-  List<Map<String, dynamic>> _smartRecommendations = [];
-  bool _isRecommendationsLoading = false;
+  List<Map<String, dynamic>> _allRecommendations = [];
+  bool _isLoading = false;
   bool _hasError = false;
-  bool _showCategoryView = false;
-  int _shoppingListCount = 0;
   Set<String> _itemsInCart = Set<String>();
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+  String _filterPriority = 'all';
+  String _filterType = 'all';
   String _searchQuery = '';
-  List<String> _selectedCategories = [];
-  List<String> _selectedPriorities = [];
-  bool _showNotificationAlert = true; // Add this flag for notification alert
+  int _shoppingListCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-    _loadSmartRecommendations();
+    _loadAllRecommendations();
+    _loadCartState();
     _loadShoppingListCount();
-    _animationController.forward();
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadSmartRecommendations() async {
+  Future<void> _loadAllRecommendations() async {
     if (widget.householdId.isEmpty) return;
 
     setState(() {
-      _isRecommendationsLoading = true;
+      _isLoading = true;
       _hasError = false;
     });
 
     try {
-      print(
-        '🔄 Loading all smart recommendations for household: ${widget.householdId}',
-      );
       final recommendations = await _recommendationService
           .getSmartRecommendations(widget.householdId);
 
-      print('✅ Loaded ${recommendations.length} recommendations');
-
       if (mounted) {
         setState(() {
-          _smartRecommendations = recommendations;
-          _isRecommendationsLoading = false;
+          _allRecommendations = recommendations;
+          _isLoading = false;
         });
       }
     } catch (e) {
-      print('❌ Error loading recommendations: $e');
       if (mounted) {
         setState(() {
-          _isRecommendationsLoading = false;
+          _isLoading = false;
           _hasError = true;
-          _smartRecommendations = [];
+          _allRecommendations = [];
         });
       }
+    }
+  }
+
+  Future<void> _loadCartState() async {
+    try {
+      final shoppingListItems = await _shoppingListService.getShoppingListItems(
+        widget.householdId,
+      );
+      if (mounted) {
+        setState(() {
+          _itemsInCart = Set<String>.from(
+            shoppingListItems.map((item) => item['id']?.toString() ?? ''),
+          );
+        });
+      }
+    } catch (e) {
+      print('Error loading cart state: $e');
     }
   }
 
@@ -130,95 +122,24 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
         });
       }
     } catch (e) {
-      print('❌ Error loading shopping list count: $e');
+      print('Error loading shopping list count: $e');
     }
-  }
-
-  Future<void> _refreshRecommendations() async {
-    setState(() {
-      _smartRecommendations = [];
-      _itemsInCart.clear();
-    });
-    await Future.wait([_loadSmartRecommendations(), _loadShoppingListCount()]);
-  }
-
-  void _toggleCategoryView() {
-    setState(() {
-      _showCategoryView = !_showCategoryView;
-    });
-  }
-
-  void _dismissNotificationAlert() {
-    setState(() {
-      _showNotificationAlert = false;
-    });
-  }
-
-  void _navigateToShoppingList() {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            ShoppingListPage(
-              householdId: widget.householdId,
-              householdName: widget.householdName,
-              primaryColor: widget.primaryColor,
-              secondaryColor: widget.secondaryColor,
-              accentColor: widget.accentColor,
-              successColor: widget.successColor,
-              warningColor: widget.warningColor,
-              errorColor: widget.errorColor,
-              backgroundColor: widget.backgroundColor,
-              surfaceColor: widget.surfaceColor,
-              textPrimary: widget.textPrimary,
-              textSecondary: widget.textSecondary,
-              textLight: widget.textLight,
-            ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOut;
-          var tween = Tween(
-            begin: begin,
-            end: end,
-          ).chain(CurveTween(curve: curve));
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
-          );
-        },
-      ),
-    ).then((_) {
-      _loadShoppingListCount();
-      _itemsInCart.clear();
-    });
   }
 
   Future<void> _toggleCartStatus(Map<String, dynamic> recommendation) async {
     final String itemId =
         recommendation['itemId'] ??
         'custom_${DateTime.now().millisecondsSinceEpoch}';
-    final String itemName = recommendation['itemName'] ?? 'Unknown Item';
-
-    print('🔄 Toggling cart status for: $itemName (ID: $itemId)');
-
     final bool isCurrentlyInCart = _itemsInCart.contains(itemId);
 
     try {
       if (isCurrentlyInCart) {
-        // Remove from cart
         await _removeFromCart(itemId);
       } else {
-        // Add to cart
         await _addToCart(recommendation);
       }
     } catch (e) {
-      print('❌ Error toggling cart status: $e');
-      _showEnhancedSnackbar(
-        message: 'Error updating cart: $e',
-        icon: Icons.error_rounded,
-        color: widget.errorColor,
-      );
+      _showErrorSnackbar('Error updating cart: $e');
     }
   }
 
@@ -227,8 +148,6 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
         recommendation['itemId'] ??
         'custom_${DateTime.now().millisecondsSinceEpoch}';
     final String itemName = recommendation['itemName'] ?? 'Unknown Item';
-
-    print('🛒 Adding to cart: $itemName (ID: $itemId)');
 
     setState(() {
       _itemsInCart.add(itemId);
@@ -242,34 +161,17 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
           );
 
       if (result['success'] == true) {
-        _showEnhancedSnackbar(
-          message: '$itemName added to cart',
-          icon: Icons.check_circle_rounded,
-          color: widget.successColor,
-        );
-        print('✅ Successfully added to cart: $itemName');
-
+        _showSuccessSnackbar('$itemName added to cart');
+        widget.onAddToShoppingList(itemName, 1, itemId);
         _loadShoppingListCount();
-
-        final quantity = 1; // Always use quantity 1
-        widget.onAddToShoppingList(itemName, quantity, itemId);
       } else {
-        _showEnhancedSnackbar(
-          message: 'Failed to add $itemName: ${result['error']}',
-          icon: Icons.error_rounded,
-          color: widget.errorColor,
-        );
+        _showErrorSnackbar('Failed to add $itemName: ${result['error']}');
         setState(() {
           _itemsInCart.remove(itemId);
         });
       }
     } catch (e) {
-      print('❌ Error adding to cart: $e');
-      _showEnhancedSnackbar(
-        message: 'Error adding $itemName to cart: $e',
-        icon: Icons.error_rounded,
-        color: widget.errorColor,
-      );
+      _showErrorSnackbar('Error adding $itemName to cart: $e');
       setState(() {
         _itemsInCart.remove(itemId);
       });
@@ -277,8 +179,6 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
   }
 
   Future<void> _removeFromCart(String itemId) async {
-    print('🗑️ Removing from cart: $itemId');
-
     try {
       final result = await _shoppingListService.removeFromShoppingList(
         widget.householdId,
@@ -289,244 +189,215 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
         setState(() {
           _itemsInCart.remove(itemId);
         });
-        _showEnhancedSnackbar(
-          message: 'Item removed from cart',
-          icon: Icons.remove_shopping_cart_rounded,
-          color: widget.accentColor,
-        );
+        _showInfoSnackbar('Item removed from cart');
         _loadShoppingListCount();
       } else {
-        _showEnhancedSnackbar(
-          message: 'Failed to remove item: ${result['error']}',
-          icon: Icons.error_rounded,
-          color: widget.errorColor,
-        );
+        _showErrorSnackbar('Failed to remove item: ${result['error']}');
       }
     } catch (e) {
-      print('❌ Error removing from cart: $e');
-      _showEnhancedSnackbar(
-        message: 'Error removing item: $e',
-        icon: Icons.error_rounded,
-        color: widget.errorColor,
-      );
+      _showErrorSnackbar('Error removing item: $e');
     }
   }
 
+  void _navigateToShoppingList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ShoppingListPage(
+          householdId: widget.householdId,
+          householdName: widget.householdName,
+          primaryColor: widget.primaryColor,
+          secondaryColor: widget.secondaryColor,
+          accentColor: widget.accentColor,
+          successColor: widget.successColor,
+          warningColor: widget.warningColor,
+          errorColor: widget.errorColor,
+          backgroundColor: widget.backgroundColor,
+          surfaceColor: widget.surfaceColor,
+          textPrimary: widget.textPrimary,
+          textSecondary: widget.textSecondary,
+          textLight: widget.textLight,
+        ),
+      ),
+    ).then((_) {
+      _loadCartState();
+      _loadShoppingListCount();
+    });
+  }
+
   List<Map<String, dynamic>> get _filteredRecommendations {
-    var filtered = _smartRecommendations;
+    List<Map<String, dynamic>> filtered = _allRecommendations;
 
-    // Search filter
+    // Apply priority filter
+    if (_filterPriority != 'all') {
+      filtered = filtered
+          .where((rec) => rec['priority'] == _filterPriority)
+          .toList();
+    }
+
+    // Apply type filter
+    if (_filterType != 'all') {
+      filtered = filtered.where((rec) {
+        final type = rec['type'] as String? ?? '';
+        return type.contains(_filterType);
+      }).toList();
+    }
+
+    // Apply search filter
     if (_searchQuery.isNotEmpty) {
-      filtered = filtered
-          .where(
-            (rec) =>
-                rec['title'].toString().toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                rec['message'].toString().toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                rec['category'].toString().toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ),
-          )
-          .toList();
-    }
+      filtered = filtered.where((rec) {
+        final itemName = rec['itemName'] as String? ?? '';
+        final title = rec['title'] as String? ?? '';
+        final message = rec['message'] as String? ?? '';
 
-    // Category filter
-    if (_selectedCategories.isNotEmpty) {
-      filtered = filtered
-          .where((rec) => _selectedCategories.contains(rec['category']))
-          .toList();
-    }
-
-    // Priority filter
-    if (_selectedPriorities.isNotEmpty) {
-      filtered = filtered
-          .where((rec) => _selectedPriorities.contains(rec['priority']))
-          .toList();
+        return itemName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            message.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
     }
 
     return filtered;
   }
 
+  Map<String, List<Map<String, dynamic>>> get _groupedRecommendations {
+    final grouped = <String, List<Map<String, dynamic>>>{};
+
+    for (final recommendation in _filteredRecommendations) {
+      final priority = recommendation['priority'] as String? ?? 'medium';
+      if (!grouped.containsKey(priority)) {
+        grouped[priority] = [];
+      }
+      grouped[priority]!.add(recommendation);
+    }
+
+    // Sort groups by priority order: high, medium, low
+    final sortedGroups = <String, List<Map<String, dynamic>>>{};
+    if (grouped.containsKey('high')) {
+      sortedGroups['high'] = grouped['high']!;
+    }
+    if (grouped.containsKey('medium')) {
+      sortedGroups['medium'] = grouped['medium']!;
+    }
+    if (grouped.containsKey('low')) {
+      sortedGroups['low'] = grouped['low']!;
+    }
+
+    return sortedGroups;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filteredRecommendations = _filteredRecommendations;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Smart Recommendations'),
-            if (filteredRecommendations.isNotEmpty)
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: Text(
-                  '${filteredRecommendations.length} items',
-                  key: ValueKey(filteredRecommendations.length),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.8),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        backgroundColor: widget.primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        shadowColor: widget.primaryColor.withOpacity(0.5),
-        actions: [
-          // Shopping cart with improved badge
-          Stack(
-            children: [
-              IconButton(
-                icon: Icon(Icons.shopping_cart_rounded),
-                onPressed: _navigateToShoppingList,
-                tooltip: 'View Shopping List',
-              ),
-              if (_shoppingListCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      _shoppingListCount > 99 ? '99+' : '$_shoppingListCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+      backgroundColor: widget.backgroundColor,
       body: Column(
         children: [
-          // Notification Alert Banner (NEW)
-          if (_showNotificationAlert && filteredRecommendations.isNotEmpty)
-            _buildNotificationAlert(),
+          // App Bar
+          _buildAppBar(),
 
-          // Search and Filter Bar
-          _buildSearchFilterBar(),
+          // Filters and Search
+          _buildFilters(),
 
-          // Stats Overview
-          if (!_isRecommendationsLoading &&
-              !_hasError &&
-              filteredRecommendations.isNotEmpty)
-            _buildEnhancedStatsOverview(),
+          // Statistics
+          if (!_isLoading && !_hasError && _allRecommendations.isNotEmpty)
+            _buildStatistics(),
 
-          // Main Content
+          // Content
           Expanded(child: _buildContent()),
         ],
       ),
     );
   }
 
-  // NEW: Notification Alert Banner
-  Widget _buildNotificationAlert() {
+  Widget _buildAppBar() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [
-            widget.warningColor.withOpacity(0.9),
-            widget.accentColor.withOpacity(0.8),
-          ],
-        ),
+        color: widget.surfaceColor,
         boxShadow: [
           BoxShadow(
-            color: widget.warningColor.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.notifications_active_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Smart Recommendations Available',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Back Button
+              Container(
+                decoration: BoxDecoration(
+                  color: widget.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Based on your inventory analysis and consumption patterns',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 12,
+                child: IconButton(
+                  icon: Icon(
+                    Icons.arrow_back_rounded,
+                    color: widget.primaryColor,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  onPressed: () => Navigator.pop(context),
                 ),
-              ],
-            ),
+              ),
+
+              const SizedBox(width: 12),
+
+              // Title
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Smart Recommendations',
+                      style: TextStyle(
+                        color: widget.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      '${_allRecommendations.length} items',
+                      style: TextStyle(color: widget.textLight, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Shopping Cart Icon
+              _ShoppingCartIcon(
+                count: _shoppingListCount,
+                onPressed: _navigateToShoppingList,
+                primaryColor: widget.primaryColor,
+              ),
+              const SizedBox(width: 8),
+
+              // Refresh Button
+              Container(
+                decoration: BoxDecoration(
+                  color: widget.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.refresh_rounded, color: widget.primaryColor),
+                  onPressed: _loadAllRecommendations,
+                  tooltip: 'Refresh recommendations',
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            icon: Icon(Icons.close_rounded, color: Colors.white, size: 18),
-            onPressed: _dismissNotificationAlert,
-            padding: EdgeInsets.zero,
-            constraints: BoxConstraints.tight(Size(32, 32)),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildSearchFilterBar() {
+  Widget _buildFilters() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: widget.surfaceColor,
         border: Border(
-          bottom: BorderSide(color: widget.primaryColor.withOpacity(0.1)),
+          bottom: BorderSide(color: widget.backgroundColor.withOpacity(0.5)),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         children: [
@@ -544,196 +415,73 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
               ],
             ),
             child: TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
               decoration: InputDecoration(
                 hintText: 'Search recommendations...',
-                hintStyle: TextStyle(color: widget.textSecondary),
-                prefixIcon: Icon(
-                  Icons.search_rounded,
-                  color: widget.textSecondary,
-                ),
+                hintStyle: TextStyle(color: widget.textLight),
+                prefixIcon: Icon(Icons.search_rounded, color: widget.textLight),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 12,
+                  vertical: 14,
                 ),
               ),
+              style: TextStyle(color: widget.textPrimary),
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Filter Chips
           Row(
             children: [
-              _buildFilterChip(
-                label: 'View',
-                icon: _showCategoryView
-                    ? Icons.list_rounded
-                    : Icons.category_rounded,
-                isSelected: false,
-                onTap: _toggleCategoryView,
-              ),
-              const SizedBox(width: 8),
-              _buildFilterChip(
-                label: 'Filter',
-                icon: Icons.filter_list_rounded,
-                isSelected:
-                    _selectedCategories.isNotEmpty ||
-                    _selectedPriorities.isNotEmpty,
-                onTap: _showFilterDialog,
-              ),
-              const Spacer(),
-              if (_selectedCategories.isNotEmpty ||
-                  _selectedPriorities.isNotEmpty ||
-                  _searchQuery.isNotEmpty)
-                TextButton(
-                  onPressed: _clearFilters,
-                  child: Text(
-                    'Clear',
-                    style: TextStyle(color: widget.primaryColor),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip({
-    required String label,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? widget.primaryColor.withOpacity(0.1)
-              : widget.backgroundColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? widget.primaryColor
-                : widget.textLight.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? widget.primaryColor : widget.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? widget.primaryColor : widget.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEnhancedStatsOverview() {
-    final filtered = _filteredRecommendations;
-    final totalItems = filtered.length;
-    final urgentItems = filtered
-        .where((rec) => rec['priority'] == 'high')
-        .length;
-    final inCartItems = filtered
-        .where((rec) => _itemsInCart.contains(rec['itemId']))
-        .length;
-    final completionPercentage = totalItems > 0
-        ? (inCartItems / totalItems) * 100
-        : 0;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            widget.primaryColor.withOpacity(0.05),
-            widget.primaryColor.withOpacity(0.02),
-          ],
-        ),
-        border: Border(
-          bottom: BorderSide(color: widget.primaryColor.withOpacity(0.1)),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Progress Bar
-          Container(
-            height: 6,
-            decoration: BoxDecoration(
-              color: widget.backgroundColor,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Stack(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 600),
-                  curve: Curves.easeOut,
-                  width:
-                      MediaQuery.of(context).size.width *
-                      (completionPercentage / 100) *
-                      0.8,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [widget.successColor, widget.primaryColor],
+              Expanded(
+                child: _buildFilterDropdown(
+                  value: _filterPriority,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text('All Priorities'),
                     ),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
+                    DropdownMenuItem(
+                      value: 'high',
+                      child: Text('High Priority'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'medium',
+                      child: Text('Medium Priority'),
+                    ),
+                    DropdownMenuItem(value: 'low', child: Text('Low Priority')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _filterPriority = value.toString();
+                    });
+                  },
                 ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Stats Row
-          Row(
-            children: [
-              _buildStatItem(
-                'Total',
-                '$totalItems',
-                Icons.auto_awesome_rounded,
-                widget.primaryColor,
               ),
-              const SizedBox(width: 16),
-              _buildStatItem(
-                'Urgent',
-                '$urgentItems',
-                Icons.warning_rounded,
-                widget.errorColor,
-              ),
-              const SizedBox(width: 16),
-              _buildStatItem(
-                'In Cart',
-                '$inCartItems',
-                Icons.shopping_cart_rounded,
-                widget.successColor,
-              ),
-              const Spacer(),
-              Text(
-                '${completionPercentage.toStringAsFixed(0)}% Complete',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: widget.textSecondary,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildFilterDropdown(
+                  value: _filterType,
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Types')),
+                    DropdownMenuItem(
+                      value: 'stock',
+                      child: Text('Stock Alerts'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'expiry',
+                      child: Text('Expiry Alerts'),
+                    ),
+                    DropdownMenuItem(value: 'usage', child: Text('Usage Tips')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _filterType = value.toString();
+                    });
+                  },
                 ),
               ),
             ],
@@ -743,119 +491,122 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
     );
   }
 
-  Widget _buildStatItem(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 16, color: color),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: widget.textPrimary,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(fontSize: 11, color: widget.textSecondary),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildContent() {
-    if (_isRecommendationsLoading) {
-      return _buildLoadingState();
-    } else if (_hasError) {
-      return _buildErrorState();
-    } else if (_filteredRecommendations.isEmpty) {
-      return _buildEmptyState();
-    } else {
-      return _buildRecommendationsContent();
-    }
-  }
-
-  Widget _buildLoadingState() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 6,
-      itemBuilder: (context, index) => _buildShimmerRecommendation(),
-    );
-  }
-
-  Widget _buildShimmerRecommendation() {
+  Widget _buildFilterDropdown({
+    required String value,
+    required List<DropdownMenuItem<String>> items,
+    required Function(String?) onChanged,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: widget.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
+        color: widget.backgroundColor,
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            blurRadius: 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Shimmer.fromColors(
-        baseColor: widget.surfaceColor.withOpacity(0.5),
-        highlightColor: widget.surfaceColor.withOpacity(0.8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        height: 16,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 8),
-                      Container(width: 150, height: 12, color: Colors.white),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(width: double.infinity, height: 12, color: Colors.white),
-            const SizedBox(height: 8),
-            Container(width: 250, height: 12, color: Colors.white),
-          ],
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          items: items,
+          onChanged: onChanged,
+          isExpanded: true,
+          style: TextStyle(color: widget.textPrimary, fontSize: 14),
+          icon: Icon(Icons.arrow_drop_down_rounded, color: widget.textLight),
+          dropdownColor: widget.surfaceColor,
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatistics() {
+    final highCount = _allRecommendations
+        .where((rec) => rec['priority'] == 'high')
+        .length;
+    final mediumCount = _allRecommendations
+        .where((rec) => rec['priority'] == 'medium')
+        .length;
+    final inCartCount = _itemsInCart.length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: widget.surfaceColor,
+        border: Border(
+          bottom: BorderSide(color: widget.backgroundColor.withOpacity(0.5)),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _StatItem(
+            count: _allRecommendations.length,
+            label: 'Total',
+            color: widget.primaryColor,
+          ),
+          _StatItem(count: highCount, label: 'High', color: widget.errorColor),
+          _StatItem(
+            count: mediumCount,
+            label: 'Medium',
+            color: widget.warningColor,
+          ),
+          _StatItem(
+            count: inCartCount,
+            label: 'In Cart',
+            color: widget.successColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return _buildLoadingState();
+    } else if (_hasError) {
+      return _buildErrorState();
+    } else if (_allRecommendations.isEmpty) {
+      return _buildEmptyState();
+    } else if (_filteredRecommendations.isEmpty) {
+      return _buildNoResultsState();
+    } else {
+      return _buildRecommendationsList();
+    }
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 60,
+            height: 60,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(widget.primaryColor),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Analyzing Your Inventory...',
+            style: TextStyle(
+              color: widget.textSecondary,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Checking stock levels, expiry dates, and consumption patterns',
+            style: TextStyle(color: widget.textLight, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -863,59 +614,58 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
   Widget _buildErrorState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 120,
-              height: 120,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: widget.errorColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.error_outline_rounded,
-                size: 60,
+                size: 40,
                 color: widget.errorColor,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Text(
               'Unable to Load Recommendations',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
                 color: widget.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
               ),
-              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
-              'Please check your internet connection and try again.',
+              'There was an error analyzing your inventory data. '
+              'Please check your connection and try again.',
               style: TextStyle(
-                fontSize: 16,
                 color: widget.textSecondary,
+                fontSize: 14,
                 height: 1.4,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _refreshRecommendations,
-              icon: Icon(Icons.refresh_rounded),
-              label: Text('Try Again'),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _loadAllRecommendations,
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.primaryColor,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+                  horizontal: 32,
+                  vertical: 14,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
+              child: const Text('Try Again'),
             ),
           ],
         ),
@@ -924,1115 +674,721 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage>
   }
 
   Widget _buildEmptyState() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: widget.successColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 60,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: widget.successColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 48,
+                color: widget.successColor,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Everything Looks Great! 🎉',
+              style: TextStyle(
+                color: widget.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Your inventory is well managed with optimal stock levels '
+              'and no urgent issues detected.',
+              style: TextStyle(
+                color: widget.textSecondary,
+                fontSize: 15,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _StatusChip(
+                  label: 'Stock Levels',
+                  value: 'Optimal',
                   color: widget.successColor,
+                  icon: Icons.inventory_2_rounded,
                 ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Inventory Well Managed!',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: widget.textPrimary,
+                _StatusChip(
+                  label: 'Expiry Dates',
+                  value: 'No Issues',
+                  color: widget.successColor,
+                  icon: Icons.calendar_today_rounded,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _searchQuery.isNotEmpty ||
-                        _selectedCategories.isNotEmpty ||
-                        _selectedPriorities.isNotEmpty
-                    ? 'No recommendations match your current filters.'
-                    : 'Your smart inventory system is working perfectly. No recommendations needed at this time.',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: widget.textSecondary,
-                  height: 1.4,
+                _StatusChip(
+                  label: 'Consumption',
+                  value: 'Stable',
+                  color: widget.successColor,
+                  icon: Icons.timeline_rounded,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              if (_searchQuery.isNotEmpty ||
-                  _selectedCategories.isNotEmpty ||
-                  _selectedPriorities.isNotEmpty)
-                ElevatedButton(
-                  onPressed: _clearFilters,
-                  child: Text('Clear Filters'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.primaryColor,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildRecommendationsContent() {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: _showCategoryView ? _buildCategoryView() : _buildListView(),
-    );
-  }
-
-  Widget _buildListView() {
-    final filtered = _filteredRecommendations;
-    final urgentItems = filtered
-        .where((rec) => rec['priority'] == 'high')
-        .toList();
-    final otherItems = filtered
-        .where((rec) => rec['priority'] != 'high')
-        .toList();
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        if (urgentItems.isNotEmpty) ...[
-          _buildSectionHeader(
-            'Urgent Items',
-            urgentItems.length,
-            widget.errorColor,
-          ),
-          const SizedBox(height: 16),
-          ...urgentItems
-              .asMap()
-              .entries
-              .map(
-                (entry) => _AdvancedRecommendationItem(
-                  recommendation: entry.value,
-                  index: entry.key,
-                  onTap: () => _handleRecommendationAction(entry.value),
-                  onToggleCart: () => _toggleCartStatus(entry.value),
-                  isInCart: _itemsInCart.contains(entry.value['itemId']),
-                  textPrimary: widget.textPrimary,
-                  textSecondary: widget.textSecondary,
-                  textLight: widget.textLight,
-                  backgroundColor: widget.backgroundColor,
-                  surfaceColor: widget.surfaceColor,
-                  successColor: widget.successColor,
-                  primaryColor: widget.primaryColor,
-                  warningColor: widget.warningColor,
-                  errorColor: widget.errorColor,
-                ),
-              )
-              .toList(),
-          const SizedBox(height: 24),
-        ],
-
-        if (otherItems.isNotEmpty) ...[
-          _buildSectionHeader(
-            'Other Recommendations',
-            otherItems.length,
-            widget.primaryColor,
-          ),
-          const SizedBox(height: 16),
-          ...otherItems
-              .asMap()
-              .entries
-              .map(
-                (entry) => _AdvancedRecommendationItem(
-                  recommendation: entry.value,
-                  index: entry.key,
-                  onTap: () => _handleRecommendationAction(entry.value),
-                  onToggleCart: () => _toggleCartStatus(entry.value),
-                  isInCart: _itemsInCart.contains(entry.value['itemId']),
-                  textPrimary: widget.textPrimary,
-                  textSecondary: widget.textSecondary,
-                  textLight: widget.textLight,
-                  backgroundColor: widget.backgroundColor,
-                  surfaceColor: widget.surfaceColor,
-                  successColor: widget.successColor,
-                  primaryColor: widget.primaryColor,
-                  warningColor: widget.warningColor,
-                  errorColor: widget.errorColor,
-                ),
-              )
-              .toList(),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildCategoryView() {
-    final Map<String, List<Map<String, dynamic>>> categorized = {};
-
-    for (final recommendation in _filteredRecommendations) {
-      final category = recommendation['category'] as String? ?? 'general';
-      categorized.putIfAbsent(category, () => []).add(recommendation);
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        ...categorized.entries
-            .map(
-              (entry) => _AdvancedCategorySection(
-                category: entry.key,
-                recommendations: entry.value,
-                onTap: _handleRecommendationAction,
-                onToggleCart: _toggleCartStatus,
-                itemsInCart: _itemsInCart,
-                textPrimary: widget.textPrimary,
-                textSecondary: widget.textSecondary,
-                textLight: widget.textLight,
-                surfaceColor: widget.surfaceColor,
-                primaryColor: widget.primaryColor,
-                errorColor: widget.errorColor,
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: widget.primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-            )
-            .toList(),
-      ],
+              child: Icon(
+                Icons.search_off_rounded,
+                size: 40,
+                color: widget.primaryColor,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'No Matching Recommendations',
+              style: TextStyle(
+                color: widget.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Try adjusting your filters or search terms to find what you\'re looking for.',
+              style: TextStyle(
+                color: widget.textSecondary,
+                fontSize: 14,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _filterPriority = 'all';
+                  _filterType = 'all';
+                  _searchQuery = '';
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.primaryColor.withOpacity(0.1),
+                foregroundColor: widget.primaryColor,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Clear Filters'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildSectionHeader(String title, int count, Color color) {
-    return Row(
+  Widget _buildRecommendationsList() {
+    final grouped = _groupedRecommendations;
+
+    return RefreshIndicator(
+      backgroundColor: widget.surfaceColor,
+      color: widget.primaryColor,
+      onRefresh: () async {
+        await _loadAllRecommendations();
+        await _loadCartState();
+        await _loadShoppingListCount();
+      },
+      child: ListView(
+        children: [
+          const SizedBox(height: 8),
+          for (final entry in grouped.entries)
+            _RecommendationGroup(
+              priority: entry.key,
+              recommendations: entry.value,
+              itemsInCart: _itemsInCart,
+              onToggleCart: _toggleCartStatus,
+              onViewDetails: _showRecommendationDetails,
+              primaryColor: widget.primaryColor,
+              successColor: widget.successColor,
+              errorColor: widget.errorColor,
+              warningColor: widget.warningColor,
+              surfaceColor: widget.surfaceColor,
+              backgroundColor: widget.backgroundColor,
+              textPrimary: widget.textPrimary,
+              textSecondary: widget.textSecondary,
+              textLight: widget.textLight,
+            ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  void _showRecommendationDetails(Map<String, dynamic> recommendation) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: widget.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      isScrollControlled: true,
+      builder: (context) => _RecommendationDetailsSheet(
+        recommendation: recommendation,
+        isInCart: _itemsInCart.contains(recommendation['itemId']),
+        onToggleCart: () => _toggleCartStatus(recommendation),
+        onViewItem: () {
+          Navigator.pop(context);
+          widget.onNavigateToItem(recommendation['itemId']);
+        },
+        primaryColor: widget.primaryColor,
+        successColor: widget.successColor,
+        errorColor: widget.errorColor,
+        surfaceColor: widget.surfaceColor,
+        textPrimary: widget.textPrimary,
+        textSecondary: widget.textSecondary,
+        textLight: widget.textLight,
+      ),
+    );
+  }
+
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: widget.successColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: widget.errorColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showInfoSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.info_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: widget.accentColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+}
+
+// Reusable Widget Components
+
+class _ShoppingCartIcon extends StatelessWidget {
+  final int count;
+  final VoidCallback onPressed;
+  final Color primaryColor;
+
+  const _ShoppingCartIcon({
+    Key? key,
+    required this.count,
+    required this.onPressed,
+    required this.primaryColor,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
       children: [
         Container(
-          width: 4,
-          height: 24,
           decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.3),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: primaryColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+            icon: Icon(Icons.shopping_cart_rounded, size: 22),
+            onPressed: onPressed,
+            tooltip: 'View Shopping List ($count items)',
+            color: primaryColor,
           ),
         ),
-        const SizedBox(width: 12),
+        if (count > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: primaryColor,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final int count;
+  final String label;
+  final Color color;
+
+  const _StatItem({
+    Key? key,
+    required this.count,
+    required this.label,
+    required this.color,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
         Text(
-          title,
+          '$count',
           style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
             color: color,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: color.withOpacity(0.8),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
-          child: Text(
-            '$count items',
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+
+  const _StatusChip({
+    Key? key,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            value,
             style: TextStyle(
               fontSize: 12,
               color: color,
               fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  void _showFilterDialog() {
-    final categories = _smartRecommendations
-        .map((rec) => rec['category'] as String)
-        .toSet()
-        .toList();
-    final priorities = _smartRecommendations
-        .map((rec) => rec['priority'] as String)
-        .toSet()
-        .toList();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: widget.surfaceColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: widget.textLight.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Filter Recommendations',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: widget.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              Text(
-                'Categories',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: widget.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: categories.map((category) {
-                  final isSelected = _selectedCategories.contains(category);
-                  return FilterChip(
-                    label: Text(_formatCategoryName(category)),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setModalState(() {
-                        if (selected) {
-                          _selectedCategories.add(category);
-                        } else {
-                          _selectedCategories.remove(category);
-                        }
-                      });
-                    },
-                    backgroundColor: widget.backgroundColor,
-                    selectedColor: widget.primaryColor.withOpacity(0.1),
-                    labelStyle: TextStyle(
-                      color: isSelected
-                          ? widget.primaryColor
-                          : widget.textSecondary,
-                    ),
-                    checkmarkColor: widget.primaryColor,
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 20),
-
-              Text(
-                'Priority',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: widget.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: priorities.map((priority) {
-                  final isSelected = _selectedPriorities.contains(priority);
-                  return FilterChip(
-                    label: Text(priority.toUpperCase()),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setModalState(() {
-                        if (selected) {
-                          _selectedPriorities.add(priority);
-                        } else {
-                          _selectedPriorities.remove(priority);
-                        }
-                      });
-                    },
-                    backgroundColor: widget.backgroundColor,
-                    selectedColor: _getPriorityColor(priority).withOpacity(0.1),
-                    labelStyle: TextStyle(
-                      color: isSelected
-                          ? _getPriorityColor(priority)
-                          : widget.textSecondary,
-                    ),
-                    checkmarkColor: _getPriorityColor(priority),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 30),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _clearFilters,
-                      child: Text('Clear All'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: widget.textSecondary,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        setState(() {});
-                      },
-                      child: Text('Apply Filters'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: widget.primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _clearFilters() {
-    setState(() {
-      _searchQuery = '';
-      _selectedCategories.clear();
-      _selectedPriorities.clear();
-    });
-  }
-
-  String _formatCategoryName(String category) {
-    return category.replaceAll('_', ' ').toUpperCase();
-  }
-
-  Color _getPriorityColor(String priority) {
-    switch (priority) {
-      case 'high':
-        return widget.errorColor;
-      case 'medium':
-        return widget.warningColor;
-      default:
-        return widget.primaryColor;
-    }
-  }
-
-  void _handleRecommendationAction(Map<String, dynamic> recommendation) {
-    final String? itemId = recommendation['itemId'] as String?;
-
-    if (itemId == null) {
-      _showEnhancedSnackbar(
-        message: 'Invalid recommendation: missing item ID',
-        icon: Icons.error_rounded,
-        color: widget.errorColor,
-      );
-      return;
-    }
-
-    // Show detailed dialog for the recommendation
-    _showRecommendationDetails(recommendation);
-  }
-
-  void _showRecommendationDetails(Map<String, dynamic> recommendation) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: widget.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Color(
-                            recommendation['color'] as int,
-                          ).withOpacity(0.8),
-                          Color(
-                            recommendation['color'] as int,
-                          ).withOpacity(0.6),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      recommendation['icon'] as IconData,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      recommendation['title'],
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: widget.textPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                recommendation['message'],
-                style: TextStyle(
-                  fontSize: 14,
-                  color: widget.textSecondary,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: Icon(
-                    _itemsInCart.contains(recommendation['itemId'])
-                        ? Icons.remove_shopping_cart_rounded
-                        : Icons.add_shopping_cart_rounded,
-                  ),
-                  label: Text(
-                    _itemsInCart.contains(recommendation['itemId'])
-                        ? 'Remove from Cart'
-                        : 'Add to Cart',
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _toggleCartStatus(recommendation);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _itemsInCart.contains(recommendation['itemId'])
-                        ? widget.errorColor
-                        : widget.primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showEnhancedSnackbar({
-    required String message,
-    required IconData icon,
-    required Color color,
-    Duration duration = const Duration(seconds: 3),
-  }) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 20, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: widget.textPrimary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: duration,
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ],
       ),
     );
   }
 }
 
-// ... rest of the code remains the same (_AdvancedCategorySection, _AdvancedRecommendationItem, _DetailChip)
-
-class _AdvancedCategorySection extends StatefulWidget {
-  final String category;
+class _RecommendationGroup extends StatelessWidget {
+  final String priority;
   final List<Map<String, dynamic>> recommendations;
-  final Function(Map<String, dynamic>) onTap;
-  final Function(Map<String, dynamic>) onToggleCart;
   final Set<String> itemsInCart;
+  final Function(Map<String, dynamic>) onToggleCart;
+  final Function(Map<String, dynamic>) onViewDetails;
+  final Color primaryColor;
+  final Color successColor;
+  final Color errorColor;
+  final Color warningColor;
+  final Color surfaceColor;
+  final Color backgroundColor;
   final Color textPrimary;
   final Color textSecondary;
   final Color textLight;
-  final Color surfaceColor;
-  final Color primaryColor;
-  final Color errorColor;
 
-  const _AdvancedCategorySection({
+  const _RecommendationGroup({
     Key? key,
-    required this.category,
+    required this.priority,
     required this.recommendations,
-    required this.onTap,
-    required this.onToggleCart,
     required this.itemsInCart,
+    required this.onToggleCart,
+    required this.onViewDetails,
+    required this.primaryColor,
+    required this.successColor,
+    required this.errorColor,
+    required this.warningColor,
+    required this.surfaceColor,
+    required this.backgroundColor,
     required this.textPrimary,
     required this.textSecondary,
     required this.textLight,
-    required this.surfaceColor,
-    required this.primaryColor,
-    required this.errorColor,
   }) : super(key: key);
 
-  @override
-  State<_AdvancedCategorySection> createState() =>
-      _AdvancedCategorySectionState();
-}
-
-class _AdvancedCategorySectionState extends State<_AdvancedCategorySection>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _heightAnimation;
-  bool _isExpanded = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _heightAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-    _animationController.forward();
+  Color get _priorityColor {
+    switch (priority) {
+      case 'high':
+        return errorColor;
+      case 'medium':
+        return warningColor;
+      case 'low':
+        return successColor;
+      default:
+        return primaryColor;
+    }
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
+  String get _priorityLabel {
+    switch (priority) {
+      case 'high':
+        return 'High Priority';
+      case 'medium':
+        return 'Medium Priority';
+      case 'low':
+        return 'Low Priority';
+      default:
+        return 'Recommendations';
+    }
   }
 
-  void _toggleExpansion() {
-    setState(() {
-      _isExpanded = !_isExpanded;
-      if (_isExpanded) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
-    });
+  IconData get _priorityIcon {
+    switch (priority) {
+      case 'high':
+        return Icons.warning_rounded;
+      case 'medium':
+        return Icons.info_rounded;
+      case 'low':
+        return Icons.lightbulb_rounded;
+      default:
+        return Icons.auto_awesome_rounded;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final urgentCount = widget.recommendations
-        .where((r) => r['priority'] == 'high')
-        .length;
-    final inCartCount = widget.recommendations
-        .where((r) => widget.itemsInCart.contains(r['itemId']))
-        .length;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.only(bottom: 16),
+    return Container(
+      margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: widget.surfaceColor,
-        borderRadius: BorderRadius.circular(20),
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
+            blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Enhanced category header
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _toggleExpansion,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            _getCategoryColor(widget.category).withOpacity(0.8),
-                            _getCategoryColor(widget.category).withOpacity(0.6),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _getCategoryColor(
-                              widget.category,
-                            ).withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        _getCategoryIcon(widget.category),
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _formatCategoryName(widget.category),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: widget.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${widget.recommendations.length} items • $inCartCount in cart',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: widget.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Status badges
-                    Row(
-                      children: [
-                        if (urgentCount > 0)
-                          Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.warning_rounded,
-                                  size: 12,
-                                  color: Colors.red,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '$urgentCount',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        AnimatedRotation(
-                          duration: const Duration(milliseconds: 300),
-                          turns: _isExpanded ? 0.5 : 0,
-                          child: Icon(
-                            Icons.expand_more_rounded,
-                            color: widget.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+          // Group Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _priorityColor.withOpacity(0.1),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
               ),
+            ),
+            child: Row(
+              children: [
+                Icon(_priorityIcon, color: _priorityColor, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  _priorityLabel,
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _priorityColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${recommendations.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
-          // Animated expandable content
-          SizeTransition(
-            sizeFactor: _heightAnimation,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                children: widget.recommendations
-                    .asMap()
-                    .entries
-                    .map(
-                      (entry) => _AdvancedRecommendationItem(
-                        recommendation: entry.value,
-                        index: entry.key,
-                        onTap: () => widget.onTap(entry.value),
-                        onToggleCart: () => widget.onToggleCart(entry.value),
-                        isInCart: widget.itemsInCart.contains(
-                          entry.value['itemId'],
-                        ),
-                        textPrimary: widget.textPrimary,
-                        textSecondary: widget.textSecondary,
-                        textLight: widget.textLight,
-                        backgroundColor: widget.surfaceColor,
-                        surfaceColor: widget.surfaceColor,
-                        successColor: Colors.green,
-                        primaryColor: widget.primaryColor,
-                        warningColor: Colors.orange,
-                        errorColor: widget.errorColor,
-                      ),
-                    )
-                    .toList(),
-              ),
+          // Recommendations List
+          ...recommendations.map(
+            (recommendation) => _RecommendationItem(
+              recommendation: recommendation,
+              isInCart: itemsInCart.contains(recommendation['itemId']),
+              onToggleCart: () => onToggleCart(recommendation),
+              onViewDetails: () => onViewDetails(recommendation),
+              priorityColor: _priorityColor,
+              surfaceColor: surfaceColor,
+              backgroundColor: backgroundColor,
+              textPrimary: textPrimary,
+              textSecondary: textSecondary,
+              textLight: textLight,
+              successColor: successColor,
             ),
           ),
         ],
       ),
     );
   }
-
-  String _formatCategoryName(String category) {
-    return category.replaceAll('_', ' ').toUpperCase();
-  }
-
-  IconData _getCategoryIcon(String category) {
-    const icons = {
-      'perishables': Icons.agriculture_rounded,
-      'household_supplies': Icons.home_rounded,
-      'personal_care': Icons.person_rounded,
-      'medicines': Icons.medical_services_rounded,
-      'beverages': Icons.local_drink_rounded,
-      'snacks': Icons.emoji_food_beverage_rounded,
-      'cleaning_supplies': Icons.cleaning_services_rounded,
-      'frozen_foods': Icons.ac_unit_rounded,
-      'pantry': Icons.kitchen_rounded,
-    };
-    return icons[category] ?? Icons.inventory_2_rounded;
-  }
-
-  Color _getCategoryColor(String category) {
-    const colors = {
-      'perishables': Colors.red,
-      'household_supplies': Colors.blue,
-      'personal_care': Colors.purple,
-      'medicines': Colors.orange,
-      'beverages': Colors.teal,
-      'snacks': Colors.amber,
-      'cleaning_supplies': Colors.grey,
-      'frozen_foods': Colors.cyan,
-      'pantry': Colors.brown,
-    };
-    return colors[category] ?? Colors.grey;
-  }
 }
 
-class _AdvancedRecommendationItem extends StatelessWidget {
+class _RecommendationItem extends StatelessWidget {
   final Map<String, dynamic> recommendation;
-  final int index;
-  final VoidCallback onTap;
-  final VoidCallback onToggleCart;
   final bool isInCart;
+  final VoidCallback onToggleCart;
+  final VoidCallback onViewDetails;
+  final Color priorityColor;
+  final Color surfaceColor;
+  final Color backgroundColor;
   final Color textPrimary;
   final Color textSecondary;
   final Color textLight;
-  final Color backgroundColor;
-  final Color surfaceColor;
   final Color successColor;
-  final Color primaryColor;
-  final Color warningColor;
-  final Color errorColor;
 
-  const _AdvancedRecommendationItem({
+  const _RecommendationItem({
     Key? key,
     required this.recommendation,
-    required this.index,
-    required this.onTap,
-    required this.onToggleCart,
     required this.isInCart,
+    required this.onToggleCart,
+    required this.onViewDetails,
+    required this.priorityColor,
+    required this.surfaceColor,
+    required this.backgroundColor,
     required this.textPrimary,
     required this.textSecondary,
     required this.textLight,
-    required this.backgroundColor,
-    required this.surfaceColor,
     required this.successColor,
-    required this.primaryColor,
-    required this.warningColor,
-    required this.errorColor,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final Color color = Color(recommendation['color'] as int);
     final IconData icon = recommendation['icon'] as IconData;
-    final String priority = recommendation['priority'] as String;
-    final String category = recommendation['category'] as String? ?? 'general';
-    final bool isCategoryAdjusted = recommendation['categoryAdjusted'] == true;
-    final double? preferenceScore =
-        recommendation['preferenceScore'] as double?;
-    final bool isAIGenerated = recommendation['aiGenerated'] == true;
-    final int? daysUntilExpiry = recommendation['daysUntilExpiry'] as int?;
-    final double? consumptionRate =
-        recommendation['consumptionRate'] as double?;
-    final int? currentStock = recommendation['currentStock'] as int?;
-    final bool isUrgent = priority == 'high';
 
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 300 + (index * 100)),
-      margin: const EdgeInsets.only(bottom: 12),
+    return Container(
       decoration: BoxDecoration(
-        color: isInCart ? successColor.withOpacity(0.08) : surfaceColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isUrgent ? 0.15 : 0.08),
-            blurRadius: isUrgent ? 16 : 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: isInCart
-            ? Border.all(color: successColor.withOpacity(0.3), width: 2)
-            : (isUrgent
-                  ? Border.all(color: errorColor.withOpacity(0.3), width: 2)
-                  : null),
+        border: Border(
+          bottom: BorderSide(color: backgroundColor.withOpacity(0.5)),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onToggleCart, // Toggle cart status on tap
-          borderRadius: BorderRadius.circular(20),
-          splashColor: isInCart
-              ? successColor.withOpacity(0.1)
-              : color.withOpacity(0.1),
-          highlightColor: isInCart
-              ? successColor.withOpacity(0.05)
-              : color.withOpacity(0.05),
+          onTap: onViewDetails,
+          borderRadius: BorderRadius.circular(0),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Priority indicator with improved design
+                // Icon
                 Container(
-                  width: 4,
-                  height: 60,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: isInCart
-                        ? successColor
-                        : _getPriorityColor(priority),
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            (isInCart
-                                    ? successColor
-                                    : _getPriorityColor(priority))
-                                .withOpacity(0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-
-                // Icon with better styling
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isInCart
-                          ? [
-                              successColor.withOpacity(0.8),
-                              successColor.withOpacity(0.6),
-                            ]
-                          : [color.withOpacity(0.8), color.withOpacity(0.6)],
-                    ),
+                        ? successColor.withOpacity(0.2)
+                        : color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isInCart ? successColor : color).withOpacity(
-                          0.3,
-                        ),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    border: Border.all(
+                      color: isInCart
+                          ? successColor.withOpacity(0.4)
+                          : color.withOpacity(0.3),
+                    ),
                   ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Icon(
-                          isInCart ? Icons.check_circle_rounded : icon,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      if (isCategoryAdjusted)
-                        Positioned(
-                          right: -4,
-                          top: -4,
-                          child: Container(
-                            width: 18,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.auto_awesome_rounded,
-                              size: 9,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      if (isAIGenerated)
-                        Positioned(
-                          left: -4,
-                          bottom: -4,
-                          child: Container(
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              color: Colors.purple,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.psychology_rounded,
-                              size: 8,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                    ],
+                  child: Icon(
+                    isInCart ? Icons.check_circle_rounded : icon,
+                    color: isInCart ? successColor : color,
+                    size: 22,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
 
+                // Content
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header with priority badge
+                      Text(
+                        recommendation['title'],
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        recommendation['message'],
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: textSecondary,
+                          height: 1.3,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  recommendation['title'],
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    color: textPrimary,
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  recommendation['message'],
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: textSecondary,
-                                    height: 1.3,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 8),
-                                if (isInCart)
-                                  Text(
-                                    '✓ In shopping list • Tap to remove',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: successColor,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  )
-                                else
-                                  Text(
-                                    'Tap to add to shopping list',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: textLight,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                              ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: priorityColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              (recommendation['type'] as String? ?? '')
+                                  .replaceAll('_', ' ')
+                                  .toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: priorityColor,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          _buildPriorityBadge(priority),
+                          const Spacer(),
+                          Text(
+                            isInCart ? 'In Cart' : 'Add to Cart',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isInCart ? successColor : textLight,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Enhanced detail chips (without quantity)
-                      _buildEnhancedDetailInfo(
-                        currentStock: currentStock,
-                        daysUntilExpiry: daysUntilExpiry,
-                        consumptionRate: consumptionRate,
-                        preferenceScore: preferenceScore,
-                        category: category,
                       ),
                     ],
                   ),
+                ),
+
+                // Action Button
+                const SizedBox(width: 12),
+                IconButton(
+                  icon: Icon(
+                    isInCart
+                        ? Icons.remove_shopping_cart_rounded
+                        : Icons.add_shopping_cart_rounded,
+                    color: isInCart ? successColor : priorityColor,
+                    size: 20,
+                  ),
+                  onPressed: onToggleCart,
+                  tooltip: isInCart ? 'Remove from cart' : 'Add to cart',
                 ),
               ],
             ),
@@ -2041,144 +1397,260 @@ class _AdvancedRecommendationItem extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildPriorityBadge(String priority) {
-    final Color bgColor = _getPriorityColor(priority);
-    final IconData icon = priority == 'high'
-        ? Icons.warning_rounded
-        : Icons.info_rounded;
+class _RecommendationDetailsSheet extends StatelessWidget {
+  final Map<String, dynamic> recommendation;
+  final bool isInCart;
+  final VoidCallback onToggleCart;
+  final VoidCallback onViewItem;
+  final Color primaryColor;
+  final Color successColor;
+  final Color errorColor;
+  final Color surfaceColor;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textLight;
+
+  const _RecommendationDetailsSheet({
+    Key? key,
+    required this.recommendation,
+    required this.isInCart,
+    required this.onToggleCart,
+    required this.onViewItem,
+    required this.primaryColor,
+    required this.successColor,
+    required this.errorColor,
+    required this.surfaceColor,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textLight,
+  }) : super(key: key);
+
+  Color get _priorityColor {
+    final priority = recommendation['priority'] as String? ?? 'medium';
+    switch (priority) {
+      case 'high':
+        return errorColor;
+      case 'medium':
+        return primaryColor;
+      case 'low':
+        return successColor;
+      default:
+        return primaryColor;
+    }
+  }
+
+  IconData get _typeIcon {
+    final type = recommendation['type'] as String? ?? '';
+    if (type.contains('stock')) return Icons.inventory_2_rounded;
+    if (type.contains('expiry')) return Icons.calendar_today_rounded;
+    if (type.contains('usage')) return Icons.timeline_rounded;
+    return Icons.auto_awesome_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final analysis =
+        recommendation['analysisSummary'] as Map<String, dynamic>? ?? {};
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: bgColor.withOpacity(0.3)),
+      padding: const EdgeInsets.all(24),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 12, color: bgColor),
-          const SizedBox(width: 4),
-          Text(
-            priority.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: bgColor,
-              letterSpacing: 0.5,
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _priorityColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(_typeIcon, color: _priorityColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recommendation['title'],
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      recommendation['itemName'] ?? 'Unknown Item',
+                      style: TextStyle(fontSize: 14, color: textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Priority Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _priorityColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
+            child: Text(
+              (recommendation['priority'] as String? ?? 'medium').toUpperCase(),
+              style: TextStyle(
+                color: _priorityColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Message
+          Text(
+            recommendation['message'],
+            style: TextStyle(fontSize: 16, color: textPrimary, height: 1.4),
+          ),
+          const SizedBox(height: 24),
+
+          // Analysis Details
+          if (analysis.isNotEmpty) _buildAnalysisDetails(analysis),
+
+          const Spacer(),
+
+          // Actions
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onViewItem,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryColor,
+                    side: BorderSide(color: primaryColor),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('View Item Details'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onToggleCart,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isInCart ? errorColor : successColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(isInCart ? 'Remove from Cart' : 'Add to Cart'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Color _getPriorityColor(String priority) {
-    switch (priority) {
-      case 'high':
-        return errorColor;
-      case 'medium':
-        return warningColor;
-      default:
-        return primaryColor;
-    }
-  }
-
-  Widget _buildEnhancedDetailInfo({
-    required int? currentStock,
-    required int? daysUntilExpiry,
-    required double? consumptionRate,
-    required double? preferenceScore,
-    required String category,
-  }) {
-    final List<Widget> details = [];
-
-    if (currentStock != null) {
-      details.add(
-        _DetailChip(
-          icon: Icons.inventory_2_rounded,
-          text: 'Stock: $currentStock',
-          color: textLight,
+  Widget _buildAnalysisDetails(Map<String, dynamic> analysis) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Analysis Details',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+          ),
         ),
-      );
-    }
-
-    if (daysUntilExpiry != null) {
-      details.add(
-        _DetailChip(
-          icon: Icons.calendar_today_rounded,
-          text: 'Expires: ${daysUntilExpiry}d',
-          color: daysUntilExpiry <= 3 ? errorColor : warningColor,
-        ),
-      );
-    }
-
-    if (consumptionRate != null) {
-      details.add(
-        _DetailChip(
-          icon: Icons.timeline_rounded,
-          text: '${consumptionRate.toStringAsFixed(1)}/day',
-          color: successColor,
-        ),
-      );
-    }
-
-    if (preferenceScore != null && preferenceScore > 0.3) {
-      details.add(
-        _DetailChip(
-          icon: Icons.favorite_rounded,
-          text: 'Household Favorite',
-          color: Colors.red,
-        ),
-      );
-    }
-
-    if (category != 'general') {
-      details.add(
-        _DetailChip(
-          icon: Icons.category_rounded,
-          text: category.replaceAll('_', ' '),
-          color: Colors.purple,
-        ),
-      );
-    }
-
-    return Wrap(spacing: 8, runSpacing: 6, children: details);
+        const SizedBox(height: 12),
+        if (analysis['daysOfSupply'] != null)
+          _AnalysisRow(
+            label: 'Days of Supply',
+            value:
+                '${(analysis['daysOfSupply'] as double).toStringAsFixed(1)} days',
+            color: textPrimary,
+          ),
+        if (analysis['consumptionRate'] != null)
+          _AnalysisRow(
+            label: 'Usage Rate',
+            value:
+                '${(analysis['consumptionRate'] as double).toStringAsFixed(2)}/day',
+            color: textPrimary,
+          ),
+        if (analysis['stockoutProbability'] != null)
+          _AnalysisRow(
+            label: 'Stockout Risk',
+            value:
+                '${((analysis['stockoutProbability'] as double) * 100).toStringAsFixed(0)}%',
+            color: textPrimary,
+          ),
+        if (analysis['expiryRisk'] != null)
+          _AnalysisRow(
+            label: 'Expiry Risk',
+            value:
+                '${((analysis['expiryRisk'] as double) * 100).toStringAsFixed(0)}%',
+            color: textPrimary,
+          ),
+        if (analysis['minStockLevel'] != null)
+          _AnalysisRow(
+            label: 'Minimum Stock',
+            value: '${analysis['minStockLevel']} units',
+            color: textPrimary,
+          ),
+      ],
+    );
   }
 }
 
-class _DetailChip extends StatelessWidget {
-  final IconData icon;
-  final String text;
+class _AnalysisRow extends StatelessWidget {
+  final String label;
+  final String value;
   final Color color;
 
-  const _DetailChip({
+  const _AnalysisRow({
     Key? key,
-    required this.icon,
-    required this.text,
+    required this.label,
+    required this.value,
     required this.color,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: color.withOpacity(0.7), fontSize: 14),
+            ),
+          ),
           Text(
-            text,
+            value,
             style: TextStyle(
-              fontSize: 11,
               color: color,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
           ),

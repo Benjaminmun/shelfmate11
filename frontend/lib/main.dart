@@ -8,6 +8,7 @@ import 'pages/Household/household_service.dart';
 import 'pages/signup_page.dart';
 import 'pages/user_info_page.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -118,7 +119,11 @@ class AuthWrapper extends StatelessWidget {
             SizedBox(height: 20),
             Text(
               'Please verify your email',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2D5D7C)),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2D5D7C),
+              ),
             ),
             SizedBox(height: 10),
             Text(
@@ -140,14 +145,20 @@ class AuthWrapper extends StatelessWidget {
                 backgroundColor: Color(0xFF2D5D7C),
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              child: Text('Resend Verification Email', style: TextStyle(color: Colors.white)),
+              child: Text(
+                'Resend Verification Email',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
             SizedBox(height: 16),
             TextButton(
               onPressed: () {
                 FirebaseAuth.instance.signOut();
               },
-              child: Text('Sign Out', style: TextStyle(color: Color(0xFF2D5D7C))),
+              child: Text(
+                'Sign Out',
+                style: TextStyle(color: Color(0xFF2D5D7C)),
+              ),
             ),
           ],
         ),
@@ -157,16 +168,19 @@ class AuthWrapper extends StatelessWidget {
 
   Future<bool> _isUserInfoCompleted(String userId) async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
       // Check if the document exists and has the required fields
       if (doc.exists) {
         final data = doc.data();
         // Check if the user has completed their profile (has phone and address)
-        return data != null && 
-               data['phone'] != null && 
-               data['phone'].toString().isNotEmpty &&
-               data['address'] != null &&
-               data['address'].toString().isNotEmpty;
+        return data != null &&
+            data['phone'] != null &&
+            data['phone'].toString().isNotEmpty &&
+            data['address'] != null &&
+            data['address'].toString().isNotEmpty;
       }
       return false;
     } catch (e) {

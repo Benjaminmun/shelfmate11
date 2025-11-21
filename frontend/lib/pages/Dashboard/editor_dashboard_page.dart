@@ -11,37 +11,47 @@ import '../profile_page.dart';
 import 'dart:async';
 import 'activity_pages.dart';
 import 'recommendation_section.dart';
+import 'shopping_list_page.dart'; // Add this import
+import '../../services/shopping_list_service.dart'; // Add this import
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // Enhanced method to get user info including fullName and role
   Future<Map<String, dynamic>> _getUserDisplayInfo() async {
     final user = _auth.currentUser;
     if (user == null) {
-      return {'userName': 'Unknown', 'fullName': 'Unknown User', 'role': 'editor'};
+      return {
+        'userName': 'Unknown',
+        'fullName': 'Unknown User',
+        'role': 'editor',
+      };
     }
-    
+
     try {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         final data = userDoc.data();
-        final userName = data?['userName'] as String? ?? user.displayName ?? user.email?.split('@').first ?? 'Unknown';
-        final fullName = data?['fullName'] as String? ?? data?['displayName'] as String? ?? userName;
-        final role = data?['role'] as String? ?? 'editor'; 
-        return {
-          'userName': userName,
-          'fullName': fullName,
-          'role': role,
-        };
+        final userName =
+            data?['userName'] as String? ??
+            user.displayName ??
+            user.email?.split('@').first ??
+            'Unknown';
+        final fullName =
+            data?['fullName'] as String? ??
+            data?['displayName'] as String? ??
+            userName;
+        final role = data?['role'] as String? ?? 'editor';
+        return {'userName': userName, 'fullName': fullName, 'role': role};
       }
     } catch (e) {
       print('Error fetching user info: $e');
     }
-    
+
     // Fallback to Firebase Auth display name
-    final fallbackName = user.displayName ?? user.email?.split('@').first ?? 'Unknown';
+    final fallbackName =
+        user.displayName ?? user.email?.split('@').first ?? 'Unknown';
     return {
       'userName': fallbackName,
       'fullName': fallbackName,
@@ -54,7 +64,7 @@ class DashboardService {
     if (householdId.isEmpty) {
       return Stream.value({});
     }
-    
+
     return _firestore
         .collection('households')
         .doc(householdId)
@@ -64,7 +74,7 @@ class DashboardService {
           return await _calculateStats(snapshot);
         });
   }
-  
+
   Future<Map<String, dynamic>> _calculateStats(QuerySnapshot snapshot) async {
     int totalItems = snapshot.docs.length;
     int lowStockItems = 0;
@@ -77,7 +87,7 @@ class DashboardService {
       final data = doc.data() as Map<String, dynamic>;
       final quantity = (data['quantity'] ?? 0).toInt();
       final price = (data['price'] ?? 0).toDouble();
-      
+
       if (quantity < 5) lowStockItems++;
       if (data['category'] != null) categories.add(data['category'] as String);
       totalValue += quantity * price;
@@ -107,11 +117,13 @@ class DashboardService {
     };
   }
 
-  Stream<List<Map<String, dynamic>>> getRecentActivitiesStream(String householdId) {
+  Stream<List<Map<String, dynamic>>> getRecentActivitiesStream(
+    String householdId,
+  ) {
     if (householdId.isEmpty) {
       return Stream.value([]);
     }
-    
+
     try {
       return _firestore
           .collection('households')
@@ -125,11 +137,13 @@ class DashboardService {
               final data = doc.data();
               return {
                 'id': doc.id,
-                'message': data['description'] ?? data['message'] ?? 'No message',
+                'message':
+                    data['description'] ?? data['message'] ?? 'No message',
                 'timestamp': data['timestamp'] ?? Timestamp.now(),
                 'type': data['type'] ?? 'info',
                 'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
+                'fullName':
+                    data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
                 'oldValue': data['oldValue'],
@@ -212,7 +226,10 @@ class DashboardService {
           .collection('households')
           .doc(householdId)
           .collection('activities')
-          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .where(
+            'timestamp',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+          )
           .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .orderBy('timestamp', descending: true)
           .snapshots()
@@ -221,11 +238,13 @@ class DashboardService {
               final data = doc.data();
               return {
                 'id': doc.id,
-                'message': data['description'] ?? data['message'] ?? 'No message',
+                'message':
+                    data['description'] ?? data['message'] ?? 'No message',
                 'timestamp': data['timestamp'] ?? Timestamp.now(),
                 'type': data['type'] ?? 'info',
                 'userName': data['userName'] ?? 'Unknown User',
-                'fullName': data['fullName'] ?? data['userName'] ?? 'Unknown User',
+                'fullName':
+                    data['fullName'] ?? data['userName'] ?? 'Unknown User',
                 'userId': data['userId'] ?? '',
                 'itemName': data['itemName'],
                 'oldValue': data['oldValue'],
@@ -241,8 +260,8 @@ class DashboardService {
 
   // Enhanced logActivity method with fullName support
   Future<void> logActivity(
-    String householdId, 
-    String description, 
+    String householdId,
+    String description,
     String type, {
     String? userId,
     String? userName,
@@ -252,18 +271,18 @@ class DashboardService {
     dynamic newValue,
   }) async {
     if (householdId.isEmpty) return;
-    
+
     try {
       // If fullName is not provided, try to get user info
       String? finalUserName = userName;
       String? finalFullName = fullName;
-      
+
       if (fullName == null) {
         final userInfo = await _getUserDisplayInfo();
         finalUserName = userInfo['userName'];
         finalFullName = userInfo['fullName'];
       }
-      
+
       await _firestore
           .collection('households')
           .doc(householdId)
@@ -273,7 +292,8 @@ class DashboardService {
             'type': type,
             'timestamp': FieldValue.serverTimestamp(),
             'userId': userId ?? _auth.currentUser?.uid,
-            'userName': finalUserName ?? _auth.currentUser?.displayName ?? 'User',
+            'userName':
+                finalUserName ?? _auth.currentUser?.displayName ?? 'User',
             'fullName': finalFullName ?? finalUserName ?? 'User',
             'itemName': itemName,
             'oldValue': oldValue,
@@ -288,9 +308,11 @@ class DashboardService {
   // Get detailed activity statistics
   Future<Map<String, dynamic>> getActivityStats(String householdId) async {
     if (householdId.isEmpty) return {};
-    
+
     try {
-      final weekAgo = Timestamp.fromDate(DateTime.now().subtract(Duration(days: 7)));
+      final weekAgo = Timestamp.fromDate(
+        DateTime.now().subtract(Duration(days: 7)),
+      );
       final snapshot = await _firestore
           .collection('households')
           .doc(householdId)
@@ -304,10 +326,18 @@ class DashboardService {
       for (var doc in snapshot.docs) {
         final type = doc['type'] ?? 'info';
         switch (type) {
-          case 'add': adds++; break;
-          case 'update': updates++; break;
-          case 'delete': deletes++; break;
-          case 'warning': warnings++; break;
+          case 'add':
+            adds++;
+            break;
+          case 'update':
+            updates++;
+            break;
+          case 'delete':
+            deletes++;
+            break;
+          case 'warning':
+            warnings++;
+            break;
         }
       }
 
@@ -329,17 +359,19 @@ class DashboardService {
 class PulseIndicator extends StatefulWidget {
   final Color color;
   final double size;
-  
-  const PulseIndicator({Key? key, required this.color, this.size = 8}) : super(key: key);
-  
+
+  const PulseIndicator({Key? key, required this.color, this.size = 8})
+    : super(key: key);
+
   @override
   _PulseIndicatorState createState() => _PulseIndicatorState();
 }
 
-class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProviderStateMixin {
+class _PulseIndicatorState extends State<PulseIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
-  
+
   @override
   void initState() {
     super.initState();
@@ -347,16 +379,16 @@ class _PulseIndicatorState extends State<PulseIndicator> with SingleTickerProvid
       duration: Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
   }
-  
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -399,7 +431,8 @@ class AnimatedStatNumber extends StatefulWidget {
   _AnimatedStatNumberState createState() => _AnimatedStatNumberState();
 }
 
-class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTickerProviderStateMixin {
+class _AnimatedStatNumberState extends State<AnimatedStatNumber>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<int> _animation;
   late int _previousValue;
@@ -408,15 +441,13 @@ class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTick
   void initState() {
     super.initState();
     _previousValue = widget.value;
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    
-    _animation = IntTween(begin: _previousValue, end: widget.value).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    
+    _controller = AnimationController(duration: widget.duration, vsync: this);
+
+    _animation = IntTween(
+      begin: _previousValue,
+      end: widget.value,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
     _controller.forward();
   }
 
@@ -426,9 +457,10 @@ class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTick
     if (oldWidget.value != widget.value) {
       _previousValue = _animation.value;
       _controller.reset();
-      _animation = IntTween(begin: _previousValue, end: widget.value).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-      );
+      _animation = IntTween(
+        begin: _previousValue,
+        end: widget.value,
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
       _controller.forward();
     }
   }
@@ -444,10 +476,7 @@ class _AnimatedStatNumberState extends State<AnimatedStatNumber> with SingleTick
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        return Text(
-          _animation.value.toString(),
-          style: widget.style,
-        );
+        return Text(_animation.value.toString(), style: widget.style);
       },
     );
   }
@@ -480,7 +509,7 @@ class EnhancedActivityItem extends StatelessWidget {
     final color = _getActivityColor(activity['type']);
     final timestamp = activity['timestamp'] as Timestamp;
     final hasDetails = activity['itemName'] != null;
-    
+
     // Get user display info with fullName support
     final String userName = activity['userName'] ?? 'Unknown User';
     final String fullName = activity['fullName'] ?? userName;
@@ -503,10 +532,7 @@ class EnhancedActivityItem extends StatelessWidget {
                 offset: Offset(0, 2),
               ),
             ],
-            border: Border.all(
-              color: color.withOpacity(0.1),
-              width: 1,
-            ),
+            border: Border.all(color: color.withOpacity(0.1), width: 1),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,21 +545,15 @@ class EnhancedActivityItem extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      color.withOpacity(0.2),
-                      color.withOpacity(0.1),
-                    ],
+                    colors: [color.withOpacity(0.2), color.withOpacity(0.1)],
                   ),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: color.withOpacity(0.3),
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: color.withOpacity(0.3), width: 1.5),
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
               SizedBox(width: 12),
-              
+
               // Activity Content
               Expanded(
                 child: Column(
@@ -551,13 +571,16 @@ class EnhancedActivityItem extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    
+
                     SizedBox(height: 8),
-                    
+
                     // Item Name (if available)
                     if (hasDetails && activity['itemName'] != null)
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -571,10 +594,10 @@ class EnhancedActivityItem extends StatelessWidget {
                           ),
                         ),
                       ),
-                    
+
                     if (hasDetails && activity['itemName'] != null)
                       SizedBox(height: 8),
-                    
+
                     // User and Time Info with fullName support - FIXED ROW
                     Row(
                       children: [
@@ -605,28 +628,34 @@ class EnhancedActivityItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Spacer(),
-                        
+
                         // Time - FIXED TIME FORMAT
-                        Icon(Icons.access_time_rounded, size: 12, color: textLight),
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 12,
+                          color: textLight,
+                        ),
                         SizedBox(width: 4),
                         Text(
                           _formatActivityTime(timestamp),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: textLight,
-                          ),
+                          style: TextStyle(fontSize: 12, color: textLight),
                         ),
                       ],
                     ),
-                    
+
                     // Value Changes (for updates)
-                    if (activity['type'] == 'update' && activity['oldValue'] != null && activity['newValue'] != null)
+                    if (activity['type'] == 'update' &&
+                        activity['oldValue'] != null &&
+                        activity['newValue'] != null)
                       Padding(
                         padding: EdgeInsets.only(top: 8),
                         child: Row(
                           children: [
                             Container(
-                              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.red.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
@@ -641,10 +670,17 @@ class EnhancedActivityItem extends StatelessWidget {
                               ),
                             ),
                             SizedBox(width: 8),
-                            Icon(Icons.arrow_forward_rounded, size: 12, color: textLight),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 12,
+                              color: textLight,
+                            ),
                             SizedBox(width: 8),
                             Container(
-                              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.green.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
@@ -664,17 +700,14 @@ class EnhancedActivityItem extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Activity Type Badge
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: color.withOpacity(0.2),
-                    width: 1,
-                  ),
+                  border: Border.all(color: color.withOpacity(0.2), width: 1),
                 ),
                 child: Text(
                   _getActivityTypeLabel(activity['type']),
@@ -699,7 +732,7 @@ class EnhancedActivityItem extends StatelessWidget {
     final now = _toGmtPlus8(DateTime.now());
     final today = DateTime(now.year, now.month, now.day);
     final activityDate = DateTime(date.year, date.month, date.day);
-    
+
     if (activityDate == today) {
       // Today: show time only
       final hour = date.hour.toString().padLeft(2, '0');
@@ -720,34 +753,52 @@ class EnhancedActivityItem extends StatelessWidget {
 
   String _getActivityTypeLabel(String type) {
     switch (type) {
-      case 'add': return 'ADDED';
-      case 'update': return 'UPDATED';
-      case 'delete': return 'DELETED';
-      case 'warning': return 'ALERT';
-      case 'info': return 'INFO';
-      default: return 'ACTIVITY';
+      case 'add':
+        return 'ADDED';
+      case 'update':
+        return 'UPDATED';
+      case 'delete':
+        return 'DELETED';
+      case 'warning':
+        return 'ALERT';
+      case 'info':
+        return 'INFO';
+      default:
+        return 'ACTIVITY';
     }
   }
 
   IconData _getActivityIcon(String type) {
     switch (type) {
-      case 'add': return Icons.add_circle_rounded;
-      case 'update': return Icons.edit_rounded;
-      case 'delete': return Icons.delete_rounded;
-      case 'warning': return Icons.warning_amber_rounded;
-      case 'info': return Icons.info_rounded;
-      default: return Icons.info_rounded;
+      case 'add':
+        return Icons.add_circle_rounded;
+      case 'update':
+        return Icons.edit_rounded;
+      case 'delete':
+        return Icons.delete_rounded;
+      case 'warning':
+        return Icons.warning_amber_rounded;
+      case 'info':
+        return Icons.info_rounded;
+      default:
+        return Icons.info_rounded;
     }
   }
 
   Color _getActivityColor(String type) {
     switch (type) {
-      case 'add': return Color(0xFF10B981);
-      case 'update': return Color(0xFF3B82F6);
-      case 'delete': return Color(0xFFEF4444);
-      case 'warning': return Color(0xFFF59E0B);
-      case 'info': return Color(0xFF6B7280);
-      default: return Color(0xFF6B7280);
+      case 'add':
+        return Color(0xFF10B981);
+      case 'update':
+        return Color(0xFF3B82F6);
+      case 'delete':
+        return Color(0xFFEF4444);
+      case 'warning':
+        return Color(0xFFF59E0B);
+      case 'info':
+        return Color(0xFF6B7280);
+      default:
+        return Color(0xFF6B7280);
     }
   }
 }
@@ -759,8 +810,9 @@ class ActivityShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: List.generate(3, (index) => 
-        Container(
+      children: List.generate(
+        3,
+        (index) => Container(
           margin: EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           padding: EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -852,16 +904,24 @@ class EditorDashboardPage extends StatefulWidget {
   final String? selectedHousehold;
   final String? householdId;
 
-  const EditorDashboardPage({Key? key, this.selectedHousehold, this.householdId}) : super(key: key);
+  const EditorDashboardPage({
+    Key? key,
+    this.selectedHousehold,
+    this.householdId,
+  }) : super(key: key);
 
   @override
   _EditorDashboardPageState createState() => _EditorDashboardPageState();
 }
 
-class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTickerProviderStateMixin {
-  final HouseholdServiceController _householdServiceController = HouseholdServiceController();
+class _EditorDashboardPageState extends State<EditorDashboardPage>
+    with SingleTickerProviderStateMixin {
+  final HouseholdServiceController _householdServiceController =
+      HouseholdServiceController();
   final DashboardService _dashboardService = DashboardService();
-  
+  final ShoppingListService _shoppingListService =
+      ShoppingListService(); // Add this
+
   // Enhanced color scheme with gradients
   final Color _primaryColor = Color(0xFF2D5D7C);
   final Color _secondaryColor = Color(0xFF6270B1);
@@ -889,7 +949,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
   bool _hasError = false;
   String _errorMessage = '';
   bool _isActivitiesLoading = true;
-  
+
   int _currentIndex = 0;
   int _selectedActivityTab = 0;
 
@@ -897,18 +957,21 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
   StreamSubscription<Map<String, dynamic>>? _statsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _activitiesSubscription;
 
+  // Shopping list count
+  int _shoppingListCount = 0;
+
   // Enhanced animations
   late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
-    
+
     _initializeAnimations();
     _currentHousehold = widget.selectedHousehold ?? '';
     _currentHouseholdId = widget.householdId ?? '';
     _loadUserData();
-    
+
     if (_currentHouseholdId.isNotEmpty) {
       _setupRealTimeSubscriptions();
     } else {
@@ -930,7 +993,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     if (user != null) {
       // Use the enhanced method to get user info
       final userInfo = await _dashboardService._getUserDisplayInfo();
-      
+
       setState(() {
         _userFullName = userInfo['fullName'] ?? 'User';
         _userRole = userInfo['role'] ?? 'editor'; // Get user role
@@ -952,35 +1015,41 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     // Set up real-time stats subscription
     _statsSubscription = _dashboardService
         .getInventoryStatsStream(_currentHouseholdId)
-        .listen((stats) {
-      if (mounted) {
-        setState(() {
-          _totalItems = stats['totalItems'] ?? 0;
-          _lowStockItems = stats['lowStockItems'] ?? 0;
-          _expiringSoonItems = stats['expiringSoonItems'] ?? 0;
-          _totalValue = stats['totalValue'] ?? 0.0;
-          _isLoading = false;
-          _hasError = false;
-        });
-        
-        // Load activity stats
-        _loadActivityStats();
-        
-        // Start animations when first data arrives
-        if (!_animationController.isAnimating) {
-          _animationController.forward();
-        }
-      }
-    }, onError: (error) {
-      print('Stats stream error: $error');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-          _errorMessage = 'Failed to load real-time data: ${error.toString()}';
-        });
-      }
-    });
+        .listen(
+          (stats) {
+            if (mounted) {
+              setState(() {
+                _totalItems = stats['totalItems'] ?? 0;
+                _lowStockItems = stats['lowStockItems'] ?? 0;
+                _expiringSoonItems = stats['expiringSoonItems'] ?? 0;
+                _totalValue = stats['totalValue'] ?? 0.0;
+                _isLoading = false;
+                _hasError = false;
+              });
+
+              // Load activity stats
+              _loadActivityStats();
+              // Load shopping list count
+              _loadShoppingListCount();
+
+              // Start animations when first data arrives
+              if (!_animationController.isAnimating) {
+                _animationController.forward();
+              }
+            }
+          },
+          onError: (error) {
+            print('Stats stream error: $error');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _hasError = true;
+                _errorMessage =
+                    'Failed to load real-time data: ${error.toString()}';
+              });
+            }
+          },
+        );
 
     // Set up activities subscription
     _setupActivitiesSubscription();
@@ -989,17 +1058,20 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
   void _setupActivitiesSubscription() {
     _activitiesSubscription = _dashboardService
         .getRecentActivitiesStream(_currentHouseholdId)
-        .listen((activities) {
-      if (mounted) {
-        setState(() {
-          _recentActivities = activities;
-          _isActivitiesLoading = false;
-        });
-      }
-    }, onError: (error) {
-      print('Activities stream error: $error');
-      _createSampleActivities();
-    });
+        .listen(
+          (activities) {
+            if (mounted) {
+              setState(() {
+                _recentActivities = activities;
+                _isActivitiesLoading = false;
+              });
+            }
+          },
+          onError: (error) {
+            print('Activities stream error: $error');
+            _createSampleActivities();
+          },
+        );
   }
 
   Future<void> _loadActivityStats() async {
@@ -1011,11 +1083,28 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     }
   }
 
+  // 🆕 Load Shopping List Count Method
+  Future<void> _loadShoppingListCount() async {
+    try {
+      final count = await _shoppingListService.getShoppingListCount(
+        _currentHouseholdId,
+      );
+      if (mounted) {
+        setState(() {
+          _shoppingListCount = count;
+        });
+      }
+    } catch (e) {
+      print('Error loading shopping list count: $e');
+    }
+  }
+
   void _createSampleActivities() {
     setState(() {
       _recentActivities = [
         {
-          'message': 'Welcome to your household! Start by adding some items to see activity here.',
+          'message':
+              'Welcome to your household! Start by adding some items to see activity here.',
           'timestamp': Timestamp.now(),
           'type': 'info',
           'userName': 'System',
@@ -1024,7 +1113,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         },
         {
           'message': 'Milk was added to inventory',
-          'timestamp': Timestamp.fromDate(DateTime.now().subtract(Duration(hours: 2))),
+          'timestamp': Timestamp.fromDate(
+            DateTime.now().subtract(Duration(hours: 2)),
+          ),
           'type': 'add',
           'userName': _userFullName,
           'fullName': _userFullName,
@@ -1032,7 +1123,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         },
         {
           'message': 'Eggs quantity was updated',
-          'timestamp': Timestamp.fromDate(DateTime.now().subtract(Duration(hours: 4))),
+          'timestamp': Timestamp.fromDate(
+            DateTime.now().subtract(Duration(hours: 4)),
+          ),
           'type': 'update',
           'userName': _userFullName,
           'fullName': _userFullName,
@@ -1042,7 +1135,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         },
         {
           'message': 'Bread is running low',
-          'timestamp': Timestamp.fromDate(DateTime.now().subtract(Duration(days: 1))),
+          'timestamp': Timestamp.fromDate(
+            DateTime.now().subtract(Duration(days: 1)),
+          ),
           'type': 'warning',
           'userName': 'System',
           'fullName': 'System',
@@ -1067,13 +1162,13 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         _isLoading = true;
         _isActivitiesLoading = true;
       });
-      
+
       await _dashboardService.logActivity(
         _currentHouseholdId,
         'Dashboard data was manually refreshed',
         'info',
       );
-      
+
       _setupRealTimeSubscriptions();
     }
   }
@@ -1091,18 +1186,27 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
 
   Widget _getPage(int index) {
     switch (index) {
-      case 0: return _buildDashboardContent();
-      case 1: return InventoryListPage(
-        householdId: _currentHouseholdId,
-        householdName: _currentHousehold,
-      );
-      case 2: return AddItemPage(
-        householdId: _currentHouseholdId,
-        householdName: _currentHousehold,
-      );
-      case 3: return ExpenseTrackerPage(householdId: _currentHouseholdId, isReadOnly: true);
-      case 4: return ProfilePage();
-      default: return _buildDashboardContent();
+      case 0:
+        return _buildDashboardContent();
+      case 1:
+        return InventoryListPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+        );
+      case 2:
+        return AddItemPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+        );
+      case 3:
+        return ExpenseTrackerPage(
+          householdId: _currentHouseholdId,
+          isReadOnly: true,
+        );
+      case 4:
+        return ProfilePage();
+      default:
+        return _buildDashboardContent();
     }
   }
 
@@ -1120,12 +1224,12 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         body: _hasError
             ? _buildErrorState()
             : _isLoading
-                ? _buildLoadingState()
-                : _currentHousehold.isNotEmpty
-                    ? _getPage(_currentIndex)
-                    : _buildHouseholdSelection(),
-        bottomNavigationBar: _currentHousehold.isNotEmpty 
-            ? _buildBottomNavigationBar() 
+            ? _buildLoadingState()
+            : _currentHousehold.isNotEmpty
+            ? _getPage(_currentIndex)
+            : _buildHouseholdSelection(),
+        bottomNavigationBar: _currentHousehold.isNotEmpty
+            ? _buildBottomNavigationBar()
             : null,
       ),
     );
@@ -1169,12 +1273,49 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         ),
       ),
       actions: [
-        IconButton(
-          icon: Icon(Icons.refresh_rounded, size: 24),
-          onPressed: _manualRefresh,
-          tooltip: 'Refresh Data',
+        // 🆕 Shopping Cart Icon with Badge
+        Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                icon: Icon(Icons.shopping_cart_rounded, size: 22),
+                tooltip: 'Shopping List',
+                onPressed: _navigateToShoppingList,
+                color: Colors.white,
+              ),
+            ),
+            if (_shoppingListCount > 0)
+              Positioned(
+                right: 6,
+                top: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  child: Text(
+                    _shoppingListCount > 99 ? '99+' : '$_shoppingListCount',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
         ),
-        
+
         if (_currentHousehold.isNotEmpty)
           IconButton(
             icon: Icon(Icons.swap_horiz_rounded, size: 24),
@@ -1234,12 +1375,18 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     );
   }
 
-  BottomNavigationBarItem _buildNavItem(IconData icon, String label, int index) {
+  BottomNavigationBarItem _buildNavItem(
+    IconData icon,
+    String label,
+    int index,
+  ) {
     return BottomNavigationBarItem(
       icon: Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: _currentIndex == index ? _primaryColor.withOpacity(0.15) : Colors.transparent,
+          color: _currentIndex == index
+              ? _primaryColor.withOpacity(0.15)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, size: 24),
@@ -1261,7 +1408,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
           SizedBox(height: 24),
           _buildQuickStats(),
           SizedBox(height: 24),
-          
+
           // 🔮 ENHANCED: Smart Recommendations Section
           RecommendationSection(
             householdId: _currentHouseholdId,
@@ -1281,7 +1428,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
             onNavigateToItem: _navigateToItem,
           ),
           SizedBox(height: 24),
-          
+
           _buildActivitySection(),
           SizedBox(height: 24),
           _buildQuickActions(),
@@ -1291,19 +1438,55 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     );
   }
 
-    void _addToShoppingList(String itemName, int quantity, String itemId) {
+  void _addToShoppingList(String itemName, int quantity, String itemId) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Added $quantity $itemName to shopping list'),
         backgroundColor: _successColor,
       ),
     );
+    // Refresh shopping list count after adding item
+    _loadShoppingListCount();
   }
-  
-    void _navigateToItem(String itemId) {
+
+  void _navigateToItem(String itemId) {
     setState(() {
       _currentIndex = 1; // Navigate to inventory page
     });
+  }
+
+  // 🆕 Shopping List Navigation Method
+  void _navigateToShoppingList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ShoppingListPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+          primaryColor: _primaryColor,
+          secondaryColor: _secondaryColor,
+          accentColor: _accentColor,
+          successColor: _successColor,
+          warningColor: _warningColor,
+          errorColor: _errorColor,
+          backgroundColor: _backgroundColor,
+          surfaceColor: _surfaceColor,
+          textPrimary: _textPrimary,
+          textSecondary: _textSecondary,
+          textLight: _textLight,
+        ),
+      ),
+    ).then((_) {
+      // Refresh data when returning from shopping list
+      _loadShoppingListCount();
+      _refreshData();
+    });
+  }
+
+  // 🆕 Refresh Data Method
+  void _refreshData() {
+    _loadShoppingListCount();
+    // Add any other data refresh methods here
   }
 
   Widget _buildWelcomeHeader() {
@@ -1341,7 +1524,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                 ),
                 SizedBox(height: 8),
                 Text(
-                  _currentHousehold.isNotEmpty 
+                  _currentHousehold.isNotEmpty
                       ? 'Your $_currentHousehold inventory is looking great!'
                       : 'Manage your household inventory efficiently',
                   style: TextStyle(
@@ -1381,7 +1564,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     Color statusColor;
     String statusText;
     IconData statusIcon;
-    
+
     if (_hasError) {
       statusColor = _errorColor;
       statusText = 'Needs Attention';
@@ -1395,7 +1578,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
       statusText = 'Live & Updated';
       statusIcon = Icons.check_circle_rounded;
     }
-    
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -1481,14 +1664,21 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               _successColor,
               'Total inventory worth',
               isCurrency: true,
-            )
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildEnhancedStatCard(String title, int value, IconData icon, Color color, String subtitle, {bool isCurrency = false}) {
+  Widget _buildEnhancedStatCard(
+    String title,
+    int value,
+    IconData icon,
+    Color color,
+    String subtitle, {
+    bool isCurrency = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: _surfaceColor,
@@ -1515,7 +1705,10 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+                      colors: [
+                        color.withOpacity(0.15),
+                        color.withOpacity(0.05),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -1573,13 +1766,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               ),
             ),
             SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 11,
-                color: _textLight,
-              ),
-            ),
+            Text(subtitle, style: TextStyle(fontSize: 11, color: _textLight)),
           ],
         ),
       ),
@@ -1622,7 +1809,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.5,
           ),
-          child: _selectedActivityTab == 0 ? _buildRecentActivityView() : _buildActivityStatsView(),
+          child: _selectedActivityTab == 0
+              ? _buildRecentActivityView()
+              : _buildActivityStatsView(),
         ),
       ],
     );
@@ -1653,10 +1842,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
 
   Widget _buildRecentActivityView() {
     if (_isActivitiesLoading) {
-      return Container(
-        height: 300,
-        child: ActivityShimmer(),
-      );
+      return Container(height: 300, child: ActivityShimmer());
     }
 
     if (_recentActivities.isEmpty) {
@@ -1725,10 +1911,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                 children: [
                   Text(
                     'View All Activities',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   SizedBox(width: 7),
                   Icon(Icons.arrow_forward_rounded, size: 16),
@@ -1791,10 +1974,30 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               childAspectRatio: 1.4,
             ),
             children: [
-              _buildActivityStatItem('Total Activities', total, Icons.analytics_rounded, _primaryColor),
-              _buildActivityStatItem('Items Added', adds, Icons.add_rounded, _successColor),
-              _buildActivityStatItem('Items Updated', updates, Icons.edit_rounded, _accentColor),
-              _buildActivityStatItem('Items Deleted', deletes, Icons.delete_rounded, _errorColor),
+              _buildActivityStatItem(
+                'Total Activities',
+                total,
+                Icons.analytics_rounded,
+                _primaryColor,
+              ),
+              _buildActivityStatItem(
+                'Items Added',
+                adds,
+                Icons.add_rounded,
+                _successColor,
+              ),
+              _buildActivityStatItem(
+                'Items Updated',
+                updates,
+                Icons.edit_rounded,
+                _accentColor,
+              ),
+              _buildActivityStatItem(
+                'Items Deleted',
+                deletes,
+                Icons.delete_rounded,
+                _errorColor,
+              ),
             ],
           ),
           if (warnings > 0) ...[
@@ -1808,7 +2011,11 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: _warningColor, size: 24),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: _warningColor,
+                    size: 24,
+                  ),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -1824,10 +2031,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                         SizedBox(height: 4),
                         Text(
                           'Consider restocking these items soon',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _textSecondary,
-                          ),
+                          style: TextStyle(fontSize: 12, color: _textSecondary),
                         ),
                       ],
                     ),
@@ -1841,7 +2045,12 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildActivityStatItem(String title, int value, IconData icon, Color color) {
+  Widget _buildActivityStatItem(
+    String title,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1923,11 +2132,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Text(
               'Your recent activities will appear here when you add, update, or delete items from your inventory',
-              style: TextStyle(
-                fontSize: 14,
-                color: _textLight,
-                height: 1.4,
-              ),
+              style: TextStyle(fontSize: 14, color: _textLight, height: 1.4),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1940,16 +2145,15 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               backgroundColor: _primaryColor,
               foregroundColor: Colors.white,
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               elevation: 2,
             ),
             icon: Icon(Icons.add_rounded, size: 18),
             label: Text(
               'Add Your First Item',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -2008,7 +2212,13 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildEnhancedActionCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildEnhancedActionCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(16),
@@ -2079,7 +2289,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
         }
 
         if (snapshot.hasError) {
-          return _buildErrorState(message: 'Error loading households: ${snapshot.error}');
+          return _buildErrorState(
+            message: 'Error loading households: ${snapshot.error}',
+          );
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -2103,10 +2315,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               SizedBox(height: 8),
               Text(
                 'Choose a household to manage its inventory',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 14, color: _textSecondary),
               ),
               SizedBox(height: 24),
               Expanded(
@@ -2176,7 +2385,11 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                 color: _errorColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.error_outline_rounded, size: 35, color: _errorColor),
+              child: Icon(
+                Icons.error_outline_rounded,
+                size: 35,
+                color: _errorColor,
+              ),
             ),
             SizedBox(height: 16),
             Text(
@@ -2192,10 +2405,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 message ?? _errorMessage,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 13, color: _textSecondary),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -2206,15 +2416,14 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                 backgroundColor: _primaryColor,
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 2,
               ),
               child: Text(
                 'Try Again',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -2237,7 +2446,11 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                 color: _primaryColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.home_work_outlined, size: 40, color: _primaryColor),
+              child: Icon(
+                Icons.home_work_outlined,
+                size: 40,
+                color: _primaryColor,
+              ),
             ),
             SizedBox(height: 16),
             Text(
@@ -2253,29 +2466,26 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 'Create your first household to get started',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _textSecondary,
-                ),
+                style: TextStyle(fontSize: 14, color: _textSecondary),
                 textAlign: TextAlign.center,
               ),
             ),
             SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () => _householdServiceController.createNewHousehold(context),
+              onPressed: () =>
+                  _householdServiceController.createNewHousehold(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _primaryColor,
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 2,
               ),
               child: Text(
                 'Create New Household',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -2284,9 +2494,13 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     );
   }
 
-  Widget _buildHouseholdCard(String householdName, Timestamp createdAt, String householdId) {
+  Widget _buildHouseholdCard(
+    String householdName,
+    Timestamp createdAt,
+    String householdId,
+  ) {
     DateTime createdDate = createdAt.toDate();
-    
+
     return Material(
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(16),
@@ -2323,11 +2537,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
                   color: _primaryColor.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  Icons.home_rounded,
-                  color: _primaryColor,
-                  size: 25,
-                ),
+                child: Icon(Icons.home_rounded, color: _primaryColor, size: 25),
               ),
               SizedBox(height: 12),
               Text(
@@ -2344,10 +2554,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
               SizedBox(height: 6),
               Text(
                 'Created ${_formatDate(createdDate)}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: _textLight,
-                ),
+                style: TextStyle(fontSize: 11, color: _textLight),
               ),
             ],
           ),
@@ -2361,4 +2568,3 @@ class _EditorDashboardPageState extends State<EditorDashboardPage> with SingleTi
     return '${date.day}/${date.month}/${date.year}';
   }
 }
-

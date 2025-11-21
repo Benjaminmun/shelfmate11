@@ -11,6 +11,7 @@ import '../profile_page.dart';
 import 'dart:async';
 import 'activity_pages.dart';
 import 'recommendation_section.dart';
+import 'shopping_list_page.dart';
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -799,6 +800,9 @@ class _DashboardPageState extends State<DashboardPage>
   StreamSubscription<Map<String, dynamic>>? _statsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _activitiesSubscription;
 
+  // Shopping list count
+  int _shoppingListCount = 0;
+
   // Enhanced animations
   late AnimationController _animationController;
 
@@ -1064,7 +1068,39 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       centerTitle: true,
       actions: [
-        // 🆕 Settings Button (replaces refresh and switch household)
+        // 🆕 Shopping Cart Icon with Badge
+        Stack(
+          children: [
+            IconButton(
+              icon: Icon(Icons.shopping_cart_rounded, size: 24),
+              tooltip: 'Shopping List',
+              onPressed: _navigateToShoppingList,
+            ),
+            if (_shoppingListCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: BoxConstraints(minWidth: 16, minHeight: 16),
+                  child: Text(
+                    _shoppingListCount > 99 ? '99+' : '$_shoppingListCount',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        // Settings Button
         PopupMenuButton<String>(
           icon: Icon(Icons.settings_rounded, size: 24),
           tooltip: 'Settings',
@@ -1174,14 +1210,14 @@ class _DashboardPageState extends State<DashboardPage>
       backgroundColor: _surfaceColor,
       child: ListView(
         physics: AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.all(30),
         children: [
           _buildWelcomeHeader(),
           SizedBox(height: 24),
           _buildQuickStats(),
           SizedBox(height: 24),
 
-          // 🔮 ENHANCED: Smart Recommendations Section
+          // 🔮 Smart Recommendations Section
           RecommendationSection(
             householdId: _currentHouseholdId,
             householdName: _currentHousehold,
@@ -1507,6 +1543,54 @@ class _DashboardPageState extends State<DashboardPage>
     setState(() {
       _currentIndex = 1; // Navigate to inventory page
     });
+  }
+
+  // 🆕 Shopping List Navigation Method
+  void _navigateToShoppingList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ShoppingListPage(
+          householdId: _currentHouseholdId,
+          householdName: _currentHousehold,
+          primaryColor: _primaryColor,
+          secondaryColor: _secondaryColor,
+          accentColor: _accentColor,
+          successColor: _successColor,
+          warningColor: _warningColor,
+          errorColor: _errorColor,
+          backgroundColor: _backgroundColor,
+          surfaceColor: _surfaceColor,
+          textPrimary: _textPrimary,
+          textSecondary: _textSecondary,
+          textLight: _textLight,
+        ),
+      ),
+    ).then((_) {
+      // Refresh data when returning from shopping list
+      _loadShoppingListCount();
+      _refreshData();
+    });
+  }
+
+  // 🆕 Load Shopping List Count
+  Future<void> _loadShoppingListCount() async {
+    // This method would typically call your shopping list service
+    // to get the current count of items in the shopping list
+    try {
+      // Example implementation - replace with your actual service call
+      // final count = await ShoppingListService().getShoppingListCount(_currentHouseholdId);
+      // setState(() { _shoppingListCount = count; });
+      print('Loading shopping list count...');
+    } catch (e) {
+      print('Error loading shopping list count: $e');
+    }
+  }
+
+  // 🆕 Refresh Data Method
+  void _refreshData() {
+    _loadShoppingListCount();
+    // Add any other data refresh methods here
   }
 
   Widget _buildActivitySection() {
@@ -1935,13 +2019,20 @@ class _DashboardPageState extends State<DashboardPage>
               _successColor,
               () => setState(() => _currentIndex = 2),
             ),
-
             _buildEnhancedActionCard(
               'Expense Tracking',
               'Monitor your spending',
               Icons.analytics_rounded,
               _warningColor,
               () => setState(() => _currentIndex = 3),
+            ),
+            // Replaced shopping list with profile card
+            _buildEnhancedActionCard(
+              'View Profile',
+              'Manage your account',
+              Icons.person_rounded,
+              _accentColor,
+              () => setState(() => _currentIndex = 4),
             ),
           ],
         ),
