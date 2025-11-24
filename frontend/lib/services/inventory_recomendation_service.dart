@@ -3,8 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'dart:math';
-
-// Import services
 import 'shopping_list_service.dart';
 
 class InventoryRecommendationService {
@@ -61,7 +59,7 @@ class InventoryRecommendationService {
       seasonality: 1.1,
       urgencyMultiplier: 1.2,
       minStockLevelMultiplier: 0.5,
-      expirySensitivity: 0.8,
+      expirySensitivity: 0.4,
       consumptionPattern: ConsumptionPattern.regular,
       priceSensitivity: 1.5,
       bulkPurchaseScore: 0.7,
@@ -75,7 +73,7 @@ class InventoryRecommendationService {
       seasonality: 1.3,
       urgencyMultiplier: 2.0,
       minStockLevelMultiplier: 0.5,
-      expirySensitivity: 1.8,
+      expirySensitivity: 0.4,
       consumptionPattern: ConsumptionPattern.irregular,
       priceSensitivity: 0.8,
       bulkPurchaseScore: 0.4,
@@ -89,7 +87,7 @@ class InventoryRecommendationService {
       seasonality: 1.4,
       urgencyMultiplier: 1.1,
       minStockLevelMultiplier: 1.5,
-      expirySensitivity: 0.5,
+      expirySensitivity: 2.2,
       consumptionPattern: ConsumptionPattern.daily,
       priceSensitivity: 1.6,
       bulkPurchaseScore: 0.9,

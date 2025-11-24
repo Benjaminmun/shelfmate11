@@ -11,8 +11,699 @@ import '../profile_page.dart';
 import 'dart:async';
 import 'activity_pages.dart';
 import 'recommendation_section.dart';
-import 'shopping_list_page.dart'; // Add this import
-import '../../services/shopping_list_service.dart'; // Add this import
+import 'shopping_list_page.dart';
+import '../../services/shopping_list_service.dart';
+import '../../services/notification_service.dart';
+
+// 🆕 SIMPLIFIED Notification Icon - White by default, Yellow for unread
+class EnhancedNotificationIcon extends StatelessWidget {
+  final List<AppNotification> notifications;
+  final VoidCallback onPressed;
+  final Color primaryColor;
+  final Color warningColor;
+  final String householdId;
+
+  const EnhancedNotificationIcon({
+    Key? key,
+    required this.notifications,
+    required this.onPressed,
+    required this.primaryColor,
+    required this.warningColor,
+    required this.householdId,
+  }) : super(key: key);
+
+  int get _unreadCount {
+    return notifications
+        .where((n) => n.householdId == householdId && !n.isRead)
+        .length;
+  }
+
+  bool get _hasHighPriority {
+    return notifications.any(
+      (n) => n.householdId == householdId && n.priority == 'high' && !n.isRead,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool hasUnread = _unreadCount > 0;
+
+    // 🆕 FIXED: Always white when no notifications, yellow when has unread
+    final Color iconColor = hasUnread ? warningColor : Colors.white;
+
+    return Stack(
+      children: [
+        // 🆕 SIMPLIFIED: Just IconButton without container
+        IconButton(
+          icon: Icon(
+            _hasHighPriority
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_rounded,
+            size: 24, // 🆕 Consistent size with other icons
+            color: iconColor,
+          ),
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(minWidth: 44, minHeight: 44),
+        ),
+
+        // Notification Badge
+        if (_unreadCount > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                // 🆕 FIXED: Use warningColor (yellow) for badge too
+                color: warningColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: warningColor.withOpacity(0.4),
+                    blurRadius: 6,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              constraints: BoxConstraints(minWidth: 20, minHeight: 20),
+              child: Text(
+                _unreadCount > 99 ? '99+' : '$_unreadCount',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// 🆕 Updated Notification Item Widget
+class EnhancedNotificationItem extends StatelessWidget {
+  final AppNotification notification;
+  final VoidCallback onDismiss;
+  final VoidCallback onTap;
+  final Color primaryColor;
+  final Color surfaceColor;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textLight;
+
+  const EnhancedNotificationItem({
+    Key? key,
+    required this.notification,
+    required this.onDismiss,
+    required this.onTap,
+    required this.primaryColor,
+    required this.surfaceColor,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textLight,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = _getNotificationIcon(notification.type);
+    final color = _getNotificationColor(notification.type);
+    final timeAgo = _getTimeAgo(notification.timestamp);
+
+    return Dismissible(
+      key: Key(notification.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: EdgeInsets.only(right: 20),
+        child: Icon(Icons.delete_rounded, color: Colors.red, size: 24),
+      ),
+      onDismissed: (direction) => onDismiss(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            margin: EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: notification.isRead
+                  ? surfaceColor.withOpacity(0.7)
+                  : surfaceColor,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+              border: Border.all(
+                color: notification.isRead
+                    ? color.withOpacity(0.1)
+                    : color.withOpacity(0.3),
+                width: notification.isRead ? 1 : 2,
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Notification Icon with Status
+                Stack(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            color.withOpacity(0.2),
+                            color.withOpacity(0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: color.withOpacity(0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Icon(icon, color: color, size: 20),
+                    ),
+                    if (!notification.isRead)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: surfaceColor, width: 2),
+                          ),
+                        ),
+                      ),
+                    // Grouped notification badge
+                    if (notification.isGrouped && notification.itemCount > 1)
+                      Positioned(
+                        right: -4,
+                        bottom: -4,
+                        child: Container(
+                          padding: EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: surfaceColor, width: 2),
+                          ),
+                          constraints: BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            notification.itemCount > 99
+                                ? '99+'
+                                : '${notification.itemCount}',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                SizedBox(width: 12),
+
+                // Notification Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title and Priority
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              notification.title,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: textPrimary,
+                                height: 1.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          _buildPriorityBadge(notification.priority),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+
+                      // Message
+                      Text(
+                        notification.message,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: textSecondary,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      SizedBox(height: 8),
+
+                      // Timestamp and Actions
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 12,
+                            color: textLight,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            timeAgo,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: textLight,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Spacer(),
+                          if (notification.actionData != null)
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                notification.isGrouped
+                                    ? 'View Items'
+                                    : 'View Item',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriorityBadge(String priority) {
+    Color color;
+    String text;
+
+    switch (priority) {
+      case 'high':
+        color = Color(0xFFEF4444);
+        text = 'HIGH';
+        break;
+      case 'medium':
+        color = Color(0xFFF59E0B);
+        text = 'MEDIUM';
+        break;
+      case 'low':
+        color = Color(0xFF10B981);
+        text = 'LOW';
+        break;
+      default:
+        color = Color(0xFF6B7280);
+        text = 'INFO';
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 8,
+          color: color,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  IconData _getNotificationIcon(String type) {
+    switch (type) {
+      case 'low_stock':
+      case 'low_stock_grouped':
+        return Icons.inventory_2_rounded;
+      case 'expiry':
+      case 'expiry_grouped':
+        return Icons.calendar_today_rounded;
+      case 'shopping_list':
+        return Icons.shopping_cart_rounded;
+      case 'recommendation':
+        return Icons.auto_awesome_rounded;
+      case 'system':
+        return Icons.settings_rounded;
+      default:
+        return Icons.info_rounded;
+    }
+  }
+
+  Color _getNotificationColor(String type) {
+    switch (type) {
+      case 'low_stock':
+      case 'low_stock_grouped':
+        return Color(0xFFF59E0B);
+      case 'expiry':
+      case 'expiry_grouped':
+        return Color(0xFFEF4444);
+      case 'shopping_list':
+        return Color(0xFF10B981);
+      case 'recommendation':
+        return Color(0xFF8B5CF6);
+      case 'system':
+        return Color(0xFF6B7280);
+      default:
+        return Color(0xFF3B82F6);
+    }
+  }
+
+  String _getTimeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
+    return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+  }
+}
+
+// 🆕 Updated Notifications Panel with Household Support
+class EnhancedNotificationsPanel extends StatelessWidget {
+  final List<AppNotification> notifications;
+  final VoidCallback onDismissPanel;
+  final Function(String) onDismissNotification;
+  final Function(AppNotification) onTapNotification;
+  final Color primaryColor;
+  final Color surfaceColor;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textLight;
+  final Color backgroundColor;
+  final String householdId;
+
+  const EnhancedNotificationsPanel({
+    Key? key,
+    required this.notifications,
+    required this.onDismissPanel,
+    required this.onDismissNotification,
+    required this.onTapNotification,
+    required this.primaryColor,
+    required this.surfaceColor,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textLight,
+    required this.backgroundColor,
+    required this.householdId,
+  }) : super(key: key);
+
+  int get _unreadCount {
+    return notifications
+        .where((n) => n.householdId == householdId && !n.isRead)
+        .length;
+  }
+
+  List<AppNotification> get _householdNotifications {
+    return notifications.where((n) => n.householdId == householdId).toList();
+  }
+
+  void _dismissAll() {
+    for (final notification in _householdNotifications) {
+      onDismissNotification(notification.id);
+    }
+  }
+
+  void _markAllRead() {
+    final notificationService = NotificationService();
+    for (final notification in _householdNotifications) {
+      if (!notification.isRead) {
+        notificationService.markAsRead(notification.id);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: 380,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 30,
+              spreadRadius: -5,
+              offset: Offset(0, 20),
+            ),
+          ],
+          border: Border.all(color: Colors.black.withOpacity(0.1), width: 1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.05),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.black.withOpacity(0.05),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.notifications_rounded,
+                    color: primaryColor,
+                    size: 24,
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: textPrimary,
+                    ),
+                  ),
+                  Spacer(),
+                  if (_unreadCount > 0)
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$_unreadCount new',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  SizedBox(width: 12),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 20, color: textLight),
+                    onPressed: onDismissPanel,
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ),
+
+            // Notifications List
+            Expanded(
+              child: _householdNotifications.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: EdgeInsets.all(16),
+                      shrinkWrap: true,
+                      itemCount: _householdNotifications.length,
+                      itemBuilder: (context, index) {
+                        final notification = _householdNotifications[index];
+                        return EnhancedNotificationItem(
+                          notification: notification,
+                          onDismiss: () =>
+                              onDismissNotification(notification.id),
+                          onTap: () => onTapNotification(notification),
+                          primaryColor: primaryColor,
+                          surfaceColor: surfaceColor,
+                          textPrimary: textPrimary,
+                          textSecondary: textSecondary,
+                          textLight: textLight,
+                        );
+                      },
+                    ),
+            ),
+
+            // Footer Actions
+            if (_householdNotifications.isNotEmpty)
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.black.withOpacity(0.05),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _dismissAll,
+                        icon: Icon(Icons.clear_all_rounded, size: 16),
+                        label: Text('Dismiss All'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textSecondary,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(
+                            color: Colors.black.withOpacity(0.1),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _markAllRead,
+                        icon: Icon(Icons.mark_email_read_rounded, size: 16),
+                        label: Text('Mark Read'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.notifications_off_rounded,
+                size: 40,
+                color: textLight,
+              ),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'No notifications',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: textPrimary,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'You\'re all caught up! New notifications will appear here.',
+              style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class DashboardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -211,53 +902,6 @@ class DashboardService {
     }
   }
 
-  // Get activities by date range (for filtering)
-  Stream<List<Map<String, dynamic>>> getActivitiesByDateRange(
-    String householdId,
-    DateTime startDate,
-    DateTime endDate,
-  ) {
-    if (householdId.isEmpty) {
-      return Stream.value([]);
-    }
-
-    try {
-      return _firestore
-          .collection('households')
-          .doc(householdId)
-          .collection('activities')
-          .where(
-            'timestamp',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
-          )
-          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-          .orderBy('timestamp', descending: true)
-          .snapshots()
-          .map((snapshot) {
-            return snapshot.docs.map((doc) {
-              final data = doc.data();
-              return {
-                'id': doc.id,
-                'message':
-                    data['description'] ?? data['message'] ?? 'No message',
-                'timestamp': data['timestamp'] ?? Timestamp.now(),
-                'type': data['type'] ?? 'info',
-                'userName': data['userName'] ?? 'Unknown User',
-                'fullName':
-                    data['fullName'] ?? data['userName'] ?? 'Unknown User',
-                'userId': data['userId'] ?? '',
-                'itemName': data['itemName'],
-                'oldValue': data['oldValue'],
-                'newValue': data['newValue'],
-              };
-            }).toList();
-          });
-    } catch (e) {
-      print('Error getting activities by date range: $e');
-      return Stream.value([]);
-    }
-  }
-
   // Enhanced logActivity method with fullName support
   Future<void> logActivity(
     String householdId,
@@ -355,66 +999,7 @@ class DashboardService {
   }
 }
 
-// Enhanced Pulse Indicator with glow effect
-class PulseIndicator extends StatefulWidget {
-  final Color color;
-  final double size;
-
-  const PulseIndicator({Key? key, required this.color, this.size = 8})
-    : super(key: key);
-
-  @override
-  _PulseIndicatorState createState() => _PulseIndicatorState();
-}
-
-class _PulseIndicatorState extends State<PulseIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-
-    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          width: widget.size,
-          height: widget.size,
-          decoration: BoxDecoration(
-            color: widget.color.withOpacity(_animation.value * 0.8),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: widget.color.withOpacity(_animation.value * 0.4),
-                blurRadius: 8,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// Animated Stat Number Widget
+// SIMPLIFIED Animated Stat Number Widget
 class AnimatedStatNumber extends StatefulWidget {
   final int value;
   final TextStyle style;
@@ -431,54 +1016,10 @@ class AnimatedStatNumber extends StatefulWidget {
   _AnimatedStatNumberState createState() => _AnimatedStatNumberState();
 }
 
-class _AnimatedStatNumberState extends State<AnimatedStatNumber>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<int> _animation;
-  late int _previousValue;
-
-  @override
-  void initState() {
-    super.initState();
-    _previousValue = widget.value;
-    _controller = AnimationController(duration: widget.duration, vsync: this);
-
-    _animation = IntTween(
-      begin: _previousValue,
-      end: widget.value,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-    _controller.forward();
-  }
-
-  @override
-  void didUpdateWidget(AnimatedStatNumber oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) {
-      _previousValue = _animation.value;
-      _controller.reset();
-      _animation = IntTween(
-        begin: _previousValue,
-        end: widget.value,
-      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
+class _AnimatedStatNumberState extends State<AnimatedStatNumber> {
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Text(_animation.value.toString(), style: widget.style);
-      },
-    );
+    return Text(widget.value.toString(), style: widget.style);
   }
 }
 
@@ -507,7 +1048,6 @@ class EnhancedActivityItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final icon = _getActivityIcon(activity['type']);
     final color = _getActivityColor(activity['type']);
-    final timestamp = activity['timestamp'] as Timestamp;
     final hasDetails = activity['itemName'] != null;
 
     // Get user display info with fullName support
@@ -616,7 +1156,6 @@ class EnhancedActivityItem extends StatelessWidget {
                           ),
                         ),
                         SizedBox(width: 6),
-                        // Display fullName only (removed @ symbol)
                         Text(
                           fullName,
                           style: TextStyle(
@@ -628,75 +1167,8 @@ class EnhancedActivityItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Spacer(),
-
-                        // Time - FIXED TIME FORMAT
-                        Icon(
-                          Icons.access_time_rounded,
-                          size: 12,
-                          color: textLight,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          _formatActivityTime(timestamp),
-                          style: TextStyle(fontSize: 12, color: textLight),
-                        ),
                       ],
                     ),
-
-                    // Value Changes (for updates)
-                    if (activity['type'] == 'update' &&
-                        activity['oldValue'] != null &&
-                        activity['newValue'] != null)
-                      Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${activity['oldValue']}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 12,
-                              color: textLight,
-                            ),
-                            SizedBox(width: 8),
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${activity['newValue']}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
               ),
@@ -724,31 +1196,6 @@ class EnhancedActivityItem extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  // FIXED: Enhanced time formatting with GMT+8
-  String _formatActivityTime(Timestamp timestamp) {
-    final date = _toGmtPlus8(timestamp.toDate());
-    final now = _toGmtPlus8(DateTime.now());
-    final today = DateTime(now.year, now.month, now.day);
-    final activityDate = DateTime(date.year, date.month, date.day);
-
-    if (activityDate == today) {
-      // Today: show time only
-      final hour = date.hour.toString().padLeft(2, '0');
-      final minute = date.minute.toString().padLeft(2, '0');
-      return '$hour:$minute';
-    } else if (activityDate == today.subtract(Duration(days: 1))) {
-      // Yesterday
-      return 'Yesterday';
-    } else {
-      // Other days: show date
-      return '${date.day}/${date.month}';
-    }
-  }
-
-  DateTime _toGmtPlus8(DateTime dateTime) {
-    return dateTime.add(Duration(hours: 8));
   }
 
   String _getActivityTypeLabel(String type) {
@@ -900,6 +1347,34 @@ class ActivityShimmer extends StatelessWidget {
   }
 }
 
+// SIMPLIFIED Pulse Indicator
+class PulseIndicator extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const PulseIndicator({Key? key, required this.color, this.size = 8})
+    : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class EditorDashboardPage extends StatefulWidget {
   final String? selectedHousehold;
   final String? householdId;
@@ -919,8 +1394,10 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
   final HouseholdServiceController _householdServiceController =
       HouseholdServiceController();
   final DashboardService _dashboardService = DashboardService();
-  final ShoppingListService _shoppingListService =
-      ShoppingListService(); // Add this
+  final ShoppingListService _shoppingListService = ShoppingListService();
+
+  // 🆕 Add Notification Service
+  final NotificationService _notificationService = NotificationService();
 
   // Enhanced color scheme with gradients
   final Color _primaryColor = Color(0xFF2D5D7C);
@@ -960,6 +1437,11 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
   // Shopping list count
   int _shoppingListCount = 0;
 
+  // 🆕 Notification state
+  List<AppNotification> _notifications = [];
+  bool _showNotificationsPanel = false;
+  bool _isDisposed = false;
+
   // Enhanced animations
   late AnimationController _animationController;
 
@@ -971,6 +1453,10 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
     _currentHousehold = widget.selectedHousehold ?? '';
     _currentHouseholdId = widget.householdId ?? '';
     _loadUserData();
+
+    // 🆕 Initialize notifications
+    _notificationService.loadNotificationsFromFirestore();
+    _setupNotificationListener();
 
     if (_currentHouseholdId.isNotEmpty) {
       _setupRealTimeSubscriptions();
@@ -985,6 +1471,21 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
       vsync: this,
       duration: Duration(milliseconds: 1500),
     );
+  }
+
+  // 🆕 Updated Notification Listener
+  void _setupNotificationListener() {
+    _notificationService.addListener(_updateNotifications);
+  }
+
+  void _updateNotifications() {
+    if (_isDisposed) return;
+
+    if (mounted) {
+      setState(() {
+        _notifications = _notificationService.notifications;
+      });
+    }
   }
 
   // Enhanced user data loading with fullName and role support
@@ -1032,6 +1533,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
               // Load shopping list count
               _loadShoppingListCount();
 
+              // 🆕 Updated: Create grouped notifications for urgent items
+              _createGroupedNotifications(stats);
+
               // Start animations when first data arrives
               if (!_animationController.isAnimating) {
                 _animationController.forward();
@@ -1053,6 +1557,42 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
 
     // Set up activities subscription
     _setupActivitiesSubscription();
+  }
+
+  // 🆕 Updated: Create Grouped Notifications based on stats
+  void _createGroupedNotifications(Map<String, dynamic> stats) {
+    final lowStockCount = stats['lowStockItems'] ?? 0;
+    final expiringSoonCount = stats['expiringSoonItems'] ?? 0;
+
+    // Create grouped low stock notification
+    if (lowStockCount > 0) {
+      _notificationService.createManualNotification(
+        title: lowStockCount == 1
+            ? '📦 Low Stock Item'
+            : '📦 Low Stock: $lowStockCount Items',
+        message: lowStockCount == 1
+            ? 'You have 1 item running low on stock'
+            : 'You have $lowStockCount items running low on stock',
+        type: 'low_stock_grouped',
+        priority: lowStockCount > 3 ? 'high' : 'medium',
+        householdId: _currentHouseholdId,
+      );
+    }
+
+    // Create grouped expiry notification
+    if (expiringSoonCount > 0) {
+      _notificationService.createManualNotification(
+        title: expiringSoonCount == 1
+            ? '⚠️ Expiring Item'
+            : '⚠️ Expiring: $expiringSoonCount Items',
+        message: expiringSoonCount == 1
+            ? 'You have 1 item expiring soon'
+            : 'You have $expiringSoonCount items expiring soon',
+        type: 'expiry_grouped',
+        priority: 'high',
+        householdId: _currentHouseholdId,
+      );
+    }
   }
 
   void _setupActivitiesSubscription() {
@@ -1150,9 +1690,15 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
 
   @override
   void dispose() {
+    _isDisposed = true;
+
     _statsSubscription?.cancel();
     _activitiesSubscription?.cancel();
     _animationController.dispose();
+
+    // 🆕 Remove notification listener
+    _notificationService.removeListener(_updateNotifications);
+
     super.dispose();
   }
 
@@ -1170,6 +1716,8 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
       );
 
       _setupRealTimeSubscriptions();
+      // 🆕 Refresh notifications
+      _notificationService.loadNotificationsFromFirestore();
     }
   }
 
@@ -1221,13 +1769,38 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
       child: Scaffold(
         backgroundColor: _backgroundColor,
         appBar: _currentIndex == 0 ? _buildAppBar() : null,
-        body: _hasError
-            ? _buildErrorState()
-            : _isLoading
-            ? _buildLoadingState()
-            : _currentHousehold.isNotEmpty
-            ? _getPage(_currentIndex)
-            : _buildHouseholdSelection(),
+        body: Stack(
+          children: [
+            _hasError
+                ? _buildErrorState()
+                : _isLoading
+                ? _buildLoadingState()
+                : _currentHousehold.isNotEmpty
+                ? _getPage(_currentIndex)
+                : _buildHouseholdSelection(),
+
+            // 🆕 Updated Notifications Panel with Household Support
+            if (_showNotificationsPanel)
+              Positioned(
+                top: 80,
+                right: 16,
+                child: EnhancedNotificationsPanel(
+                  notifications: _notifications,
+                  onDismissPanel: _toggleNotificationsPanel,
+                  onDismissNotification:
+                      _notificationService.dismissNotification,
+                  onTapNotification: _handleNotificationAction,
+                  surfaceColor: _surfaceColor,
+                  primaryColor: _primaryColor,
+                  textPrimary: _textPrimary,
+                  textSecondary: _textSecondary,
+                  textLight: _textLight,
+                  backgroundColor: _backgroundColor,
+                  householdId: _currentHouseholdId,
+                ),
+              ),
+          ],
+        ),
         bottomNavigationBar: _currentHousehold.isNotEmpty
             ? _buildBottomNavigationBar()
             : null,
@@ -1235,6 +1808,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
     );
   }
 
+  // 🆕 UPDATED AppBar with SIMPLIFIED notification button
   AppBar _buildAppBar() {
     return AppBar(
       automaticallyImplyLeading: false,
@@ -1272,21 +1846,79 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
           bottomRight: Radius.circular(40),
         ),
       ),
+      // 🆕 Settings button on the left
+      leading: PopupMenuButton<String>(
+        icon: Icon(Icons.settings_rounded, size: 24, color: Colors.white),
+        onSelected: (value) {
+          if (value == 'refresh') {
+            _manualRefresh();
+          } else if (value == 'switch_household') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => HouseholdService()),
+            );
+          } else if (value == 'clear_notifications') {
+            _notificationService.dismissAllNotifications();
+          }
+        },
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            value: 'refresh',
+            child: Row(
+              children: [
+                Icon(Icons.refresh_rounded, color: _textPrimary),
+                SizedBox(width: 12),
+                Text('Refresh Data'),
+              ],
+            ),
+          ),
+          if (_currentHouseholdId.isNotEmpty)
+            PopupMenuItem<String>(
+              value: 'clear_notifications',
+              child: Row(
+                children: [
+                  Icon(Icons.notifications_off_rounded, color: _textPrimary),
+                  SizedBox(width: 12),
+                  Text('Clear Notifications'),
+                ],
+              ),
+            ),
+          PopupMenuItem<String>(
+            value: 'switch_household',
+            child: Row(
+              children: [
+                Icon(Icons.swap_horiz_rounded, color: _textPrimary),
+                SizedBox(width: 12),
+                Text('Switch Household'),
+              ],
+            ),
+          ),
+        ],
+      ),
+      // 🆕 Shopping list and notification on the right - CONSISTENT SIZES
       actions: [
-        // 🆕 Shopping Cart Icon with Badge
+        // 🆕 SIMPLIFIED Notification Icon - No container, white by default
+        if (_currentHouseholdId.isNotEmpty)
+          EnhancedNotificationIcon(
+            notifications: _notifications,
+            onPressed: _toggleNotificationsPanel,
+            warningColor: _warningColor,
+            primaryColor: _primaryColor,
+            householdId: _currentHouseholdId,
+          ),
+
+        // 🆕 Shopping List Button with Count Badge - CONSISTENT SIZE
         Stack(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: IconButton(
-                icon: Icon(Icons.shopping_cart_rounded, size: 22),
-                tooltip: 'Shopping List',
-                onPressed: _navigateToShoppingList,
+            IconButton(
+              icon: Icon(
+                Icons.shopping_cart_rounded,
+                size: 24, // 🆕 Consistent size with notification icon
                 color: Colors.white,
               ),
+              onPressed: _navigateToShoppingList,
+              padding: EdgeInsets.zero,
+              constraints: BoxConstraints(minWidth: 44, minHeight: 44),
             ),
             if (_shoppingListCount > 0)
               Positioned(
@@ -1315,18 +1947,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
               ),
           ],
         ),
-
-        if (_currentHousehold.isNotEmpty)
-          IconButton(
-            icon: Icon(Icons.swap_horiz_rounded, size: 24),
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => HouseholdService()),
-              );
-            },
-            tooltip: 'Switch Household',
-          ),
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -1445,6 +2066,15 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
         backgroundColor: _successColor,
       ),
     );
+
+    // Create shopping list notification
+    _notificationService.createShoppingListNotification(
+      itemName: itemName,
+      quantity: quantity,
+      priority: 'medium',
+      householdId: '',
+    );
+
     // Refresh shopping list count after adding item
     _loadShoppingListCount();
   }
@@ -1486,7 +2116,56 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
   // 🆕 Refresh Data Method
   void _refreshData() {
     _loadShoppingListCount();
-    // Add any other data refresh methods here
+  }
+
+  // 🆕 Notification Methods
+  void _toggleNotificationsPanel() {
+    setState(() {
+      _showNotificationsPanel = !_showNotificationsPanel;
+    });
+  }
+
+  void _handleNotificationAction(AppNotification notification) {
+    _notificationService.markAsRead(notification.id);
+
+    if (notification.actionData != null) {
+      _handleRecommendationAction(notification.actionData!);
+    } else {
+      _navigateToItem(notification.itemId);
+    }
+
+    setState(() {
+      _showNotificationsPanel = false;
+    });
+  }
+
+  void _handleRecommendationAction(Map<String, dynamic> recommendation) {
+    final String? itemId = recommendation['itemId'] as String?;
+
+    if (itemId == null) {
+      _showErrorSnackbar('Invalid recommendation: missing item ID');
+      return;
+    }
+
+    _navigateToItem(itemId);
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_rounded, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: _errorColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   Widget _buildWelcomeHeader() {
@@ -2205,6 +2884,14 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
               Icons.analytics_rounded,
               _warningColor,
               () => setState(() => _currentIndex = 3),
+            ),
+            // Replaced shopping list with profile card
+            _buildEnhancedActionCard(
+              'View Profile',
+              'Manage your account',
+              Icons.person_rounded,
+              _accentColor,
+              () => setState(() => _currentIndex = 4),
             ),
           ],
         ),

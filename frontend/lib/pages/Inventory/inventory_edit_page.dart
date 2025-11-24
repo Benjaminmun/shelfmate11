@@ -27,7 +27,8 @@ class InventoryEditPage extends StatefulWidget {
   _InventoryEditPageState createState() => _InventoryEditPageState();
 }
 
-class _InventoryEditPageState extends State<InventoryEditPage> with SingleTickerProviderStateMixin {
+class _InventoryEditPageState extends State<InventoryEditPage>
+    with SingleTickerProviderStateMixin {
   final InventoryService _inventoryService = InventoryService();
   final ImagePicker _imagePicker = ImagePicker();
   final _formKey = GlobalKey<FormState>();
@@ -37,7 +38,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     'Cleaning Supplies',
     'Personal Care',
     'Medication',
-    'Other'
+    'Other',
   ];
 
   // Form controllers
@@ -89,43 +90,51 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       duration: Duration(milliseconds: 600),
       vsync: this,
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    
-    _slideAnimation = Tween<Offset>(
-      begin: Offset(0.0, 0.1),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOut,
-      ),
-    );
-    
+
+    _slideAnimation = Tween<Offset>(begin: Offset(0.0, 0.1), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
+
     _isEditMode = widget.item?.id != null;
     _isReadOnly = widget.userRole == 'member';
-    
+
     // Initialize controllers with existing item data or empty values
     _nameController = TextEditingController(text: widget.item?.name ?? '');
-    _categoryController = TextEditingController(text: widget.item?.category ?? _categories[0]);
-    _quantityController = TextEditingController(text: widget.item?.quantity.toString() ?? '1');
-    _priceController = TextEditingController(text: widget.item?.price.toStringAsFixed(2) ?? '0.00');
-    _descriptionController = TextEditingController(text: widget.item?.description ?? '');
-    _locationController = TextEditingController(text: widget.item?.location ?? '');
-    _supplierController = TextEditingController(text: widget.item?.supplier ?? '');
-    _barcodeController = TextEditingController(text: widget.item?.barcode ?? widget.barcode ?? '');
-    _minStockLevelController = TextEditingController(text: widget.item?.minStockLevel?.toString() ?? '1');
-    
+    _categoryController = TextEditingController(
+      text: widget.item?.category ?? _categories[0],
+    );
+    _quantityController = TextEditingController(
+      text: widget.item?.quantity.toString() ?? '1',
+    );
+    _priceController = TextEditingController(
+      text: widget.item?.price.toStringAsFixed(2) ?? '0.00',
+    );
+    _descriptionController = TextEditingController(
+      text: widget.item?.description ?? '',
+    );
+    _locationController = TextEditingController(
+      text: widget.item?.location ?? '',
+    );
+    _supplierController = TextEditingController(
+      text: widget.item?.supplier ?? '',
+    );
+    _barcodeController = TextEditingController(
+      text: widget.item?.barcode ?? widget.barcode ?? '',
+    );
+    _minStockLevelController = TextEditingController(
+      text: widget.item?.minStockLevel?.toString() ?? '1',
+    );
+
     _purchaseDate = widget.item?.purchaseDate;
     _expiryDate = widget.item?.expiryDate;
 
@@ -171,13 +180,23 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
         category: _categoryController.text,
         quantity: int.parse(_quantityController.text),
         price: double.parse(_priceController.text),
-        description: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+        description: _descriptionController.text.isNotEmpty
+            ? _descriptionController.text
+            : null,
         purchaseDate: _purchaseDate,
         expiryDate: _expiryDate,
-        location: _locationController.text.isNotEmpty ? _locationController.text : null,
-        supplier: _supplierController.text.isNotEmpty ? _supplierController.text : null,
-        barcode: _barcodeController.text.isNotEmpty ? _barcodeController.text : null,
-        minStockLevel: _minStockLevelController.text.isNotEmpty ? int.parse(_minStockLevelController.text) : null,
+        location: _locationController.text.isNotEmpty
+            ? _locationController.text
+            : null,
+        supplier: _supplierController.text.isNotEmpty
+            ? _supplierController.text
+            : null,
+        barcode: _barcodeController.text.isNotEmpty
+            ? _barcodeController.text
+            : null,
+        minStockLevel: _minStockLevelController.text.isNotEmpty
+            ? int.parse(_minStockLevelController.text)
+            : null,
         imageUrl: widget.item?.imageUrl, // Keep existing image URL if any
         localImagePath: _localImagePath, // Save local image path
         createdAt: widget.item?.createdAt ?? DateTime.now(),
@@ -278,13 +297,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
 
   Future<void> _selectDate(BuildContext context, bool isExpiryDate) async {
     if (_isReadOnly) return;
-    
+
     final DateTime? picked = await showModalBottomSheet<DateTime>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => _buildDatePickerBottomSheet(isExpiryDate),
     );
-    
+
     if (picked != null) {
       setState(() {
         if (isExpiryDate) {
@@ -324,7 +343,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
               children: [
                 Text(
                   isExpiryDate ? 'Select Expiry Date' : 'Select Purchase Date',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textColor),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
                 ),
                 IconButton(
                   icon: Icon(Icons.close, color: lightTextColor),
@@ -335,7 +358,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
           ),
           Expanded(
             child: CalendarDatePicker(
-              initialDate: isExpiryDate ? (_expiryDate ?? DateTime.now().add(Duration(days: 30))) : (_purchaseDate ?? DateTime.now()),
+              initialDate: isExpiryDate
+                  ? (_expiryDate ?? DateTime.now().add(Duration(days: 30)))
+                  : (_purchaseDate ?? DateTime.now()),
               firstDate: DateTime(2000),
               lastDate: DateTime(2100),
               onDateChanged: (date) {
@@ -350,7 +375,7 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
 
   void _clearDate(bool isExpiryDate) {
     if (_isReadOnly) return;
-    
+
     setState(() {
       if (isExpiryDate) {
         _expiryDate = null;
@@ -360,10 +385,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     });
   }
 
-
   void _decrementQuantity() {
     if (_isReadOnly) return;
-    
+
     int current = int.tryParse(_quantityController.text) ?? 1;
     if (current > 1) {
       setState(() {
@@ -514,16 +538,17 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
           ),
         ),
         SizedBox(height: 12),
-        
+
         if (_localImagePath != null || widget.item?.imageUrl != null)
           _buildImagePreview()
         else
           _buildImagePlaceholder(),
-          
+
         if (_localImagePath != null || widget.item?.imageUrl != null)
           SizedBox(height: 12),
-          
-        if (!_isReadOnly && (_localImagePath != null || widget.item?.imageUrl != null))
+
+        if (!_isReadOnly &&
+            (_localImagePath != null || widget.item?.imageUrl != null))
           _buildImageActions(),
       ],
     );
@@ -598,26 +623,32 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                   },
                 )
               : widget.item?.imageUrl != null
-                  ? Image.network(
-                      widget.item!.imageUrl!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+              ? Image.network(
+                  widget.item!.imageUrl!,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  loadingBuilder:
+                      (
+                        BuildContext context,
+                        Widget child,
+                        ImageChunkEvent? loadingProgress,
+                      ) {
                         if (loadingProgress == null) return child;
                         return Center(
                           child: CircularProgressIndicator(
                             value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
                                 : null,
                             color: primaryColor,
                           ),
                         );
                       },
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildImageError();
-                      },
-                    )
-                  : _buildImageError(),
+                  errorBuilder: (context, error, stackTrace) {
+                    return _buildImageError();
+                  },
+                )
+              : _buildImageError(),
         ),
       ),
     );
@@ -645,7 +676,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
             style: OutlinedButton.styleFrom(
               foregroundColor: primaryColor,
               side: BorderSide(color: primaryColor),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               padding: EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -659,7 +692,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
             style: OutlinedButton.styleFrom(
               foregroundColor: errorColor,
               side: BorderSide(color: errorColor),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               padding: EdgeInsets.symmetric(vertical: 12),
             ),
           ),
@@ -701,7 +736,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                     children: [
                       Text(
                         'Image Preview',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: textColor),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
                       ),
                       IconButton(
                         icon: Icon(Icons.close, color: lightTextColor),
@@ -726,25 +765,41 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                 fit: BoxFit.contain,
                               )
                             : widget.item?.imageUrl != null
-                                ? Image.network(
-                                    widget.item!.imageUrl!,
-                                    fit: BoxFit.contain,
-                                    loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                            ? Image.network(
+                                widget.item!.imageUrl!,
+                                fit: BoxFit.contain,
+                                loadingBuilder:
+                                    (
+                                      BuildContext context,
+                                      Widget child,
+                                      ImageChunkEvent? loadingProgress,
+                                    ) {
                                       if (loadingProgress == null) return child;
                                       return Center(
                                         child: CircularProgressIndicator(
-                                          value: loadingProgress.expectedTotalBytes != null
-                                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                          value:
+                                              loadingProgress
+                                                      .expectedTotalBytes !=
+                                                  null
+                                              ? loadingProgress
+                                                        .cumulativeBytesLoaded /
+                                                    loadingProgress
+                                                        .expectedTotalBytes!
                                               : null,
                                           color: primaryColor,
                                         ),
                                       );
                                     },
-                                    errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                                errorBuilder:
+                                    (
+                                      BuildContext context,
+                                      Object error,
+                                      StackTrace? stackTrace,
+                                    ) {
                                       return _buildImageError();
                                     },
-                                  )
-                                : _buildImageError(),
+                              )
+                            : _buildImageError(),
                       ),
                     ),
                   ),
@@ -756,8 +811,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 32,
+                      ),
                       elevation: 2,
                     ),
                     child: Text('Close'),
@@ -800,7 +860,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                    child: Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
                 Spacer(),
@@ -846,7 +910,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.inventory_2_outlined, size: 16, color: Colors.white),
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      size: 16,
+                      color: Colors.white,
+                    ),
                     SizedBox(width: 6),
                     Text(
                       '${widget.item!.quantity} in stock',
@@ -901,7 +969,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
     );
   }
 
-  Widget _buildSectionCard({required String title, required IconData icon, required List<Widget> children}) {
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -933,7 +1005,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                 SizedBox(width: 12),
                 Text(
                   title,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textColor),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
                 ),
               ],
             ),
@@ -973,23 +1049,40 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
         else if (isPrice)
           _buildPriceField()
         else
-          _buildTextField(controller, '', icon, isRequired,
-              focusNode: focusNode,
-              maxLines: maxLines,
-              validator: validator),
+          _buildTextField(
+            controller,
+            '',
+            icon,
+            isRequired,
+            focusNode: focusNode,
+            maxLines: maxLines,
+            validator: validator,
+          ),
       ],
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, bool isRequired,
-      {FocusNode? focusNode, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator, int maxLines = 1, String? prefixText}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon,
+    bool isRequired, {
+    FocusNode? focusNode,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String?)? validator,
+    int maxLines = 1,
+    String? prefixText,
+  }) {
     return TextFormField(
       controller: controller,
       focusNode: focusNode,
       enabled: !_isReadOnly,
       decoration: InputDecoration(
         labelText: label.isNotEmpty ? (isRequired ? '$label *' : label) : null,
-        prefixIcon: icon != Icons.attach_money ? Icon(icon, color: _isReadOnly ? disabledColor : lightTextColor) : null,
+        prefixIcon: icon != Icons.attach_money
+            ? Icon(icon, color: _isReadOnly ? disabledColor : lightTextColor)
+            : null,
         prefixText: prefixText,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -1013,14 +1106,19 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
         ),
         filled: true,
         fillColor: _isReadOnly ? Colors.grey[100] : Colors.white,
-        labelStyle: TextStyle(color: _isReadOnly ? disabledColor : lightTextColor),
+        labelStyle: TextStyle(
+          color: _isReadOnly ? disabledColor : lightTextColor,
+        ),
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: _isReadOnly ? null : validator,
       maxLines: maxLines,
-      style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
+      style: TextStyle(
+        fontSize: 15,
+        color: _isReadOnly ? disabledColor : textColor,
+      ),
     );
   }
 
@@ -1038,7 +1136,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
         ),
         SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _categoryController.text.isNotEmpty ? _categoryController.text : _categories[0],
+          value: _categoryController.text.isNotEmpty
+              ? _categoryController.text
+              : _categories[0],
           decoration: InputDecoration(
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -1063,28 +1163,47 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
             filled: true,
             fillColor: _isReadOnly ? Colors.grey[100] : Colors.white,
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            prefixIcon: Icon(Icons.category_outlined, color: _isReadOnly ? disabledColor : lightTextColor),
+            prefixIcon: Icon(
+              Icons.category_outlined,
+              color: _isReadOnly ? disabledColor : lightTextColor,
+            ),
           ),
           items: _categories.map((String category) {
             return DropdownMenuItem<String>(
               value: category,
-              child: Text(category, style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor)),
+              child: Text(
+                category,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: _isReadOnly ? disabledColor : textColor,
+                ),
+              ),
             );
           }).toList(),
-          onChanged: _isReadOnly ? null : (String? newValue) {
-            setState(() {
-              _categoryController.text = newValue!;
-            });
-          },
-          validator: _isReadOnly ? null : (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please select a category';
-            }
-            return null;
-          },
+          onChanged: _isReadOnly
+              ? null
+              : (String? newValue) {
+                  setState(() {
+                    _categoryController.text = newValue!;
+                  });
+                },
+          validator: _isReadOnly
+              ? null
+              : (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please select a category';
+                  }
+                  return null;
+                },
           dropdownColor: Colors.white,
-          style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
-          icon: Icon(Icons.arrow_drop_down, color: _isReadOnly ? disabledColor : lightTextColor),
+          style: TextStyle(
+            fontSize: 15,
+            color: _isReadOnly ? disabledColor : textColor,
+          ),
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: _isReadOnly ? disabledColor : lightTextColor,
+          ),
         ),
       ],
     );
@@ -1112,13 +1231,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
               icon: Icon(Icons.remove, size: 20, color: primaryColor),
               onPressed: _decrementQuantity, // Always enabled
               padding: EdgeInsets.all(8),
-              constraints: BoxConstraints(
-                minWidth: 48,
-                minHeight: 48,
-              ),
+              constraints: BoxConstraints(minWidth: 48, minHeight: 48),
             ),
           ),
-          
+
           // Quantity input field
           Expanded(
             child: TextFormField(
@@ -1131,28 +1247,34 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                 focusedBorder: InputBorder.none,
                 errorBorder: InputBorder.none,
                 focusedErrorBorder: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 filled: false,
               ),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              validator: _isReadOnly ? null : (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter quantity';
-                }
-                if (int.tryParse(value) == null || int.parse(value) <= 0) {
-                  return 'Please enter valid quantity';
-                }
-                return null;
-              },
+              validator: _isReadOnly
+                  ? null
+                  : (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter quantity';
+                      }
+                      if (int.tryParse(value) == null ||
+                          int.parse(value) <= 0) {
+                        return 'Please enter valid quantity';
+                      }
+                      return null;
+                    },
               style: TextStyle(
-                fontSize: 16, 
+                fontSize: 16,
                 color: _isReadOnly ? disabledColor : textColor,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          
+
           // Increment button - DISABLED (as per your requirement)
           Container(
             decoration: BoxDecoration(
@@ -1163,13 +1285,14 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
               ),
             ),
             child: IconButton(
-              icon: Icon(Icons.add, size: 20, color: disabledColor), // Use disabled color
+              icon: Icon(
+                Icons.add,
+                size: 20,
+                color: disabledColor,
+              ), // Use disabled color
               onPressed: null, // Disabled - user cannot click
               padding: EdgeInsets.all(8),
-              constraints: BoxConstraints(
-                minWidth: 48,
-                minHeight: 48,
-              ),
+              constraints: BoxConstraints(minWidth: 48, minHeight: 48),
             ),
           ),
         ],
@@ -1182,7 +1305,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
       controller: _priceController,
       enabled: !_isReadOnly,
       decoration: InputDecoration(
-        prefixIcon: Icon(Icons.attach_money, color: _isReadOnly ? disabledColor : lightTextColor),
+        prefixIcon: Icon(
+          Icons.attach_money,
+          color: _isReadOnly ? disabledColor : lightTextColor,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -1208,16 +1334,21 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       keyboardType: TextInputType.numberWithOptions(decimal: true),
-      validator: _isReadOnly ? null : (value) {
-        if (value == null || value.isEmpty) {
-          return 'Please enter price';
-        }
-        if (double.tryParse(value) == null || double.parse(value) < 0) {
-          return 'Please enter valid price';
-        }
-        return null;
-      },
-      style: TextStyle(fontSize: 15, color: _isReadOnly ? disabledColor : textColor),
+      validator: _isReadOnly
+          ? null
+          : (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter price';
+              }
+              if (double.tryParse(value) == null || double.parse(value) < 0) {
+                return 'Please enter valid price';
+              }
+              return null;
+            },
+      style: TextStyle(
+        fontSize: 15,
+        color: _isReadOnly ? disabledColor : textColor,
+      ),
     );
   }
 
@@ -1255,10 +1386,14 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      date != null ? DateFormat('MMM dd, yyyy').format(date) : 'Select date',
+                      date != null
+                          ? DateFormat('MMM dd, yyyy').format(date)
+                          : 'Select date',
                       style: TextStyle(
                         fontSize: 15,
-                        color: date != null ? (_isReadOnly ? disabledColor : textColor) : (_isReadOnly ? disabledColor : lightTextColor),
+                        color: date != null
+                            ? (_isReadOnly ? disabledColor : textColor)
+                            : (_isReadOnly ? disabledColor : lightTextColor),
                       ),
                     ),
                   ),
@@ -1271,7 +1406,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                           color: Colors.grey[100],
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.clear, color: lightTextColor, size: 16),
+                        child: Icon(
+                          Icons.clear,
+                          color: lightTextColor,
+                          size: 16,
+                        ),
                       ),
                     ),
                 ],
@@ -1294,7 +1433,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
             style: ElevatedButton.styleFrom(
               backgroundColor: primaryColor,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               elevation: 3,
               shadowColor: primaryColor.withOpacity(0.3),
             ),
@@ -1314,7 +1455,10 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                       SizedBox(width: 8),
                       Text(
                         _isEditMode ? 'Update Item' : 'Add to Inventory',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -1329,7 +1473,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
               onPressed: () => Navigator.pop(context),
               style: TextButton.styleFrom(
                 foregroundColor: lightTextColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: Text('Cancel'),
             ),
@@ -1341,12 +1487,14 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
 
   void _showDeleteDialog() {
     if (_isReadOnly) return;
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           backgroundColor: Colors.transparent,
           child: Container(
             padding: EdgeInsets.all(0),
@@ -1383,12 +1531,20 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                           color: warningColor,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.delete_forever, color: Colors.white, size: 30),
+                        child: Icon(
+                          Icons.delete_forever,
+                          color: Colors.white,
+                          size: 30,
+                        ),
                       ),
                       SizedBox(height: 16),
                       Text(
                         'Delete Item',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: textColor),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                        ),
                       ),
                       SizedBox(height: 8),
                       Text(
@@ -1405,7 +1561,11 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                       Text(
                         'Are you sure you want to delete "${widget.item?.name}"?',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, color: textColor, height: 1.5),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: textColor,
+                          height: 1.5,
+                        ),
                       ),
                       SizedBox(height: 24),
                       Row(
@@ -1416,7 +1576,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: lightTextColor,
                                 side: BorderSide(color: Colors.grey[300]!),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                                 padding: EdgeInsets.symmetric(vertical: 14),
                               ),
                               child: Text('Cancel'),
@@ -1431,8 +1593,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                   setState(() {
                                     _isLoading = true;
                                   });
-                                  await _inventoryService.deleteItem(widget.householdId, widget.item!.id!);
-                                  _showSuccessSnackBar('${widget.item?.name} deleted successfully');
+                                  await _inventoryService.deleteItem(
+                                    widget.householdId,
+                                    widget.item!.id!,
+                                  );
+                                  _showSuccessSnackBar(
+                                    '${widget.item?.name} deleted successfully',
+                                  );
                                   Navigator.pop(context);
                                 } catch (e) {
                                   _showErrorSnackBar('Error deleting item: $e');
@@ -1445,7 +1612,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: errorColor,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                                 padding: EdgeInsets.symmetric(vertical: 14),
                               ),
                               child: Text('Delete'),
@@ -1516,10 +1685,12 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                             focusNode: _quantityFocus,
                                             isQuantity: true,
                                             validator: (value) {
-                                              if (value == null || value.isEmpty) {
+                                              if (value == null ||
+                                                  value.isEmpty) {
                                                 return 'Please enter quantity';
                                               }
-                                              if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                                              if (int.tryParse(value) == null ||
+                                                  int.parse(value) <= 0) {
                                                 return 'Please enter valid quantity';
                                               }
                                               return null;
@@ -1535,10 +1706,13 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                             focusNode: _priceFocus,
                                             isPrice: true,
                                             validator: (value) {
-                                              if (value == null || value.isEmpty) {
+                                              if (value == null ||
+                                                  value.isEmpty) {
                                                 return 'Please enter price';
                                               }
-                                              if (double.tryParse(value) == null || double.parse(value) < 0) {
+                                              if (double.tryParse(value) ==
+                                                      null ||
+                                                  double.parse(value) < 0) {
                                                 return 'Please enter valid price';
                                               }
                                               return null;
@@ -1549,19 +1723,17 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                     ),
                                   ],
                                 ),
-                                
+
                                 SizedBox(height: 20),
-                                
+
                                 _buildSectionCard(
                                   title: 'Media',
                                   icon: Icons.photo_library_outlined,
-                                  children: [
-                                    _buildImageSection(),
-                                  ],
+                                  children: [_buildImageSection()],
                                 ),
-                                
+
                                 SizedBox(height: 20),
-                                
+
                                 _buildSectionCard(
                                   title: 'Stock Management',
                                   icon: Icons.analytics_outlined,
@@ -1574,7 +1746,8 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                         if (value == null || value.isEmpty) {
                                           return 'Please enter minimum stock level';
                                         }
-                                        if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                                        if (int.tryParse(value) == null ||
+                                            int.parse(value) <= 0) {
                                           return 'Please enter valid number';
                                         }
                                         return null;
@@ -1588,9 +1761,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                     ),
                                   ],
                                 ),
-                                
+
                                 SizedBox(height: 20),
-                                
+
                                 _buildSectionCard(
                                   title: 'Additional Details',
                                   icon: Icons.description_outlined,
@@ -1605,11 +1778,19 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: _buildDateField('Purchase Date', _purchaseDate, false),
+                                          child: _buildDateField(
+                                            'Purchase Date',
+                                            _purchaseDate,
+                                            false,
+                                          ),
                                         ),
                                         SizedBox(width: 16),
                                         Expanded(
-                                          child: _buildDateField('Expiry Date', _expiryDate, true),
+                                          child: _buildDateField(
+                                            'Expiry Date',
+                                            _expiryDate,
+                                            true,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1627,9 +1808,9 @@ class _InventoryEditPageState extends State<InventoryEditPage> with SingleTicker
                                     ),
                                   ],
                                 ),
-                                
+
                                 SizedBox(height: 32),
-                                
+
                                 if (!_isReadOnly) _buildActionButtons(),
                               ],
                             ),

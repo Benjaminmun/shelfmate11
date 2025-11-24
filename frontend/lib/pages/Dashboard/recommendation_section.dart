@@ -140,6 +140,7 @@ class _RecommendationSectionState extends State<RecommendationSection> {
           textLight: widget.textLight,
           onAddToShoppingList: widget.onAddToShoppingList,
           onNavigateToItem: widget.onNavigateToItem,
+          userRole: '',
         ),
       ),
     ).then((_) => _refreshData());
@@ -159,10 +160,6 @@ class _RecommendationSectionState extends State<RecommendationSection> {
   }
 
   Widget _buildHeader() {
-    final urgentCount = _smartRecommendations
-        .where((rec) => rec['priority'] == 'high')
-        .length;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -191,41 +188,6 @@ class _RecommendationSectionState extends State<RecommendationSection> {
             ),
           ],
         ),
-        if (_smartRecommendations.isNotEmpty && !_isRecommendationsLoading)
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            child: Row(
-              children: [
-                if (urgentCount > 0) ...[
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$urgentCount urgent items',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: widget.errorColor,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: urgentCount > 0 ? 1.0 : 0.0,
-                          backgroundColor: widget.backgroundColor,
-                          color: widget.warningColor,
-                          minHeight: 4,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                ],
-              ],
-            ),
-          ),
       ],
     );
   }

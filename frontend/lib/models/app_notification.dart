@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
 class AppNotification {
   final String id;
@@ -28,6 +28,12 @@ class AppNotification {
     this.isRead = false,
   });
 
+  // Check if this is a grouped notification
+  bool get isGrouped => type.endsWith('_grouped');
+
+  // Get item count for grouped notifications
+  int get itemCount => actionData?['itemCount'] ?? 1;
+
   Color getColor(BuildContext context) {
     switch (priority) {
       case 'high':
@@ -44,8 +50,10 @@ class AppNotification {
   IconData getIcon() {
     switch (type) {
       case 'low_stock':
+      case 'low_stock_grouped':
         return Icons.inventory_2_rounded;
       case 'expiry':
+      case 'expiry_grouped':
         return Icons.calendar_today_rounded;
       case 'recommendation':
         return Icons.auto_awesome_rounded;
@@ -63,8 +71,10 @@ class AppNotification {
   String getTypeLabel() {
     switch (type) {
       case 'low_stock':
+      case 'low_stock_grouped':
         return 'Stock Alert';
       case 'expiry':
+      case 'expiry_grouped':
         return 'Expiry Alert';
       case 'recommendation':
         return 'Recommendation';
@@ -77,6 +87,23 @@ class AppNotification {
       default:
         return 'Notification';
     }
+  }
+
+  // Convert to Firestore map
+  Map<String, dynamic> toFirestoreMap() {
+    return {
+      'id': id,
+      'title': title,
+      'message': message,
+      'type': type,
+      'priority': priority,
+      'itemId': itemId,
+      'itemName': itemName,
+      'actionData': actionData,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'isRead': isRead,
+      'householdId': householdId,
+    };
   }
 
   @override

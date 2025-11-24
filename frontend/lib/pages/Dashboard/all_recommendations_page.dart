@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:frontend/services/inventory_recomendation_service.dart';
+import '../../services/inventory_service.dart';
 import '../../services/shopping_list_service.dart';
 import 'shopping_list_page.dart';
+import '../inventory/inventory_edit_page.dart';
 
 class AllRecommendationsPage extends StatefulWidget {
   final String householdId;
   final String householdName;
+  final String userRole;
   final Color primaryColor;
   final Color secondaryColor;
   final Color accentColor;
@@ -18,12 +21,12 @@ class AllRecommendationsPage extends StatefulWidget {
   final Color textSecondary;
   final Color textLight;
   final Function(String, int, String) onAddToShoppingList;
-  final Function(String) onNavigateToItem;
 
   const AllRecommendationsPage({
     Key? key,
     required this.householdId,
     required this.householdName,
+    required this.userRole,
     required this.primaryColor,
     required this.secondaryColor,
     required this.accentColor,
@@ -36,7 +39,7 @@ class AllRecommendationsPage extends StatefulWidget {
     required this.textSecondary,
     required this.textLight,
     required this.onAddToShoppingList,
-    required this.onNavigateToItem,
+    required Function(String p1) onNavigateToItem,
   }) : super(key: key);
 
   @override
@@ -47,6 +50,7 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> {
   final InventoryRecommendationService _recommendationService =
       InventoryRecommendationService();
   final ShoppingListService _shoppingListService = ShoppingListService();
+  final InventoryService _inventoryService = InventoryService();
 
   List<Map<String, dynamic>> _allRecommendations = [];
   bool _isLoading = false;
@@ -196,6 +200,49 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> {
       }
     } catch (e) {
       _showErrorSnackbar('Error removing item: $e');
+    }
+  }
+
+  Future<void> _navigateToItemDetails(String itemId) async {
+    try {
+      // Show loading
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Fetch the complete item data
+      final item = await _inventoryService.getItem(widget.householdId, itemId);
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Navigate to InventoryEditPage in view-only mode
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => InventoryEditPage(
+              householdId: widget.householdId,
+              householdName: widget.householdName,
+              item: item,
+              userRole: widget.userRole,
+              barcode: item.barcode,
+            ),
+          ),
+        ).then((_) {
+          // Refresh when returning from item details
+          _loadCartState();
+          _loadShoppingListCount();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showErrorSnackbar('Error loading item details: $e');
+      }
     }
   }
 
@@ -860,9 +907,12 @@ class _AllRecommendationsPageState extends State<AllRecommendationsPage> {
         recommendation: recommendation,
         isInCart: _itemsInCart.contains(recommendation['itemId']),
         onToggleCart: () => _toggleCartStatus(recommendation),
-        onViewItem: () {
-          Navigator.pop(context);
-          widget.onNavigateToItem(recommendation['itemId']);
+        onViewItem: () async {
+          Navigator.pop(context); // Close the bottom sheet
+          final String itemId = recommendation['itemId'];
+          if (itemId.isNotEmpty) {
+            await _navigateToItemDetails(itemId);
+          }
         },
         primaryColor: widget.primaryColor,
         successColor: widget.successColor,
