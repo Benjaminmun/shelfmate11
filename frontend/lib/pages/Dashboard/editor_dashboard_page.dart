@@ -1421,14 +1421,13 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
   int _expiringSoonItems = 0;
   double _totalValue = 0.0;
   List<Map<String, dynamic>> _recentActivities = [];
-  Map<String, dynamic> _activityStats = {};
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
   bool _isActivitiesLoading = true;
 
   int _currentIndex = 0;
-  int _selectedActivityTab = 0;
+  // REMOVED: _selectedActivityTab variable
 
   // Stream subscriptions for real-time data
   StreamSubscription<Map<String, dynamic>>? _statsSubscription;
@@ -1617,9 +1616,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
   Future<void> _loadActivityStats() async {
     final stats = await _dashboardService.getActivityStats(_currentHouseholdId);
     if (mounted) {
-      setState(() {
-        _activityStats = stats;
-      });
+      setState(() {});
     }
   }
 
@@ -2327,7 +2324,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
               _lowStockItems,
               Icons.warning_amber_rounded,
               _warningColor,
-              'Items below 5 quantity',
+              'Items below 2 quantity',
             ),
             _buildEnhancedStatCard(
               'Expiring Soon',
@@ -2468,19 +2465,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
                 letterSpacing: -0.5,
               ),
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: _surfaceColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.black.withOpacity(0.05)),
-              ),
-              child: Row(
-                children: [
-                  _buildActivityTab('Recent', 0),
-                  _buildActivityTab('Stats', 1),
-                ],
-              ),
-            ),
+            // REMOVED: Tab selector for Recent/Stats
           ],
         ),
         SizedBox(height: 16),
@@ -2488,34 +2473,9 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.5,
           ),
-          child: _selectedActivityTab == 0
-              ? _buildRecentActivityView()
-              : _buildActivityStatsView(),
+          child: _buildRecentActivityView(), // Always show recent activities
         ),
       ],
-    );
-  }
-
-  Widget _buildActivityTab(String text, int index) {
-    final isSelected = _selectedActivityTab == index;
-    return Material(
-      color: isSelected ? _primaryColor.withOpacity(0.1) : Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: () => setState(() => _selectedActivityTab = index),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? _primaryColor : _textLight,
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -2612,161 +2572,7 @@ class _EditorDashboardPageState extends State<EditorDashboardPage>
     );
   }
 
-  Widget _buildActivityStatsView() {
-    final total = _activityStats['totalActivities'] ?? 0;
-    final adds = _activityStats['adds'] ?? 0;
-    final updates = _activityStats['updates'] ?? 0;
-    final deletes = _activityStats['deletes'] ?? 0;
-    final warnings = _activityStats['warnings'] ?? 0;
-
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 15,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            'Activity Statistics (Last 7 Days)',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: _textPrimary,
-            ),
-          ),
-          SizedBox(height: 12),
-          GridView(
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 2,
-              mainAxisSpacing: 2,
-              childAspectRatio: 1.4,
-            ),
-            children: [
-              _buildActivityStatItem(
-                'Total Activities',
-                total,
-                Icons.analytics_rounded,
-                _primaryColor,
-              ),
-              _buildActivityStatItem(
-                'Items Added',
-                adds,
-                Icons.add_rounded,
-                _successColor,
-              ),
-              _buildActivityStatItem(
-                'Items Updated',
-                updates,
-                Icons.edit_rounded,
-                _accentColor,
-              ),
-              _buildActivityStatItem(
-                'Items Deleted',
-                deletes,
-                Icons.delete_rounded,
-                _errorColor,
-              ),
-            ],
-          ),
-          if (warnings > 0) ...[
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _warningColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _warningColor.withOpacity(0.2)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: _warningColor,
-                    size: 24,
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$warnings Low Stock Warnings',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: _textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Consider restocking these items soon',
-                          style: TextStyle(fontSize: 12, color: _textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityStatItem(
-    String title,
-    int value,
-    IconData icon,
-    Color color,
-  ) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 18),
-              SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _textSecondary,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          AnimatedStatNumber(
-            value: value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: _textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // REMOVED: _buildActivityStatsView() method
 
   Widget _buildEmptyActivityState() {
     return Container(

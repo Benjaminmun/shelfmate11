@@ -31,13 +31,14 @@ class EnhancedActivityItem extends StatelessWidget {
     final time = timestamp.toDate().toLocal();
     final icon = _getActivityIcon(activity['type']);
     final color = _getActivityColor(activity['type']);
-    
+
     // Extract user and item information
     final String fullName = activity['fullName'] ?? 'Unknown User';
     final String itemName = activity['itemName'] ?? '';
     final String profileImage = activity['profileImage'] ?? '';
     final String itemImage = activity['itemImage'] ?? '';
-    final bool isImportant = activity['type'] == 'warning' || activity['type'] == 'delete';
+    final bool isImportant =
+        activity['type'] == 'warning' || activity['type'] == 'delete';
 
     return Container(
       margin: EdgeInsets.only(bottom: 12),
@@ -53,10 +54,12 @@ class EnhancedActivityItem extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isPinned ? color.withOpacity(0.3) : color.withOpacity(0.1),
+                color: isPinned
+                    ? color.withOpacity(0.3)
+                    : color.withOpacity(0.1),
                 width: isPinned ? 2 : 1,
               ),
-              gradient: isImportant 
+              gradient: isImportant
                   ? LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -74,10 +77,7 @@ class EnhancedActivityItem extends StatelessWidget {
                   padding: EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [
-                        color.withOpacity(0.25),
-                        color.withOpacity(0.1),
-                      ],
+                      colors: [color.withOpacity(0.25), color.withOpacity(0.1)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -92,9 +92,9 @@ class EnhancedActivityItem extends StatelessWidget {
                   ),
                   child: Icon(icon, color: color, size: 22),
                 ),
-                
+
                 SizedBox(width: 16),
-                
+
                 // User Avatar
                 Stack(
                   children: [
@@ -126,7 +126,11 @@ class EnhancedActivityItem extends StatelessWidget {
                             width: 2,
                           ),
                         ),
-                        child: Icon(Icons.person, size: 20, color: primaryColor),
+                        child: Icon(
+                          Icons.person,
+                          size: 20,
+                          color: primaryColor,
+                        ),
                       ),
                     Positioned(
                       right: -2,
@@ -137,10 +141,7 @@ class EnhancedActivityItem extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Colors.green,
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: surfaceColor,
-                            width: 2,
-                          ),
+                          border: Border.all(color: surfaceColor, width: 2),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.green.withOpacity(0.4),
@@ -149,18 +150,14 @@ class EnhancedActivityItem extends StatelessWidget {
                             ),
                           ],
                         ),
-                        child: Icon(
-                          Icons.check,
-                          size: 8,
-                          color: Colors.white,
-                        ),
+                        child: Icon(Icons.check, size: 8, color: Colors.white),
                       ),
                     ),
                   ],
                 ),
-                
+
                 SizedBox(width: 16),
-                
+
                 // Content Area
                 Expanded(
                   child: Column(
@@ -196,10 +193,13 @@ class EnhancedActivityItem extends StatelessWidget {
                         ],
                       ),
                       SizedBox(height: 8),
-                      
+
                       // User info
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: primaryColor.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(8),
@@ -224,11 +224,14 @@ class EnhancedActivityItem extends StatelessWidget {
                           ],
                         ),
                       ),
-                      
+
                       if (itemName.isNotEmpty) ...[
                         SizedBox(height: 8),
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: primaryColor.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(10),
@@ -267,7 +270,7 @@ class EnhancedActivityItem extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Time and Action Section
                 Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -275,7 +278,10 @@ class EnhancedActivityItem extends StatelessWidget {
                   children: [
                     // Time with context
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -311,9 +317,9 @@ class EnhancedActivityItem extends StatelessWidget {
                         ],
                       ),
                     ),
-                    
+
                     SizedBox(height: 8),
-                    
+
                     // Item Image
                     if (itemImage.isNotEmpty || itemName.isNotEmpty)
                       Stack(
@@ -323,13 +329,13 @@ class EnhancedActivityItem extends StatelessWidget {
                             height: 36,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
-                              image: itemImage.isNotEmpty 
+                              image: itemImage.isNotEmpty
                                   ? DecorationImage(
                                       image: NetworkImage(itemImage),
                                       fit: BoxFit.cover,
                                     )
                                   : null,
-                              color: itemImage.isEmpty 
+                              color: itemImage.isEmpty
                                   ? primaryColor.withOpacity(0.1)
                                   : null,
                               boxShadow: [
@@ -391,7 +397,7 @@ class EnhancedActivityItem extends StatelessWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final activityDate = DateTime(date.year, date.month, date.day);
-    
+
     if (activityDate == today) {
       return 'Today';
     } else if (activityDate == today.subtract(Duration(days: 1))) {
@@ -403,23 +409,35 @@ class EnhancedActivityItem extends StatelessWidget {
 
   IconData _getActivityIcon(String type) {
     switch (type) {
-      case 'add': return Icons.add_circle_rounded;
-      case 'update': return Icons.edit_rounded;
-      case 'delete': return Icons.delete_rounded;
-      case 'warning': return Icons.warning_amber_rounded;
-      case 'info': return Icons.info_rounded;
-      default: return Icons.info_rounded;
+      case 'add':
+        return Icons.add_circle_rounded;
+      case 'update':
+        return Icons.edit_rounded;
+      case 'delete':
+        return Icons.delete_rounded;
+      case 'warning':
+        return Icons.warning_amber_rounded;
+      case 'info':
+        return Icons.info_rounded;
+      default:
+        return Icons.info_rounded;
     }
   }
 
   Color _getActivityColor(String type) {
     switch (type) {
-      case 'add': return Color(0xFF10B981);
-      case 'update': return Color(0xFF3B82F6);
-      case 'delete': return Color(0xFFEF4444);
-      case 'warning': return Color(0xFFF59E0B);
-      case 'info': return Color(0xFF6B7280);
-      default: return Color(0xFF6B7280);
+      case 'add':
+        return Color(0xFF10B981);
+      case 'update':
+        return Color(0xFF3B82F6);
+      case 'delete':
+        return Color(0xFFEF4444);
+      case 'warning':
+        return Color(0xFFF59E0B);
+      case 'info':
+        return Color(0xFF6B7280);
+      default:
+        return Color(0xFF6B7280);
     }
   }
 }
@@ -428,7 +446,8 @@ class EnhancedActivityItem extends StatelessWidget {
 class ActivityDetailPage extends StatelessWidget {
   final Map<String, dynamic> activity;
 
-  const ActivityDetailPage({Key? key, required this.activity}) : super(key: key);
+  const ActivityDetailPage({Key? key, required this.activity})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -487,22 +506,42 @@ class ActivityDetailPage extends StatelessWidget {
           children: [
             // Header Card
             _buildHeaderCard(icon, color, textPrimary, textSecondary, time),
-            
+
             SizedBox(height: 24),
-            
+
             // Activity Message Card
-            _buildMessageCard(activity, primaryColor, textPrimary, textSecondary, surfaceColor),
-            
+            _buildMessageCard(
+              activity,
+              primaryColor,
+              textPrimary,
+              textSecondary,
+              surfaceColor,
+            ),
+
             SizedBox(height: 20),
-            
+
             // Participants Section
-            _buildParticipantsSection(fullName, profileImage, itemName, itemImage, primaryColor, surfaceColor, textPrimary),
-            
+            _buildParticipantsSection(
+              fullName,
+              profileImage,
+              itemName,
+              itemImage,
+              primaryColor,
+              surfaceColor,
+              textPrimary,
+            ),
+
             SizedBox(height: 24),
-            
+
             // Timeline Section
-            _buildTimelineSection(time, primaryColor, surfaceColor, textPrimary, textSecondary),
-            
+            _buildTimelineSection(
+              time,
+              primaryColor,
+              surfaceColor,
+              textPrimary,
+              textSecondary,
+            ),
+
             SizedBox(height: 40),
           ],
         ),
@@ -510,7 +549,13 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderCard(IconData icon, Color color, Color textPrimary, Color textSecondary, DateTime time) {
+  Widget _buildHeaderCard(
+    IconData icon,
+    Color color,
+    Color textPrimary,
+    Color textSecondary,
+    DateTime time,
+  ) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(24),
@@ -518,10 +563,7 @@ class ActivityDetailPage extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            color.withOpacity(0.2),
-            color.withOpacity(0.05),
-          ],
+          colors: [color.withOpacity(0.2), color.withOpacity(0.05)],
         ),
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
@@ -538,10 +580,7 @@ class ActivityDetailPage extends StatelessWidget {
             padding: EdgeInsets.all(18),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  color.withOpacity(0.4),
-                  color.withOpacity(0.2),
-                ],
+                colors: [color.withOpacity(0.4), color.withOpacity(0.2)],
               ),
               shape: BoxShape.circle,
               boxShadow: [
@@ -587,7 +626,11 @@ class ActivityDetailPage extends StatelessWidget {
                 SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(Icons.access_time_rounded, size: 16, color: textSecondary),
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 16,
+                      color: textSecondary,
+                    ),
                     SizedBox(width: 6),
                     Text(
                       _formatDetailedTime(time),
@@ -607,7 +650,13 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMessageCard(Map<String, dynamic> activity, Color primaryColor, Color textPrimary, Color textSecondary, Color surfaceColor) {
+  Widget _buildMessageCard(
+    Map<String, dynamic> activity,
+    Color primaryColor,
+    Color textPrimary,
+    Color textSecondary,
+    Color surfaceColor,
+  ) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(20),
@@ -633,7 +682,11 @@ class ActivityDetailPage extends StatelessWidget {
                   color: primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.description_rounded, color: primaryColor, size: 20),
+                child: Icon(
+                  Icons.description_rounded,
+                  color: primaryColor,
+                  size: 20,
+                ),
               ),
               SizedBox(width: 12),
               Text(
@@ -669,7 +722,15 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildParticipantsSection(String fullName, String profileImage, String itemName, String itemImage, Color primaryColor, Color surfaceColor, Color textPrimary) {
+  Widget _buildParticipantsSection(
+    String fullName,
+    String profileImage,
+    String itemName,
+    String itemImage,
+    Color primaryColor,
+    Color surfaceColor,
+    Color textPrimary,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -711,7 +772,13 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTimelineSection(DateTime time, Color primaryColor, Color surfaceColor, Color textPrimary, Color textSecondary) {
+  Widget _buildTimelineSection(
+    DateTime time,
+    Color primaryColor,
+    Color surfaceColor,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -775,7 +842,14 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEnhancedParticipantCard(String title, String name, String imageUrl, IconData icon, Color color, Color surfaceColor) {
+  Widget _buildEnhancedParticipantCard(
+    String title,
+    String name,
+    String imageUrl,
+    IconData icon,
+    Color color,
+    Color surfaceColor,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: surfaceColor,
@@ -803,10 +877,7 @@ class ActivityDetailPage extends StatelessWidget {
                     image: NetworkImage(imageUrl),
                     fit: BoxFit.cover,
                   ),
-                  border: Border.all(
-                    color: color.withOpacity(0.2),
-                    width: 2,
-                  ),
+                  border: Border.all(color: color.withOpacity(0.2), width: 2),
                 ),
               )
             else
@@ -816,16 +887,13 @@ class ActivityDetailPage extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(15),
-                  border: Border.all(
-                    color: color.withOpacity(0.2),
-                    width: 2,
-                  ),
+                  border: Border.all(color: color.withOpacity(0.2), width: 2),
                 ),
                 child: Icon(icon, color: color, size: 28),
               ),
-            
+
             SizedBox(width: 20),
-            
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -857,17 +925,20 @@ class ActivityDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEnhancedTimelineItem(IconData icon, String title, String value, String description, Color color) {
+  Widget _buildEnhancedTimelineItem(
+    IconData icon,
+    String title,
+    String value,
+    String description,
+    Color color,
+  ) {
     return Row(
       children: [
         Container(
           padding: EdgeInsets.all(12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                color.withOpacity(0.15),
-                color.withOpacity(0.05),
-              ],
+              colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withOpacity(0.2)),
@@ -899,10 +970,7 @@ class ActivityDetailPage extends StatelessWidget {
               SizedBox(height: 2),
               Text(
                 description,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF94A3B8),
-                ),
+                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
               ),
             ],
           ),
@@ -924,65 +992,104 @@ class ActivityDetailPage extends StatelessWidget {
 
   String _getWeekday(int weekday) {
     switch (weekday) {
-      case 1: return 'Monday';
-      case 2: return 'Tuesday';
-      case 3: return 'Wednesday';
-      case 4: return 'Thursday';
-      case 5: return 'Friday';
-      case 6: return 'Saturday';
-      case 7: return 'Sunday';
-      default: return '';
+      case 1:
+        return 'Monday';
+      case 2:
+        return 'Tuesday';
+      case 3:
+        return 'Wednesday';
+      case 4:
+        return 'Thursday';
+      case 5:
+        return 'Friday';
+      case 6:
+        return 'Saturday';
+      case 7:
+        return 'Sunday';
+      default:
+        return '';
     }
   }
 
   String _getMonth(int month) {
     switch (month) {
-      case 1: return 'January';
-      case 2: return 'February';
-      case 3: return 'March';
-      case 4: return 'April';
-      case 5: return 'May';
-      case 6: return 'June';
-      case 7: return 'July';
-      case 8: return 'August';
-      case 9: return 'September';
-      case 10: return 'October';
-      case 11: return 'November';
-      case 12: return 'December';
-      default: return '';
+      case 1:
+        return 'January';
+      case 2:
+        return 'February';
+      case 3:
+        return 'March';
+      case 4:
+        return 'April';
+      case 5:
+        return 'May';
+      case 6:
+        return 'June';
+      case 7:
+        return 'July';
+      case 8:
+        return 'August';
+      case 9:
+        return 'September';
+      case 10:
+        return 'October';
+      case 11:
+        return 'November';
+      case 12:
+        return 'December';
+      default:
+        return '';
     }
   }
 
   String _getActivityTypeLabel(String type) {
     switch (type) {
-      case 'add': return 'Item Added';
-      case 'update': return 'Item Updated';
-      case 'delete': return 'Item Deleted';
-      case 'warning': return 'Stock Alert';
-      case 'info': return 'Information';
-      default: return 'Activity';
+      case 'add':
+        return 'Item Added';
+      case 'update':
+        return 'Item Updated';
+      case 'delete':
+        return 'Item Deleted';
+      case 'warning':
+        return 'Stock Alert';
+      case 'info':
+        return 'Information';
+      default:
+        return 'Activity';
     }
   }
 
   IconData _getActivityIcon(String type) {
     switch (type) {
-      case 'add': return Icons.add_circle_rounded;
-      case 'update': return Icons.edit_rounded;
-      case 'delete': return Icons.delete_rounded;
-      case 'warning': return Icons.warning_amber_rounded;
-      case 'info': return Icons.info_rounded;
-      default: return Icons.info_rounded;
+      case 'add':
+        return Icons.add_circle_rounded;
+      case 'update':
+        return Icons.edit_rounded;
+      case 'delete':
+        return Icons.delete_rounded;
+      case 'warning':
+        return Icons.warning_amber_rounded;
+      case 'info':
+        return Icons.info_rounded;
+      default:
+        return Icons.info_rounded;
     }
   }
 
   Color _getActivityColor(String type) {
     switch (type) {
-      case 'add': return Color(0xFF10B981);
-      case 'update': return Color(0xFF3B82F6);
-      case 'delete': return Color(0xFFEF4444);
-      case 'warning': return Color(0xFFF59E0B);
-      case 'info': return Color(0xFF6B7280);
-      default: return Color(0xFF6B7280);
+      case 'add':
+        return Color(0xFF10B981);
+      case 'update':
+        return Color(0xFF3B82F6);
+      case 'delete':
+        return Color(0xFFEF4444);
+      case 'warning':
+        return Color(0xFFF59E0B);
+      case 'info':
+        return Color(0xFF6B7280);
+      default:
+        return Color(0xFF6B7280);
     }
   }
 }
@@ -992,13 +1099,18 @@ class ActivityLogPage extends StatefulWidget {
   final String householdId;
   final String householdName;
 
-  const ActivityLogPage({Key? key, required this.householdId, required this.householdName}) : super(key: key);
+  const ActivityLogPage({
+    Key? key,
+    required this.householdId,
+    required this.householdName,
+  }) : super(key: key);
 
   @override
   _ActivityLogPageState createState() => _ActivityLogPageState();
 }
 
-class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProviderStateMixin {
+class _ActivityLogPageState extends State<ActivityLogPage>
+    with SingleTickerProviderStateMixin {
   final DashboardService _dashboardService = DashboardService();
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _allActivities = [];
@@ -1043,7 +1155,10 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels == _scrollController.position.maxScrollExtent && _hasMore && !_isLoading) {
+    if (_scrollController.position.pixels ==
+            _scrollController.position.maxScrollExtent &&
+        _hasMore &&
+        !_isLoading) {
       _loadMoreActivities();
     }
   }
@@ -1116,9 +1231,11 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
     }
   }
 
-  List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> activities) {
+  List<Map<String, dynamic>> _applyFilters(
+    List<Map<String, dynamic>> activities,
+  ) {
     List<Map<String, dynamic>> filtered = activities;
-    
+
     // Apply search filter
     if (_searchQuery.isNotEmpty) {
       filtered = filtered.where((activity) {
@@ -1126,18 +1243,20 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
         final itemName = activity['itemName']?.toString().toLowerCase() ?? '';
         final fullName = activity['fullName']?.toString().toLowerCase() ?? '';
         final query = _searchQuery.toLowerCase();
-        
-        return message.contains(query) || 
-               itemName.contains(query) ||
-               fullName.contains(query);
+
+        return message.contains(query) ||
+            itemName.contains(query) ||
+            fullName.contains(query);
       }).toList();
     }
-    
+
     // Apply type filter
     if (_selectedFilter != 'all') {
-      filtered = filtered.where((activity) => activity['type'] == _selectedFilter).toList();
+      filtered = filtered
+          .where((activity) => activity['type'] == _selectedFilter)
+          .toList();
     }
-    
+
     return filtered;
   }
 
@@ -1262,22 +1381,23 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                             border: InputBorder.none,
                             isDense: true,
                           ),
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: _textPrimary,
-                          ),
+                          style: TextStyle(fontSize: 15, color: _textPrimary),
                         ),
                       ),
                       if (_searchQuery.isNotEmpty)
                         IconButton(
-                          icon: Icon(Icons.clear_rounded, size: 18, color: _textLight),
+                          icon: Icon(
+                            Icons.clear_rounded,
+                            size: 18,
+                            color: _textLight,
+                          ),
                           onPressed: () => _onSearchChanged(''),
                         ),
                     ],
                   ),
                 ),
                 SizedBox(height: 12),
-                
+
                 // Filter Toggle
                 Row(
                   children: [
@@ -1294,7 +1414,10 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                     GestureDetector(
                       onTap: _toggleFilters,
                       child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: _primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -1302,7 +1425,11 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.filter_list_rounded, size: 16, color: _primaryColor),
+                            Icon(
+                              Icons.filter_list_rounded,
+                              size: 16,
+                              color: _primaryColor,
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Filters',
@@ -1314,7 +1441,9 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                             ),
                             SizedBox(width: 4),
                             Icon(
-                              _showFilters ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                              _showFilters
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
                               size: 16,
                               color: _primaryColor,
                             ),
@@ -1324,7 +1453,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                     ),
                   ],
                 ),
-                
+
                 // Animated Filter Options
                 SizeTransition(
                   sizeFactor: _filterAnimation,
@@ -1349,7 +1478,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
               ],
             ),
           ),
-          
+
           // Activities List
           Expanded(
             child: _filteredActivities.isEmpty && !_isLoading
@@ -1362,15 +1491,16 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                       controller: _scrollController,
                       physics: AlwaysScrollableScrollPhysics(),
                       padding: EdgeInsets.all(20),
-                      itemCount: _filteredActivities.length + (_hasMore ? 1 : 0),
+                      itemCount:
+                          _filteredActivities.length + (_hasMore ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index == _filteredActivities.length) {
                           return _buildEnhancedLoadMoreIndicator();
                         }
-                        
+
                         final activity = _filteredActivities[index];
                         final isPinned = activity['type'] == 'warning';
-                        
+
                         return EnhancedActivityItem(
                           activity: activity,
                           onTap: () => _showActivityDetails(activity),
@@ -1442,37 +1572,34 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                 ],
               )
             : _hasMore
-                ? ElevatedButton.icon(
-                    onPressed: _loadMoreActivities,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 2,
-                    ),
-                    icon: Icon(Icons.autorenew_rounded, size: 18),
-                    label: Text(
-                      'Load More Activities',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  )
-                : Container(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      'End',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _textLight,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+            ? ElevatedButton.icon(
+                onPressed: _loadMoreActivities,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
                   ),
+                  elevation: 2,
+                ),
+                icon: Icon(Icons.autorenew_rounded, size: 18),
+                label: Text(
+                  'Load More Activities',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              )
+            : Container(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'End',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: _textLight,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -1499,7 +1626,9 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
             ),
             SizedBox(height: 32),
             Text(
-              _searchQuery.isNotEmpty ? 'No matching activities' : 'No Activities Yet',
+              _searchQuery.isNotEmpty
+                  ? 'No matching activities'
+                  : 'No Activities Yet',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
@@ -1514,11 +1643,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                 _searchQuery.isNotEmpty
                     ? 'No activities found for "${_searchQuery}". Try different keywords or clear your search.'
                     : 'Activities will appear here when you add, update, or delete items from your inventory.',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: _textLight,
-                  height: 1.5,
-                ),
+                style: TextStyle(fontSize: 15, color: _textLight, height: 1.5),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1537,10 +1662,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                 ),
                 child: Text(
                   'Clear Search',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                 ),
               )
             else
@@ -1558,10 +1680,7 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
                 icon: Icon(Icons.refresh_rounded, size: 18),
                 label: Text(
                   'Refresh Activities',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                 ),
               ),
           ],
@@ -1569,23 +1688,24 @@ class _ActivityLogPageState extends State<ActivityLogPage> with SingleTickerProv
       ),
     );
   }
-  
+
   void _showActivityDetails(Map<String, dynamic> activity) {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => ActivityDetailPage(activity: activity),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            ActivityDetailPage(activity: activity),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;
           const curve = Curves.easeInOutCubic;
-          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
           var offsetAnimation = animation.drive(tween);
 
-          return SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          );
+          return SlideTransition(position: offsetAnimation, child: child);
         },
         transitionDuration: Duration(milliseconds: 400),
       ),

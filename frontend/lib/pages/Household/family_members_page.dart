@@ -7,13 +7,15 @@ import '../../services/household_service_controller.dart';
 class FamilyMembersPage extends StatefulWidget {
   final String householdId;
 
-  const FamilyMembersPage({Key? key, required this.householdId}) : super(key: key);
+  const FamilyMembersPage({Key? key, required this.householdId})
+    : super(key: key);
 
   @override
   _FamilyMembersPageState createState() => _FamilyMembersPageState();
 }
 
-class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTickerProviderStateMixin {
+class _FamilyMembersPageState extends State<FamilyMembersPage>
+    with SingleTickerProviderStateMixin {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color secondaryColor = Color(0xFF5D8AA8);
@@ -24,7 +26,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   final Color textPrimary = Color(0xFF2D3748);
   final Color textSecondary = Color(0xFF718096);
   final ScrollController _scrollController = ScrollController();
-  
+
   List<Map<String, dynamic>> _householdMembers = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
@@ -60,11 +62,13 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
       duration: Duration(milliseconds: 300),
     );
     _loadData();
-    
+
     _scrollController.addListener(() {
-      if (_scrollController.position.userScrollDirection == ScrollDirection.forward) {
+      if (_scrollController.position.userScrollDirection ==
+          ScrollDirection.forward) {
         _showFloatingActionButton();
-      } else if (_scrollController.position.userScrollDirection == ScrollDirection.reverse) {
+      } else if (_scrollController.position.userScrollDirection ==
+          ScrollDirection.reverse) {
         _hideFloatingActionButton();
       }
     });
@@ -93,7 +97,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   Future<void> _loadData({bool loadMore = false}) async {
     if (loadMore && (!_hasMore || _isLoadingMore)) return;
-    
+
     try {
       setState(() {
         if (loadMore) {
@@ -108,21 +112,21 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
       // Get user role first
       final role = await _controller.getUserRole(widget.householdId);
-      
+
       // Load household members with enhanced data fetching
       final result = await _controller.getHouseholdMembersPaginated(
-        widget.householdId, 
-        limit: _pageSize, 
-        startAfter: loadMore ? _lastDocument : null
+        widget.householdId,
+        limit: _pageSize,
+        startAfter: loadMore ? _lastDocument : null,
       );
-      
+
       // Enhance member data with user profiles
       final enhancedMembers = await _enhanceMemberData(result.members);
-      
+
       setState(() {
         _userRole = role;
         _isOwner = role == 'creator';
-        
+
         if (loadMore) {
           _householdMembers.addAll(enhancedMembers);
           _isLoadingMore = false;
@@ -130,7 +134,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
           _householdMembers = enhancedMembers;
           _isLoading = false;
         }
-        
+
         _lastDocument = result.lastDocument;
         _hasMore = result.hasMore;
       });
@@ -139,15 +143,20 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         _isLoading = false;
         _isLoadingMore = false;
       });
-      
-      _showErrorSnackBar('Error loading household members: $e', isRetryable: true);
+
+      _showErrorSnackBar(
+        'Error loading household members: $e',
+        isRetryable: true,
+      );
     }
   }
 
   // Enhance member data by fetching additional user information
-  Future<List<Map<String, dynamic>>> _enhanceMemberData(List<Map<String, dynamic>> members) async {
+  Future<List<Map<String, dynamic>>> _enhanceMemberData(
+    List<Map<String, dynamic>> members,
+  ) async {
     final enhancedMembers = <Map<String, dynamic>>[];
-    
+
     for (var member in members) {
       try {
         // Always try to fetch the latest user profile data
@@ -167,7 +176,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         enhancedMembers.add(member);
       }
     }
-    
+
     return enhancedMembers;
   }
 
@@ -178,7 +187,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
           .collection('users')
           .doc(userId)
           .get();
-      
+
       if (doc.exists) {
         return doc.data();
       }
@@ -200,11 +209,13 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         ),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
-        action: isRetryable ? SnackBarAction(
-          label: 'Retry',
-          textColor: Colors.white,
-          onPressed: _loadData,
-        ) : null,
+        action: isRetryable
+            ? SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: _loadData,
+              )
+            : null,
       ),
     );
   }
@@ -224,7 +235,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   String _formatDate(dynamic date) {
     if (date == null) return 'Not available';
-    
+
     try {
       if (date is Timestamp) {
         final dateTime = date.toDate();
@@ -249,7 +260,10 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   }
 
   String _getInitials(String displayName) {
-    final names = displayName.split(' ').where((name) => name.isNotEmpty).toList();
+    final names = displayName
+        .split(' ')
+        .where((name) => name.isNotEmpty)
+        .toList();
     if (names.length >= 2) {
       return '${names[0][0]}${names[1][0]}'.toUpperCase();
     } else if (displayName.isNotEmpty) {
@@ -266,23 +280,23 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   Widget _buildRoleBadge(String role) {
     final bool isCreator = role == 'creator';
     final bool isEditor = role == 'editor';
-    
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        gradient: isCreator 
-                ? LinearGradient(colors: [Colors.blue, Colors.lightBlue])
-                : isEditor
-                    ? LinearGradient(colors: [Colors.purple, Colors.deepPurple])
-                    : LinearGradient(colors: [Colors.green, Colors.lightGreen]),
+        gradient: isCreator
+            ? LinearGradient(colors: [Colors.blue, Colors.lightBlue])
+            : isEditor
+            ? LinearGradient(colors: [Colors.purple, Colors.deepPurple])
+            : LinearGradient(colors: [Colors.green, Colors.lightGreen]),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isCreator 
+            color: isCreator
                 ? Colors.amber.withOpacity(0.3)
-                    : isEditor
-                        ? Colors.purple.withOpacity(0.3)
-                        : Colors.green.withOpacity(0.3),
+                : isEditor
+                ? Colors.purple.withOpacity(0.3)
+                : Colors.green.withOpacity(0.3),
             blurRadius: 4,
             offset: Offset(0, 2),
           ),
@@ -292,8 +306,11 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isCreator ? Icons.star : 
-            isEditor ? Icons.edit : Icons.person,
+            isCreator
+                ? Icons.star
+                : isEditor
+                ? Icons.edit
+                : Icons.person,
             size: 14,
             color: Colors.white,
           ),
@@ -399,13 +416,13 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                             width: double.infinity,
                             padding: EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: selectedRole == role 
+                              color: selectedRole == role
                                   ? primaryColor.withOpacity(0.1)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: selectedRole == role 
-                                    ? primaryColor 
+                                color: selectedRole == role
+                                    ? primaryColor
                                     : Colors.grey[300]!,
                                 width: selectedRole == role ? 2 : 1,
                               ),
@@ -420,7 +437,8 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         _formatRole(role),
@@ -472,7 +490,8 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                 ),
                 if (availableRoles.isNotEmpty)
                   ElevatedButton(
-                    onPressed: selectedRole != null && selectedRole != currentRole
+                    onPressed:
+                        selectedRole != null && selectedRole != currentRole
                         ? () => _changeMemberRole(member, selectedRole!)
                         : null,
                     style: ElevatedButton.styleFrom(
@@ -494,7 +513,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   List<String> _getAvailableRoles() {
     if (_userRole == 'creator') {
-      return [ 'editor', 'member'];
+      return ['editor', 'member'];
     }
     return []; // Members can't change roles
   }
@@ -540,11 +559,13 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     }
   }
 
-  Future<void> _changeMemberRole(Map<String, dynamic> member, String newRole) async {
+  Future<void> _changeMemberRole(
+    Map<String, dynamic> member,
+    String newRole,
+  ) async {
     final String userId = member['userId'];
     final String displayName = _getDisplayName(member);
     final String currentRole = member['userRole'] ?? 'member';
-    
 
     if (newRole == currentRole) {
       _showErrorSnackBar("User already has the $newRole role");
@@ -555,7 +576,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
     try {
       await _controller.updateMemberRole(widget.householdId, userId, newRole);
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -574,7 +595,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
           duration: Duration(seconds: 3),
         ),
       );
-      
+
       // Refresh the data to show the updated role
       _loadData();
     } catch (e) {
@@ -585,7 +606,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   void _showMemberDetails(BuildContext context, Map<String, dynamic> member) {
     final String displayName = _getDisplayName(member);
     final String initials = _getInitials(displayName);
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -658,7 +679,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                   ],
                 ),
               ),
-              
+
               // Details
               Expanded(
                 child: SingleChildScrollView(
@@ -684,14 +705,15 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                           _buildDetailItem(
                             icon: Icons.phone,
                             label: 'Phone Number',
-                            value: member['phone']?.toString() ?? 'Not provided',
+                            value:
+                                member['phone']?.toString() ?? 'Not provided',
                             isImportant: false,
                           ),
                         ],
                       ),
-                      
+
                       SizedBox(height: 24),
-                      
+
                       _buildDetailSection(
                         title: 'Household Information',
                         icon: Icons.family_restroom,
@@ -710,8 +732,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                           ),
                         ],
                       ),
-                      
-                      if ((_isOwner || _userRole == 'admin') && member['userRole'] != 'creator')
+
+                      if ((_isOwner || _userRole == 'admin') &&
+                          member['userRole'] != 'creator')
                         Padding(
                           padding: EdgeInsets.only(top: 24),
                           child: Column(
@@ -737,14 +760,16 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                   ),
                                 ),
                               ),
-                              
+
                               // Remove Button
                               Container(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
                                   onPressed: () {
                                     Navigator.pop(context);
-                                    _removeMember(_householdMembers.indexOf(member));
+                                    _removeMember(
+                                      _householdMembers.indexOf(member),
+                                    );
                                   },
                                   icon: Icon(Icons.person_remove),
                                   label: Text('Remove from Household'),
@@ -772,7 +797,11 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     );
   }
 
-  Widget _buildDetailSection({required String title, required IconData icon, required List<Widget> children}) {
+  Widget _buildDetailSection({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -807,7 +836,12 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
     );
   }
 
-  Widget _buildDetailItem({required IconData icon, required String label, required String value, required bool isImportant}) {
+  Widget _buildDetailItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required bool isImportant,
+  }) {
     return Padding(
       padding: EdgeInsets.only(bottom: 16),
       child: Row(
@@ -855,12 +889,12 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
   void _removeMember(int index) async {
     final member = _householdMembers[index];
     final displayName = _getDisplayName(member);
-    
+
     if (member['userId'] == null) {
       _showErrorSnackBar("Cannot remove member: Missing user ID");
       return;
     }
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -876,7 +910,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Are you sure you want to remove this member from the household?"),
+              Text(
+                "Are you sure you want to remove this member from the household?",
+              ),
               SizedBox(height: 16),
               Container(
                 padding: EdgeInsets.all(16),
@@ -902,18 +938,27 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                         children: [
                           Text(
                             displayName,
-                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
                           ),
                           SizedBox(height: 4),
                           Text(
                             member['email'] ?? '',
-                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
                           ),
                           if (member['phone'] != null) ...[
                             SizedBox(height: 2),
                             Text(
                               member['phone'].toString(),
-                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                              ),
                             ),
                           ],
                         ],
@@ -938,23 +983,30 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         );
       },
     );
-    
+
     if (confirmed == true) {
       setState(() {
         _isRemovingMember = true;
         _removingMemberIndex = index;
       });
-      
+
       try {
-        await _controller.removeHouseholdMember(widget.householdId, member['userId']);
-        
+        await _controller.removeHouseholdMember(
+          widget.householdId,
+          member['userId'],
+        );
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 Icon(Icons.check_circle, color: Colors.white),
                 SizedBox(width: 8),
-                Expanded(child: Text("$displayName has been removed from the household")),
+                Expanded(
+                  child: Text(
+                    "$displayName has been removed from the household",
+                  ),
+                ),
               ],
             ),
             backgroundColor: Colors.green,
@@ -962,7 +1014,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             duration: Duration(seconds: 3),
           ),
         );
-        
+
         _loadData();
       } catch (e) {
         _showErrorSnackBar("Failed to remove member: $e");
@@ -977,11 +1029,12 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 
   Widget _buildMemberCard(Map<String, dynamic> member, int index) {
     final bool isCreator = member['userRole'] == 'creator';
-    final bool isRemovingThisMember = _isRemovingMember && _removingMemberIndex == index;
+    final bool isRemovingThisMember =
+        _isRemovingMember && _removingMemberIndex == index;
     final String displayName = _getDisplayName(member);
     final String initials = _getInitials(displayName);
     final Color avatarColor = _getAvatarColor(displayName);
-    
+
     return Container(
       margin: EdgeInsets.only(bottom: 16),
       child: Stack(
@@ -1001,7 +1054,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
               ),
             ),
           ),
-          
+
           // Main Card Content
           Container(
             decoration: BoxDecoration(
@@ -1019,10 +1072,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                   offset: Offset(0, 2),
                 ),
               ],
-              border: Border.all(
-                color: Colors.grey.withOpacity(0.1),
-                width: 1,
-              ),
+              border: Border.all(color: Colors.grey.withOpacity(0.1), width: 1),
             ),
             child: Material(
               color: Colors.transparent,
@@ -1057,7 +1107,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                           ],
                         ),
                         child: Center(
-                          child: isCreator 
+                          child: isCreator
                               ? Icon(Icons.star, color: Colors.white, size: 28)
                               : Text(
                                   initials,
@@ -1070,9 +1120,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                 ),
                         ),
                       ),
-                      
+
                       SizedBox(width: 16),
-                      
+
                       // Member Details - Enhanced Layout
                       Expanded(
                         child: Column(
@@ -1084,7 +1134,8 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         displayName,
@@ -1098,13 +1149,17 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       SizedBox(height: 4),
-                                      _buildRoleBadge(member['userRole'] ?? 'member'),
+                                      _buildRoleBadge(
+                                        member['userRole'] ?? 'member',
+                                      ),
                                     ],
                                   ),
                                 ),
-                                
+
                                 // Action Menu
-                                if ((_isOwner || _userRole == 'admin') && !isCreator && member['userId'] != null)
+                                if ((_isOwner || _userRole == 'admin') &&
+                                    !isCreator &&
+                                    member['userId'] != null)
                                   Container(
                                     width: 36,
                                     height: 36,
@@ -1117,23 +1172,32 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                             child: SizedBox(
                                               width: 16,
                                               height: 16,
-                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
                                             ),
                                           )
                                         : IconButton(
-                                            icon: Icon(Icons.more_vert, size: 18),
-                                            onPressed: () => _showMemberDetails(context, member),
+                                            icon: Icon(
+                                              Icons.more_vert,
+                                              size: 18,
+                                            ),
+                                            onPressed: () => _showMemberDetails(
+                                              context,
+                                              member,
+                                            ),
                                             tooltip: 'View details',
                                             padding: EdgeInsets.zero,
                                           ),
                                   ),
                               ],
                             ),
-                            
+
                             SizedBox(height: 12),
-                            
+
                             // Contact Information with enhanced icons
-                            if (member['email'] != null || member['phone'] != null)
+                            if (member['email'] != null ||
+                                member['phone'] != null)
                               Container(
                                 padding: EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -1148,7 +1212,8 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                         member['email']!,
                                         primaryColor,
                                       ),
-                                    if (member['phone'] != null && member['phone'].toString().isNotEmpty)
+                                    if (member['phone'] != null &&
+                                        member['phone'].toString().isNotEmpty)
                                       Padding(
                                         padding: EdgeInsets.only(top: 8),
                                         child: _buildEnhancedContactItem(
@@ -1160,9 +1225,9 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
                                   ],
                                 ),
                               ),
-                            
+
                             SizedBox(height: 12),
-                            
+
                             // Additional Info with improved chips
                             Wrap(
                               spacing: 8,
@@ -1200,11 +1265,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            size: 16,
-            color: color,
-          ),
+          child: Icon(icon, size: 16, color: color),
         ),
         SizedBox(width: 12),
         Expanded(
@@ -1228,19 +1289,12 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1,
-        ),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: color,
-          ),
+          Icon(icon, size: 14, color: color),
           SizedBox(width: 6),
           Text(
             text,
@@ -1273,7 +1327,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         ),
       );
     }
-    
+
     if (_hasMore) {
       return Padding(
         padding: EdgeInsets.all(16),
@@ -1292,7 +1346,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
         ),
       );
     }
-    
+
     return Container(
       padding: EdgeInsets.all(24),
       child: Center(
@@ -1325,7 +1379,10 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
               height: 150,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [primaryColor.withOpacity(0.1), secondaryColor.withOpacity(0.1)],
+                  colors: [
+                    primaryColor.withOpacity(0.1),
+                    secondaryColor.withOpacity(0.1),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -1351,11 +1408,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
             Text(
               'Your household family members will appear here once they join.\nShare your household code with family members to get started.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: textSecondary,
-                height: 1.6,
-              ),
+              style: TextStyle(fontSize: 16, color: textSecondary, height: 1.6),
             ),
           ],
         ),
@@ -1388,9 +1441,7 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
           SizedBox(height: 12),
           Text(
             'Gathering your household information...',
-            style: TextStyle(
-              color: textSecondary,
-            ),
+            style: TextStyle(color: textSecondary),
             textAlign: TextAlign.center,
           ),
         ],
@@ -1429,68 +1480,67 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
       body: _isLoading
           ? _buildLoadingState()
           : _householdMembers.isEmpty
-              ? _buildEmptyState()
-              : NotificationListener<ScrollNotification>(
-                  onNotification: (ScrollNotification scrollInfo) {
-                    if (!_isLoadingMore && 
-                        _hasMore && 
-                        scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 100) {
-                      _loadData(loadMore: true);
-                      return true;
-                    }
-                    return false;
-                  },
-                  child: RefreshIndicator(
-                    onRefresh: () => _loadData(),
-                    color: primaryColor,
-                    backgroundColor: backgroundColor,
-                    child: CustomScrollView(
-                      controller: _scrollController,
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Family Members',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w800,
-                                    color: primaryColor,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  '${_householdMembers.length} member${_householdMembers.length != 1 ? 's' : ''} in your household',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              ],
+          ? _buildEmptyState()
+          : NotificationListener<ScrollNotification>(
+              onNotification: (ScrollNotification scrollInfo) {
+                if (!_isLoadingMore &&
+                    _hasMore &&
+                    scrollInfo.metrics.pixels >=
+                        scrollInfo.metrics.maxScrollExtent - 100) {
+                  _loadData(loadMore: true);
+                  return true;
+                }
+                return false;
+              },
+              child: RefreshIndicator(
+                onRefresh: () => _loadData(),
+                color: primaryColor,
+                backgroundColor: backgroundColor,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Family Members',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: primaryColor,
+                              ),
                             ),
-                          ),
+                            SizedBox(height: 4),
+                            Text(
+                              '${_householdMembers.length} member${_householdMembers.length != 1 ? 's' : ''} in your household',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              return Padding(
-                                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-                                child: _buildMemberCard(_householdMembers[index], index),
-                              );
-                            },
-                            childCount: _householdMembers.length,
-                          ),
-                        ),
-                        SliverToBoxAdapter(
-                          child: _buildLoadMoreButton(),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        return Padding(
+                          padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: _buildMemberCard(
+                            _householdMembers[index],
+                            index,
+                          ),
+                        );
+                      }, childCount: _householdMembers.length),
+                    ),
+                    SliverToBoxAdapter(child: _buildLoadMoreButton()),
+                  ],
                 ),
+              ),
+            ),
     );
   }
 }
@@ -1498,9 +1548,11 @@ class _FamilyMembersPageState extends State<FamilyMembersPage> with SingleTicker
 // Extension method to convert string to title case
 extension StringExtension on String {
   String toTitleCase() {
-    return split(' ').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return split(' ')
+        .map((word) {
+          if (word.isEmpty) return '';
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 }

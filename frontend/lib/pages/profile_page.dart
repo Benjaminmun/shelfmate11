@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'Household/household_service.dart';
 import 'user_info_page.dart';
+import 'change_password_page.dart'; // Import the new page
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -12,7 +13,8 @@ class ProfilePage extends StatefulWidget {
   _ProfilePageState createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStateMixin {
+class _ProfilePageState extends State<ProfilePage>
+    with SingleTickerProviderStateMixin {
   final Color primaryColor = Color(0xFF2D5D7C);
   final Color secondaryColor = Color(0xFF4CAF50);
   final Color accentColor = Color(0xFFFF6B35);
@@ -47,17 +49,11 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
     );
 
     _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
     );
 
     _colorAnimation = ColorTween(
@@ -108,13 +104,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         pageBuilder: (context, animation, secondaryAnimation) => UserInfoPage(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset(1.0, 0.0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOutCubic,
-            )),
+            position: Tween<Offset>(begin: Offset(1.0, 0.0), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeInOutCubic,
+                  ),
+                ),
             child: child,
           );
         },
@@ -128,10 +124,31 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => HouseholdService(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            HouseholdService(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: animation,
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+  }
+
+  // NEW: Navigate to Change Password Page
+  void _navigateToChangePasswordPage() {
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            ChangePasswordPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(begin: Offset(1.0, 0.0), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeInOutCubic,
+                  ),
+                ),
             child: child,
           );
         },
@@ -171,17 +188,13 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               painter: _AvatarPatternPainter(primaryColor.withOpacity(0.1)),
             ),
           ),
-          
+
           // Main content
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.person_rounded,
-                  size: 50,
-                  color: Colors.white,
-                ),
+                Icon(Icons.person_rounded, size: 50, color: Colors.white),
                 SizedBox(height: 4),
                 Text(
                   _getInitials(),
@@ -194,7 +207,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               ],
             ),
           ),
-          
+
           // Animated ring
           Positioned.fill(
             child: AnimatedBuilder(
@@ -221,7 +234,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
       if (parts.length >= 2) {
         return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
       }
-      return parts[0].length >= 2 ? parts[0].substring(0, 2).toUpperCase() : parts[0].toUpperCase();
+      return parts[0].length >= 2
+          ? parts[0].substring(0, 2).toUpperCase()
+          : parts[0].toUpperCase();
     }
     return 'U';
   }
@@ -296,7 +311,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          side: BorderSide(color: lightTextColor.withOpacity(0.3)),
+                          side: BorderSide(
+                            color: lightTextColor.withOpacity(0.3),
+                          ),
                         ),
                         child: Text(
                           'Cancel',
@@ -347,43 +364,12 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   Future<void> _performLogout() async {
     try {
       await FirebaseAuth.instance.signOut();
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/login', 
-        (Route<dynamic> route) => false
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/login', (Route<dynamic> route) => false);
     } catch (e) {
       _showErrorSnackBar('Logout failed. Please try again.');
     }
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.check_rounded, color: successColor, size: 18),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: successColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: EdgeInsets.all(16),
-      ),
-    );
   }
 
   void _showErrorSnackBar(String message) {
@@ -397,7 +383,11 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.error_outline_rounded, color: Colors.white, size: 18),
+              child: Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
             ),
             SizedBox(width: 12),
             Expanded(
@@ -431,8 +421,8 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               child: isLoading
                   ? _buildLoadingIndicator()
                   : userData == null
-                      ? _buildNoDataMessage()
-                      : _buildProfileContent(),
+                  ? _buildNoDataMessage()
+                  : _buildProfileContent(),
             ),
           );
         },
@@ -545,13 +535,17 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                   ],
                 ),
               ),
-              child: Icon(Icons.person_off_rounded, size: 50, color: lightTextColor),
+              child: Icon(
+                Icons.person_off_rounded,
+                size: 50,
+                color: lightTextColor,
+              ),
             ),
             SizedBox(height: 24),
             Text(
-              "Profile Not Found", 
+              "Profile Not Found",
               style: GoogleFonts.poppins(
-                fontSize: 22, 
+                fontSize: 22,
                 color: textColor,
                 fontWeight: FontWeight.w700,
               ),
@@ -628,9 +622,11 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         ),
         SizedBox(height: 12),
         _buildInfoRow(Icons.email_rounded, userData!['email'] ?? "No Email"),
-        if (userData!['phone'] != null && userData!['phone'].toString().isNotEmpty) 
+        if (userData!['phone'] != null &&
+            userData!['phone'].toString().isNotEmpty)
           _buildInfoRow(Icons.phone_rounded, userData!['phone']),
-        if (userData!['address'] != null && userData!['address'].toString().isNotEmpty)
+        if (userData!['address'] != null &&
+            userData!['address'].toString().isNotEmpty)
           _buildInfoRow(Icons.location_on_rounded, userData!['address']),
       ],
     );
@@ -708,10 +704,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             offset: Offset(0, 4),
           ),
         ],
-        border: Border.all(
-          color: Colors.black.withOpacity(0.03),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.black.withOpacity(0.03), width: 1),
       ),
       child: Column(
         children: [
@@ -721,10 +714,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
               gradient: LinearGradient(
-                colors: [
-                  color.withOpacity(0.15),
-                  color.withOpacity(0.05),
-                ],
+                colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
               ),
             ),
             child: Icon(icon, size: 22, color: color),
@@ -762,7 +752,20 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
   }
 
   String _getMonthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[month - 1];
   }
 
@@ -787,7 +790,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         title: "Change Password",
         subtitle: "Update security settings",
         color: accentColor,
-        onTap: () => _showChangePasswordDialog(context),
+        onTap: _navigateToChangePasswordPage, // Updated to use new page
       ),
       _ProfileAction(
         icon: Icons.logout_rounded,
@@ -810,10 +813,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
             offset: Offset(0, 6),
           ),
         ],
-        border: Border.all(
-          color: Colors.black.withOpacity(0.04),
-          width: 1,
-        ),
+        border: Border.all(color: Colors.black.withOpacity(0.04), width: 1),
       ),
       child: Column(
         children: List.generate(actions.length, (index) {
@@ -855,11 +855,7 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                       ],
                     ),
                   ),
-                  child: Icon(
-                    action.icon,
-                    color: action.color,
-                    size: 24,
-                  ),
+                  child: Icon(action.icon, color: action.color, size: 24),
                 ),
                 SizedBox(width: 16),
                 Expanded(
@@ -887,7 +883,9 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: action.isDestructive ? errorColor : lightTextColor.withOpacity(0.6),
+                  color: action.isDestructive
+                      ? errorColor
+                      : lightTextColor.withOpacity(0.6),
                   size: 22,
                 ),
               ],
@@ -896,218 +894,6 @@ class _ProfilePageState extends State<ProfilePage> with SingleTickerProviderStat
         ),
       ),
     );
-  }
-
-  void _showChangePasswordDialog(BuildContext context) {
-    final TextEditingController currentPasswordController = TextEditingController();
-    final TextEditingController newPasswordController = TextEditingController();
-    final TextEditingController confirmPasswordController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AnimatedDialog(
-          child: Container(
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 30,
-                  offset: Offset(0, 15),
-                ),
-              ],
-            ),
-            padding: EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        primaryColor.withOpacity(0.15),
-                        primaryColor.withOpacity(0.05),
-                      ],
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.lock_reset_rounded,
-                    size: 32,
-                    color: primaryColor,
-                  ),
-                ),
-                SizedBox(height: 20),
-                Text(
-                  'Change Password',
-                  style: GoogleFonts.poppins(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-                SizedBox(height: 12),
-                Text(
-                  'Update your account password securely',
-                  style: GoogleFonts.poppins(
-                    color: lightTextColor,
-                    fontSize: 15,
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 24),
-                _buildPasswordField(
-                  controller: currentPasswordController,
-                  label: 'Current Password',
-                  icon: Icons.lock_rounded,
-                ),
-                SizedBox(height: 16),
-                _buildPasswordField(
-                  controller: newPasswordController,
-                  label: 'New Password',
-                  icon: Icons.lock_outline_rounded,
-                ),
-                SizedBox(height: 16),
-                _buildPasswordField(
-                  controller: confirmPasswordController,
-                  label: 'Confirm New Password',
-                  icon: Icons.lock_reset_rounded,
-                ),
-                SizedBox(height: 28),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          side: BorderSide(color: lightTextColor.withOpacity(0.3)),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: GoogleFonts.poppins(
-                            color: lightTextColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          await _updatePassword(
-                            currentPasswordController.text,
-                            newPasswordController.text,
-                            confirmPasswordController.text,
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 3,
-                          shadowColor: primaryColor.withOpacity(0.4),
-                        ),
-                        child: Text(
-                          'Update',
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-  }) {
-    return TextField(
-      controller: controller,
-      style: GoogleFonts.poppins(),
-      obscureText: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.poppins(color: lightTextColor),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: lightTextColor.withOpacity(0.2)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: primaryColor, width: 2),
-        ),
-        prefixIcon: Icon(icon, color: primaryColor),
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      ),
-    );
-  }
-
-  Future<void> _updatePassword(
-    String currentPassword,
-    String newPassword,
-    String confirmPassword,
-  ) async {
-    if (newPassword != confirmPassword) {
-      _showErrorSnackBar('New passwords do not match');
-      return;
-    }
-    
-    if (newPassword.length < 6) {
-      _showErrorSnackBar('Password must be at least 6 characters');
-      return;
-    }
-    
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null && user.email != null) {
-      try {
-        final cred = EmailAuthProvider.credential(
-          email: user.email!,
-          password: currentPassword
-        );
-        
-        await user.reauthenticateWithCredential(cred);
-        await user.updatePassword(newPassword);
-        
-        Navigator.of(context).pop();
-        _showSuccessSnackBar('Password updated successfully');
-      } on FirebaseAuthException catch (e) {
-        String message = 'Error updating password';
-        if (e.code == 'wrong-password') {
-          message = 'Current password is incorrect';
-        } else if (e.code == 'requires-recent-login') {
-          message = 'Please log out and log in again to change password';
-        }
-        
-        _showErrorSnackBar(message);
-      } catch (e) {
-        _showErrorSnackBar('Error updating password: $e');
-      }
-    }
   }
 
   @override

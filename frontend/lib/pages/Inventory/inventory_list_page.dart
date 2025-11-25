@@ -264,7 +264,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
               SizedBox(height: 16),
               SwitchListTile(
                 title: Text('Show Low Stock Only'),
-                subtitle: Text('Items with quantity less than 5'),
+                subtitle: Text('Items with quantity less than 2'),
                 value: _showLowStockOnly,
                 onChanged: (value) {
                   setState(() {
@@ -527,7 +527,7 @@ class _InventoryListPageState extends State<InventoryListPage> {
                         _selectedCategory == 'All' ||
                         item.category == _selectedCategory;
                     final matchesLowStock =
-                        !_showLowStockOnly || item.quantity < 5;
+                        !_showLowStockOnly || item.quantity < 2;
                     final matchesExpiringSoon =
                         !_showExpiringSoonOnly ||
                         (item.expiryDate != null &&

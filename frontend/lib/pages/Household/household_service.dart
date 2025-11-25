@@ -16,10 +16,11 @@ class HouseholdService extends StatefulWidget {
   _HouseholdServiceState createState() => _HouseholdServiceState();
 }
 
-class _HouseholdServiceState extends State<HouseholdService> with TickerProviderStateMixin {
+class _HouseholdServiceState extends State<HouseholdService>
+    with TickerProviderStateMixin {
   final HouseholdServiceController _controller = HouseholdServiceController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   // Color scheme
   static const Color primaryColor = Color(0xFF2D5D7C);
   static const Color secondaryColor = Color(0xFF4CAF50);
@@ -28,14 +29,14 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   static const Color cardColor = Colors.white;
   static const Color textColor = Color(0xFF2C3E50);
   static const Color lightTextColor = Color(0xFF7F8C8D);
-  
+
   // Animation controllers
   late AnimationController _scaleController;
   late AnimationController _fadeController;
   late AnimationController _searchControllerAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
-  
+
   // Search functionality
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -48,41 +49,33 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize animation controllers
     _scaleController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    
+
     _searchControllerAnimation = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    
-    _scaleAnimation = Tween<double>(
-      begin: 0.95,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _scaleController,
-      curve: Curves.easeOutBack,
-    ));
-    
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeInOut,
-    ));
-    
+
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+
     _fadeController.forward();
-    
+
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.toLowerCase();
@@ -108,7 +101,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       setState(() {
         _isLoading = true;
       });
-      
+
       final households = await _controller.getUserHouseholdsWithDetails();
       setState(() {
         _households = households;
@@ -142,7 +135,9 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(primaryColor)),
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation(primaryColor),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'Creating Household...',
@@ -160,20 +155,20 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
 
       // Create household and get the result
       final result = await _controller.createNewHousehold(context);
-      
+
       // Close loading dialog
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
-      
+
       // If household was created successfully, reload households and navigate
       if (result['success'] == true) {
         final householdId = result['householdId'];
         final householdName = result['householdName'];
-        
+
         // Reload households to show the new one immediately
         await _loadHouseholds();
-        
+
         // Navigate to household dashboard (creator)
         _navigateToHouseholdDashboard(householdId, householdName, 'creator');
       }
@@ -182,16 +177,20 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
-      
+
       // Show error message
       _showErrorSnackbar(context, 'Failed to create household: $e');
     }
   }
 
   // UPDATED: Method to navigate to appropriate dashboard based on user role
-  void _navigateToHouseholdDashboard(String householdId, String householdName, String userRole) {
+  void _navigateToHouseholdDashboard(
+    String householdId,
+    String householdName,
+    String userRole,
+  ) {
     Widget targetPage;
-    
+
     // Determine which dashboard to show based on user role
     switch (userRole) {
       case 'creator':
@@ -221,17 +220,11 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         pageBuilder: (context, animation, secondaryAnimation) => targetPage,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOut,
-            )),
-            child: FadeTransition(
-              opacity: animation,
-              child: child,
-            ),
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+                ),
+            child: FadeTransition(opacity: animation, child: child),
           );
         },
         transitionDuration: const Duration(milliseconds: 500),
@@ -240,8 +233,69 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   }
 
   // UPDATED: Method to select household with role-based navigation
-  void _selectHousehold(String householdId, String householdName, String userRole) {
+  void _selectHousehold(
+    String householdId,
+    String householdName,
+    String userRole,
+  ) {
     _navigateToHouseholdDashboard(householdId, householdName, userRole);
+  }
+
+  // NEW: Method for members and editors to leave household
+  Future<void> _leaveHousehold(String householdId, String householdName) async {
+    try {
+      // Check if user can leave (not owner)
+      final canLeave = await _controller.canLeaveHousehold(householdId);
+      if (!canLeave) {
+        _showErrorSnackbar(
+          context,
+          'Owners cannot leave households. Please transfer ownership or delete the household.',
+        );
+        return;
+      }
+
+      // Show confirmation dialog
+      bool? confirm = await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Leave Household?'),
+            content: Text(
+              'Are you sure you want to leave "$householdName"? You will need an invitation code to rejoin.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text('Leave', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm == true) {
+        // Remove from local state immediately for responsive UI
+        setState(() {
+          _households.removeWhere(
+            (household) => household['id'] == householdId,
+          );
+        });
+
+        await _controller.leaveHousehold(householdId);
+        _showSuccessSnackbar(context, 'Successfully left $householdName');
+
+        // Reload to ensure consistency with backend
+        await _loadHouseholds();
+      }
+    } catch (e) {
+      // If error, reload to restore correct state
+      await _loadHouseholds();
+      _showErrorSnackbar(context, 'Error leaving household: $e');
+    }
   }
 
   // Refresh households with animation
@@ -268,14 +322,13 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       context: context,
       pageBuilder: (context, animation, secondaryAnimation) {
         return ScaleTransition(
-          scale: CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutBack,
-          ),
+          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
           child: FadeTransition(
             opacity: animation,
             child: Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
               elevation: 0,
               backgroundColor: Colors.transparent,
               child: Container(
@@ -318,7 +371,11 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                               color: primaryColor.withOpacity(0.1),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(Icons.close, size: 18, color: primaryColor),
+                            child: Icon(
+                              Icons.close,
+                              size: 18,
+                              color: primaryColor,
+                            ),
                           ),
                           onPressed: () => Navigator.pop(context),
                         ),
@@ -351,16 +408,18 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
           Navigator.push(
             context,
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => UserInfoPage(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(1, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                );
-              },
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  UserInfoPage(),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(1, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    );
+                  },
             ),
           );
         },
@@ -379,7 +438,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     return options.asMap().entries.map((entry) {
       final index = entry.key;
       final option = entry.value;
-      
+
       return AnimatedContainer(
         duration: Duration(milliseconds: 200 + (index * 100)),
         curve: Curves.easeOut,
@@ -414,7 +473,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 height: 48,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [primaryColor.withOpacity(0.2), primaryColor.withOpacity(0.1)],
+                    colors: [
+                      primaryColor.withOpacity(0.2),
+                      primaryColor.withOpacity(0.1),
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -500,7 +562,9 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           elevation: 0,
           backgroundColor: Colors.transparent,
           child: Container(
@@ -535,19 +599,23 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 const SizedBox(height: 8),
                 Text(
                   'Choose a household to manage its family members',
-                  style: TextStyle(
-                    color: lightTextColor,
-                  ),
+                  style: TextStyle(color: lightTextColor),
                 ),
                 const SizedBox(height: 24),
                 FutureBuilder<List<Map<String, dynamic>>>(
                   future: _controller.getUserHouseholdsWithDetails(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(primaryColor)));
+                      return Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation(primaryColor),
+                        ),
+                      );
                     }
-                    
-                    if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+
+                    if (snapshot.hasError ||
+                        !snapshot.hasData ||
+                        snapshot.data!.isEmpty) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         child: Text(
@@ -557,7 +625,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                         ),
                       );
                     }
-                    
+
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
@@ -586,16 +654,29 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                               Navigator.push(
                                 context,
                                 PageRouteBuilder(
-                                  pageBuilder: (context, animation, secondaryAnimation) => FamilyMembersPage(householdId: householdId),
-                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                    return SlideTransition(
-                                      position: Tween<Offset>(
-                                        begin: const Offset(1, 0),
-                                        end: Offset.zero,
-                                      ).animate(animation),
-                                      child: child,
-                                    );
-                                  },
+                                  pageBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                      ) => FamilyMembersPage(
+                                        householdId: householdId,
+                                      ),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        return SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(1, 0),
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
+                                        );
+                                      },
                                 ),
                               );
                             }
@@ -604,7 +685,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                             'Select a household',
                             style: TextStyle(color: lightTextColor),
                           ),
-                          icon: Icon(Icons.arrow_drop_down, color: primaryColor),
+                          icon: Icon(
+                            Icons.arrow_drop_down,
+                            color: primaryColor,
+                          ),
                         ),
                       ),
                     );
@@ -616,7 +700,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel', style: TextStyle(color: lightTextColor)),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(color: lightTextColor),
+                      ),
                     ),
                   ],
                 ),
@@ -629,12 +716,12 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   }
 
   // Enhanced household options dialog
-  void _showHouseholdOptions(BuildContext context, String householdId, String householdName, String userRole) async {
-    if (userRole != 'creator') {
-      _showPermissionDeniedSnackbar(context);
-      return;
-    }
-
+  void _showHouseholdOptions(
+    BuildContext context,
+    String householdId,
+    String householdName,
+    String userRole,
+  ) async {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -686,8 +773,17 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                         ),
                         textAlign: TextAlign.center,
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Role: ${_getRoleDisplayName(userRole)}',
+                        style: TextStyle(fontSize: 14, color: lightTextColor),
+                      ),
                       const SizedBox(height: 16),
-                      ..._buildHouseholdOptions(householdId, householdName),
+                      ..._buildHouseholdOptions(
+                        householdId,
+                        householdName,
+                        userRole,
+                      ),
                     ],
                   ),
                 ),
@@ -699,25 +795,15 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     );
   }
 
-  void _showPermissionDeniedSnackbar(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.info_outline, color: Colors.white),
-            SizedBox(width: 8),
-            Expanded(child: Text('Only household creators can manage settings')),
-          ],
-        ),
-        backgroundColor: Colors.orange,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
+  List<Widget> _buildHouseholdOptions(
+    String householdId,
+    String householdName,
+    String userRole,
+  ) {
+    final options = <Widget>[];
 
-  List<Widget> _buildHouseholdOptions(String householdId, String householdName) {
-    return [
+    // Options available for all roles
+    options.addAll([
       _buildOptionTile(
         icon: Icons.share,
         title: 'Share Invitation Code',
@@ -736,17 +822,40 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
           _copyInvitationCode(context, householdId);
         },
       ),
-      const Divider(),
-      _buildOptionTile(
-        icon: Icons.delete,
-        title: 'Delete Household',
-        color: Colors.red,
-        onTap: () {
-          Navigator.pop(context);
-          _showDeleteConfirmation(context, householdId, householdName);
-        },
-      ),
-    ];
+    ]);
+
+    // Add divider before destructive actions
+    options.add(const Divider());
+
+    // Owner-only options
+    if (userRole == 'creator') {
+      options.add(
+        _buildOptionTile(
+          icon: Icons.delete,
+          title: 'Delete Household',
+          color: Colors.red,
+          onTap: () {
+            Navigator.pop(context);
+            _showDeleteConfirmation(context, householdId, householdName);
+          },
+        ),
+      );
+    } else {
+      // Leave household option for non-owners (members and editors)
+      options.add(
+        _buildOptionTile(
+          icon: Icons.exit_to_app,
+          title: 'Leave Household',
+          color: Colors.orange,
+          onTap: () {
+            Navigator.pop(context);
+            _leaveHousehold(householdId, householdName);
+          },
+        ),
+      );
+    }
+
+    return options;
   }
 
   Widget _buildOptionTile({
@@ -789,7 +898,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     );
   }
 
-  void _shareHouseholdInvitation(BuildContext context, String householdId) async {
+  void _shareHouseholdInvitation(
+    BuildContext context,
+    String householdId,
+  ) async {
     try {
       final householdDoc = await _firestore
           .collection('households')
@@ -799,7 +911,8 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       if (householdDoc.exists) {
         final invitationCode = householdDoc.data()!['invitationCode'] ?? '';
         final householdName = householdDoc.data()!['householdName'] ?? '';
-        final shareText = 'Join my household "$householdName" on HomeHub! Use code: $invitationCode';
+        final shareText =
+            'Join my household "$householdName" on HomeHub! Use code: $invitationCode';
         Share.share(shareText);
       }
     } catch (e) {
@@ -817,7 +930,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       if (householdDoc.exists) {
         final invitationCode = householdDoc.data()!['invitationCode'] ?? '';
         await Clipboard.setData(ClipboardData(text: invitationCode));
-        
+
         _showSuccessSnackbar(context, 'Invitation code copied to clipboard');
       }
     } catch (e) {
@@ -825,12 +938,18 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     }
   }
 
-  void _showDeleteConfirmation(BuildContext context, String householdId, String householdName) {
+  void _showDeleteConfirmation(
+    BuildContext context,
+    String householdId,
+    String householdName,
+  ) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           elevation: 0,
           backgroundColor: Colors.transparent,
           child: Container(
@@ -871,9 +990,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 Text(
                   'Are you sure you want to delete "$householdName"? This action cannot be undone.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: lightTextColor,
-                  ),
+                  style: TextStyle(color: lightTextColor),
                 ),
                 const SizedBox(height: 24),
                 Row(
@@ -921,16 +1038,19 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   }
 
   // Delete household with immediate UI update
-  Future<void> _deleteHousehold(BuildContext context, String householdId) async {
+  Future<void> _deleteHousehold(
+    BuildContext context,
+    String householdId,
+  ) async {
     try {
       // Remove from local state immediately for responsive UI
       setState(() {
         _households.removeWhere((household) => household['id'] == householdId);
       });
-      
+
       await _controller.deleteHousehold(householdId);
       _showSuccessSnackbar(context, 'Household deleted successfully');
-      
+
       // Reload to ensure consistency with backend
       await _loadHouseholds();
     } catch (e) {
@@ -982,7 +1102,9 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           elevation: 0,
           backgroundColor: Colors.transparent,
           child: Container(
@@ -1030,9 +1152,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 const SizedBox(height: 8),
                 Text(
                   'Choose how you want to proceed',
-                  style: TextStyle(
-                    color: lightTextColor,
-                  ),
+                  style: TextStyle(color: lightTextColor),
                 ),
                 const SizedBox(height: 24),
                 _buildAnimatedButton(
@@ -1140,14 +1260,12 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
         backgroundColor: primaryColor,
         elevation: 4,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            bottom: Radius.circular(20),
-          ),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
         ),
         centerTitle: false,
         iconTheme: const IconThemeData(color: Colors.white),
         // UPDATED: Removed notification and help & support buttons
-        actions: _showSearchBar 
+        actions: _showSearchBar
             ? []
             : [
                 IconButton(
@@ -1182,9 +1300,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 height: _showSearchBar ? 0 : 20,
                 curve: Curves.easeInOut,
               ),
-              Expanded(
-                child: _buildHouseholdsContent(),
-              ),
+              Expanded(child: _buildHouseholdsContent()),
             ],
           ),
         ),
@@ -1329,10 +1445,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
               child: Text(
                 'Create your first household to start managing your inventory and family members',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: lightTextColor,
-                ),
+                style: TextStyle(fontSize: 14, color: lightTextColor),
               ),
             ),
             const SizedBox(height: 32),
@@ -1346,7 +1459,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
             ),
           ],
@@ -1373,10 +1489,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
           const SizedBox(height: 8),
           Text(
             'Try a different search term',
-            style: TextStyle(
-              fontSize: 14,
-              color: lightTextColor,
-            ),
+            style: TextStyle(fontSize: 14, color: lightTextColor),
           ),
         ],
       ),
@@ -1405,9 +1518,15 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     );
   }
 
-  Widget _buildHouseholdCard(String name, dynamic createdAt, String householdId, String userRole, BuildContext context) {
+  Widget _buildHouseholdCard(
+    String name,
+    dynamic createdAt,
+    String householdId,
+    String userRole,
+    BuildContext context,
+  ) {
     DateTime createdDate = _parseCreatedAt(createdAt);
-    
+
     return MouseRegion(
       onEnter: (_) => _scaleController.forward(),
       onExit: (_) => _scaleController.reverse(),
@@ -1429,9 +1548,8 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
             color: Colors.transparent,
             child: InkWell(
               onTap: () => _selectHousehold(householdId, name, userRole),
-              onLongPress: userRole == 'creator' 
-                  ? () => _showHouseholdOptions(context, householdId, name, userRole)
-                  : null,
+              onLongPress: () =>
+                  _showHouseholdOptions(context, householdId, name, userRole),
               borderRadius: BorderRadius.circular(20),
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -1448,7 +1566,11 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(FeatherIcons.home, color: Colors.white, size: 28),
+                      child: Icon(
+                        FeatherIcons.home,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -1476,7 +1598,10 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                           const SizedBox(height: 4),
                           // UPDATED: Enhanced role badge with editor support
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: _getRoleColor(userRole).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
@@ -1493,7 +1618,12 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
                         ],
                       ),
                     ),
-                    _buildHouseholdActions(householdId, userRole, context),
+                    _buildHouseholdActions(
+                      householdId,
+                      userRole,
+                      name,
+                      context,
+                    ),
                   ],
                 ),
               ),
@@ -1530,7 +1660,12 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
     }
   }
 
-  Widget _buildHouseholdActions(String householdId, String userRole, BuildContext context) {
+  Widget _buildHouseholdActions(
+    String householdId,
+    String userRole,
+    String householdName,
+    BuildContext context,
+  ) {
     return Row(
       children: [
         IconButton(
@@ -1547,64 +1682,101 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
             Navigator.push(
               context,
               PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) => FamilyMembersPage(householdId: householdId),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(1, 0),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  );
-                },
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    FamilyMembersPage(householdId: householdId),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(1, 0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      );
+                    },
               ),
             );
           },
           tooltip: 'Manage Family Members',
         ),
-        if (userRole == 'creator') ...[
-          const SizedBox(width: 4),
-          PopupMenuButton(
-            icon: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: primaryColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(FeatherIcons.moreVertical, color: primaryColor, size: 16),
+        PopupMenuButton(
+          icon: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
             ),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'share',
-                child: Row(
-                  children: [
-                    Icon(FeatherIcons.share2, size: 16, color: primaryColor),
-                    const SizedBox(width: 8),
-                    Text('Share Invitation'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(FeatherIcons.trash2, size: 16, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: Colors.red)),
-                  ],
-                ),
-              ),
-            ],
-            onSelected: (value) {
-              if (value == 'share') {
-                _shareHouseholdInvitation(context, householdId);
-              } else if (value == 'delete') {
-                _showDeleteConfirmation(context, householdId, 'Household');
-              }
-            },
+            child: Icon(
+              FeatherIcons.moreVertical,
+              color: primaryColor,
+              size: 16,
+            ),
           ),
-        ],
+          itemBuilder: (context) {
+            // Different menu items based on user role
+            if (userRole == 'creator') {
+              return [
+                PopupMenuItem(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      Icon(FeatherIcons.share2, size: 16, color: primaryColor),
+                      const SizedBox(width: 8),
+                      Text('Share Invitation'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(FeatherIcons.trash2, size: 16, color: Colors.red),
+                      const SizedBox(width: 8),
+                      Text('Delete', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ];
+            } else {
+              // For members and editors
+              return [
+                PopupMenuItem(
+                  value: 'share',
+                  child: Row(
+                    children: [
+                      Icon(FeatherIcons.share2, size: 16, color: primaryColor),
+                      const SizedBox(width: 8),
+                      Text('Share Invitation'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'leave',
+                  child: Row(
+                    children: [
+                      Icon(FeatherIcons.logOut, size: 16, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Leave Household',
+                        style: TextStyle(color: Colors.orange),
+                      ),
+                    ],
+                  ),
+                ),
+              ];
+            }
+          },
+          onSelected: (value) {
+            if (value == 'share') {
+              _shareHouseholdInvitation(context, householdId);
+            } else if (value == 'delete') {
+              _showDeleteConfirmation(context, householdId, householdName);
+            } else if (value == 'leave') {
+              _leaveHousehold(householdId, householdName);
+            }
+          },
+        ),
       ],
     );
   }
@@ -1622,7 +1794,7 @@ class _HouseholdServiceState extends State<HouseholdService> with TickerProvider
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
-    
+
     if (difference.inDays == 0) {
       return 'today';
     } else if (difference.inDays == 1) {

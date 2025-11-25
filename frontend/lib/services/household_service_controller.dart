@@ -71,6 +71,12 @@ class HouseholdServiceController {
     return role == 'creator' || role == 'editor';
   }
 
+  // Check if user can leave household (non-owners)
+  Future<bool> canLeaveHousehold(String householdId) async {
+    final userRole = await getUserRole(householdId);
+    return userRole != 'creator';
+  }
+
   // Get households with user role information
   Future<List<Map<String, dynamic>>> getUserHouseholdsWithDetails() async {
     if (currentUser == null) return [];
@@ -393,6 +399,160 @@ class HouseholdServiceController {
       await _firestore.collection('households').doc(householdId).delete();
     } catch (e) {
       debugPrint('Error deleting household: $e');
+      rethrow;
+    }
+  }
+
+  // Leave household (for members and editors)
+  Future<void> leaveHousehold(String householdId) async {
+    if (currentUser == null) return;
+
+    try {
+      // Get user role to check if they're the owner
+      final userRole = await getUserRole(householdId);
+
+      // Owners cannot leave, they must delete or transfer ownership first
+      if (userRole == 'creator') {
+        throw Exception(
+          'Household owners cannot leave. You must either delete the household '
+          'or transfer ownership to another member before leaving.',
+        );
+      }
+
+      // Remove user from household members collection
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .delete();
+
+      // Remove household from user's personal collection
+      await _firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('households')
+          .doc(householdId)
+          .delete();
+
+      debugPrint('User left household $householdId successfully');
+    } catch (e) {
+      debugPrint('Error leaving household: $e');
+      rethrow;
+    }
+  }
+
+  // Enhanced leave household with confirmation and navigation
+  Future<void> leaveHouseholdWithConfirmation(
+    String householdId,
+    String householdName,
+    BuildContext context,
+  ) async {
+    final userRole = await getUserRole(householdId);
+
+    if (userRole == 'creator') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Owners cannot leave households. Please delete or transfer ownership first.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Leave Household?'),
+          content: Text(
+            'Are you sure you want to leave "$householdName"? You will need an invitation code to rejoin.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text('Leave', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      try {
+        await leaveHousehold(householdId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully left $householdName'),
+            backgroundColor: const Color(0xFF4CAF50),
+          ),
+        );
+
+        // Navigate back to household selection or login page
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginPage()),
+          (_) => false,
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error leaving household: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Transfer ownership (for owners who want to leave)
+  Future<void> transferOwnership(String householdId, String newOwnerId) async {
+    if (currentUser == null) return;
+
+    try {
+      final currentUserRole = await getUserRole(householdId);
+      if (currentUserRole != 'creator') {
+        throw Exception('Only household owners can transfer ownership');
+      }
+
+      // Update new user to creator role
+      await updateMemberRole(householdId, newOwnerId, 'creator');
+
+      // Update current user to member role
+      await _firestore
+          .collection('households')
+          .doc(householdId)
+          .collection('members')
+          .doc(currentUser!.uid)
+          .update({
+            'userRole': 'member',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      await _firestore
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('households')
+          .doc(householdId)
+          .update({
+            'userRole': 'member',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      // Update household document with new owner
+      await _firestore.collection('households').doc(householdId).update({
+        'ownerId': newOwnerId,
+      });
+
+      debugPrint('Ownership transferred successfully');
+    } catch (e) {
+      debugPrint('Error transferring ownership: $e');
       rethrow;
     }
   }
